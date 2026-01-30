@@ -14,17 +14,30 @@ export default function Login({ onLogin }) {
     setLoading(true);
 
     try {
+      console.log('=== LOGIN ATTEMPT ===');
+      console.log('Email:', email);
+      console.log('Password length:', password.length);
+      console.log('Password first char:', password[0]);
+      console.log('Sending to Supabase...');
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
       });
 
-      if (error) throw error;
+      console.log('Login response:', { data, error });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
 
       if (data.session) {
+        console.log('Login successful!');
         onLogin();
       }
     } catch (error) {
+      console.error('Login failed:', error);
       setError(error.message || 'Invalid email or password');
     } finally {
       setLoading(false);

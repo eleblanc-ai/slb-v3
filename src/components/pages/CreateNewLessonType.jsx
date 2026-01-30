@@ -582,7 +582,7 @@ export default function CreateNewLessonType() {
       
       // Fetch lesson template
       const { data: lessonTypeData, error: lessonTypeError } = await supabase
-        .from('lesson_templates')
+        .from('lesson_types')
         .select('*')
         .eq('id', id)
         .single();
@@ -734,7 +734,7 @@ export default function CreateNewLessonType() {
       
       // Update the lesson template's updated_at timestamp
       const { error: updateError } = await supabase
-        .from('lesson_templates')
+        .from('lesson_types')
         .update({
           updated_at: new Date().toISOString(),
           updated_by: session?.user?.id
@@ -773,7 +773,7 @@ export default function CreateNewLessonType() {
       
       // Update the lesson template's updated_at timestamp
       const { error: updateError } = await supabase
-        .from('lesson_templates')
+        .from('lesson_types')
         .update({
           updated_at: new Date().toISOString(),
           updated_by: session?.user?.id
@@ -803,7 +803,7 @@ export default function CreateNewLessonType() {
       const { data: { user } } = await supabase.auth.getUser();
       
       const { data: lessonType, error } = await supabase
-        .from('lesson_templates')
+        .from('lesson_types')
         .insert({
           name: data.name,
           category: data.category,

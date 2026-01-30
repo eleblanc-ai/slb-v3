@@ -67,7 +67,7 @@ export default function NameLessonTypeModal({ visible, onClose, onSave, initialN
       const stateValue = category === 'State-specific' ? state : null;
       
       let query = supabase
-        .from('lesson_templates')
+        .from('lesson_types')
         .select('id, name, category, state')
         .eq('name', lessonTypeName.trim())
         .eq('category', category);
