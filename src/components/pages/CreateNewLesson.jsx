@@ -1039,35 +1039,77 @@ export default function CreateNewLesson() {
     const designerFields = fields.filter(f => f.fieldFor === 'designer');
     const builderFields = fields.filter(f => f.fieldFor === 'builder');
 
+    // Helper function to upload data URLs to storage
+    const uploadDataUrlIfNeeded = async (value, fieldName) => {
+      if (value && typeof value === 'object' && value.url && value.url.startsWith('data:image')) {
+        console.log('🔄 Uploading data URL for field:', fieldName);
+        const contentId = fieldValues[designerFields.find(f => f.name === 'Content ID')?.id] || `lesson-${Date.now()}`;
+        const templateName = templateData?.name || 'unknown-template';
+        const fileName = `${templateName}/${contentId}-${fieldName}.png`;
+        
+        // Convert base64 to blob
+        const base64Data = value.url.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        
+        // Delete old if exists
+        await supabase.storage.from('lesson-images').remove([fileName]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Upload
+        const { error: uploadError } = await supabase.storage
+          .from('lesson-images')
+          .upload(fileName, blob, {
+            contentType: 'image/png',
+            cacheControl: '0'
+          });
+        
+        if (uploadError) throw new Error(`Failed to upload image: ${uploadError.message}`);
+        
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('lesson-images')
+          .getPublicUrl(fileName);
+        
+        return { ...value, url: `${publicUrl}?t=${Date.now()}` };
+      }
+      return value;
+    };
+
     // Collect design responses from actual field values
     const designResponses = {};
-    designerFields.forEach(field => {
+    for (const field of designerFields) {
       const value = fieldValues[field.id];
       // For checklist fields, ensure array; for others, use value or fallback to placeholder/empty
       if (field.type === 'checklist') {
         designResponses[field.name] = Array.isArray(value) ? value : [];
       } else if (field.type === 'image') {
-        // For image fields, save the full object with url, altText, etc.
-        designResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        // For image fields, upload data URL if needed, then save
+        designResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
       } else {
         designResponses[field.name] = value || field.placeholder || '';
       }
-    });
+    }
     
     // Collect lesson responses from builder field values
     const lessonResponses = {};
-    builderFields.forEach(field => {
+    for (const field of builderFields) {
       const value = fieldValues[field.id];
       // For checklist fields, ensure array; for others, use value or fallback to placeholder/empty
       if (field.type === 'checklist') {
         lessonResponses[field.name] = Array.isArray(value) ? value : [];
       } else if (field.type === 'image') {
-        // For image fields, save the full object with url, altText, etc.
-        lessonResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        // For image fields, upload data URL if needed, then save
+        lessonResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
       } else {
         lessonResponses[field.name] = value || field.placeholder || '';
       }
-    });
+    }
 
     try {
       let data, error;

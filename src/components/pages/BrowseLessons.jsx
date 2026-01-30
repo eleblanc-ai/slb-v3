@@ -268,7 +268,14 @@ export default function BrowseLessons() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
               gap: '1rem'
             }}>
-          {lessons.map((lesson) => (
+          {lessons.map((lesson) => {
+            // Find first image from designer or builder responses for thumbnail
+            const allResponses = { ...(lesson.designer_responses || {}), ...(lesson.builder_responses || {}) };
+            const thumbnailUrl = Object.values(allResponses).find(
+              val => val && typeof val === 'object' && val.url && !val.url.startsWith('data:')
+            )?.url;
+
+            return (
             <div
               key={lesson.id}
               onClick={() => handleLessonClick(lesson)}
@@ -294,6 +301,32 @@ export default function BrowseLessons() {
                 e.currentTarget.style.borderColor = 'var(--gray-200)';
               }}
             >
+              {/* Thumbnail Image */}
+              {thumbnailUrl && (
+                <div style={{
+                  width: '100%',
+                  height: '140px',
+                  backgroundColor: 'var(--gray-100)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <img
+                    src={thumbnailUrl}
+                    alt="Lesson thumbnail"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+
               <div style={{ padding: '1rem' }}>
                 {/* State Badge (if exists) */}
                 {lesson.template?.state && (
@@ -450,7 +483,8 @@ export default function BrowseLessons() {
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
             </div>
           )}
         </div>
