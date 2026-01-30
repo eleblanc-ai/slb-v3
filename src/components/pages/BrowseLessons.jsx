@@ -50,7 +50,7 @@ export default function BrowseLessons() {
       let templateMap = {};
       if (templateIds.length > 0) {
         const { data: templates } = await supabase
-          .from('lesson_types')
+          .from('lesson_templates')
           .select('id, category, state')
           .in('id', templateIds);
         

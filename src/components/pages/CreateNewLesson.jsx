@@ -433,7 +433,7 @@ export default function CreateNewLesson() {
         
         // Get template name
         const { data: templateData } = await supabase
-          .from('lesson_types')
+          .from('lesson_templates')
           .select('name')
           .eq('id', templateId)
           .single();

@@ -25,7 +25,7 @@ export default function BrowseLessonTemplates() {
     try {
       // Fetch ALL lesson templates (not just user's own)
       const { data: templates, error } = await supabase
-        .from('lesson_types')
+        .from('lesson_templates')
         .select('*')
         .order('updated_at', { ascending: false });
 
@@ -86,7 +86,7 @@ export default function BrowseLessonTemplates() {
     try {
       // Delete the lesson template (this will cascade to related tables due to foreign key constraints)
       const { error } = await supabase
-        .from('lesson_types')
+        .from('lesson_templates')
         .delete()
         .eq('id', templateToDelete.id);
       
