@@ -30,7 +30,10 @@ export default function BrowseLessons() {
       if (lessonsError) throw lessonsError;
 
       // Get unique user IDs and template IDs
-      const userIds = [...new Set(lessonsData?.map(l => l.created_by).filter(Boolean))];
+      const userIds = [...new Set([
+        ...lessonsData?.map(l => l.created_by).filter(Boolean),
+        ...lessonsData?.map(l => l.updated_by).filter(Boolean)
+      ])];
       const templateIds = [...new Set(lessonsData?.map(l => l.lesson_template_id).filter(Boolean))];
       
       // Fetch profiles for creators
@@ -60,11 +63,15 @@ export default function BrowseLessons() {
       }
 
       // Add creator and template info to lessons
-      const lessonsWithCreator = lessonsData?.map(lesson => ({
-        ...lesson,
-        creator: { display_name: profileMap[lesson.created_by] },
-        template: templateMap[lesson.lesson_template_id] || {}
-      }));
+      const lessonsWithCreator = lessonsData?.map(lesson => {
+        // Use updated_by if it exists, otherwise fall back to created_by
+        const userId = lesson.updated_by || lesson.created_by;
+        return {
+          ...lesson,
+          creator: { display_name: profileMap[userId] },
+          template: templateMap[lesson.lesson_template_id] || {}
+        };
+      });
 
       // Filter out test lessons for non-admin users
       const filteredLessons = profile?.role === 'admin' 
@@ -457,7 +464,14 @@ export default function BrowseLessons() {
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                     <Calendar size={12} />
-                    <span>{new Date(lesson.updated_at).toLocaleDateString()}</span>
+                    <span>{new Date(lesson.updated_at).toLocaleString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric', 
+                      hour: 'numeric', 
+                      minute: '2-digit',
+                      hour12: true 
+                    })}</span>
                   </div>
                 </div>
 
