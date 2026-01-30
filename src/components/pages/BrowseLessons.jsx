@@ -115,6 +115,28 @@ export default function BrowseLessons() {
     }
 
     try {
+      // Delete associated images from storage
+      const allResponses = {
+        ...(lessonToDelete.designer_responses || {}),
+        ...(lessonToDelete.builder_responses || {})
+      };
+      
+      for (const value of Object.values(allResponses)) {
+        if (value && typeof value === 'object' && value.url) {
+          // Extract storage path from URL
+          const url = value.url;
+          if (url.includes('/storage/v1/object/public/lesson-images/')) {
+            const path = url.split('/lesson-images/')[1];
+            if (path) {
+              await supabase.storage
+                .from('lesson-images')
+                .remove([path]);
+            }
+          }
+        }
+      }
+
+      // Delete lesson from database
       const { error } = await supabase
         .from('lessons')
         .delete()

@@ -1843,7 +1843,7 @@ export default function CreateNewLesson() {
                                 {...aiProps}
                               />
                             );
-                          } else if (field.type === 'mcqs') {
+                          } else if (field.type === 'mcqs') { console.log('🔥 BUILDER MCQ:', field.name, field.type);
                             fieldComponent = (
                               <MCQsField
                                 key={field.id}

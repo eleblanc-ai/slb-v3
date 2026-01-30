@@ -1802,6 +1802,20 @@ export default function CreateNewLessonType() {
                                 {...aiProps}
                               />
                             );
+                          } else if (field.type === 'mcqs') {
+                            fieldComponent = (
+                              <MCQsField
+                                key={field.id}
+                                field={field}
+                                value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
+                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
+                                onEdit={handleEditField}
+                                onDelete={handleDeleteField}
+                                onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
+                                onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
+                                onAIConfig={handleAIConfig}
+                              />
+                            );
                           } else {
                             fieldComponent = (
                               <BaseField

@@ -113,11 +113,12 @@ export default function MCQsField({
   };
   
   console.log('🎨 MCQsField rendering, activeTab:', activeTab, 'questions:', questions);
+  console.log('🎨 MCQsField props:', { field: field?.name, hasOnAIGenerate: !!onAIGenerate, hasOnGenerateIndividual: !!onGenerateIndividual });
   
   return (
     <BaseField field={field} onAIConfig={onAIConfig} onEdit={onEdit} onDelete={onDelete}>
       {/* Generate All Button */}
-      {onAIGenerate && (
+      {onAIGenerate && field.aiEnabled && (
         <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="button"
