@@ -402,17 +402,17 @@ export default function CreateNewLesson() {
       const q = result.questions[0];
       const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${q.standards.join('; ')}]<br>KEY: ${q.correct_answer}</p>`;
       
-      // Update only the specific question in the array
-      setFieldValues(prev => {
-        const currentValue = prev[fieldId] || { questions: ['', '', '', '', ''] };
-        const updatedQuestions = [...(currentValue.questions || ['', '', '', '', ''])];
-        updatedQuestions[questionIndex] = formattedMCQ;
-        
-        return {
-          ...prev,
-          [fieldId]: { questions: updatedQuestions }
-        };
-      });
+      // Build updated questions array
+      const currentValue = fieldValues[fieldId] || { questions: ['', '', '', '', ''] };
+      const updatedQuestions = [...(currentValue.questions || ['', '', '', '', ''])];
+      updatedQuestions[questionIndex] = formattedMCQ;
+      const newFieldValue = { questions: updatedQuestions };
+      
+      // Update state
+      setFieldValues(prev => ({
+        ...prev,
+        [fieldId]: newFieldValue
+      }));
       
       setHasGeneratedMap(prev => ({ ...prev, [fieldId]: true }));
     } catch (error) {
@@ -497,14 +497,6 @@ export default function CreateNewLesson() {
         
         // Update our tracking with the newly generated value
         currentFieldValues = { ...currentFieldValues, [field.id]: generatedValue };
-        
-        // CRITICAL: Wait for auto-save to complete before moving to next field
-        console.log(`💾 Saving "${field.name}" to Supabase before continuing...`);
-        await autoSaveLesson();
-        console.log(`✅ "${field.name}" saved successfully, moving to next field`);
-        
-        // Add a small delay to ensure database write completes
-        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`Error generating field ${field.name}:`, error);
         alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
@@ -599,18 +591,30 @@ export default function CreateNewLesson() {
   };
 
   // Auto-save lesson after field generation
-  const autoSaveLesson = async () => {
+  const autoSaveLesson = async (updatedFieldValues = null) => {
     if (!lessonId || !templateData?.id) return;
+    
+    // Use provided values or fall back to state
+    const valuesToSave = updatedFieldValues || fieldValues;
     
     try {
       const designerFields = fields.filter(f => f.fieldFor === 'designer');
       const builderFields = fields.filter(f => f.fieldFor === 'builder');
 
+      console.log('💾 Designer fields found:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Builder fields found:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Values to save:', valuesToSave);
+
       const designResponses = {};
       designerFields.forEach(field => {
-        const value = fieldValues[field.id];
+        const value = valuesToSave[field.id];
+        console.log(`💾 Designer field ${field.name}: value =`, value);
         if (field.type === 'checklist') {
           designResponses[field.name] = Array.isArray(value) ? value : [];
+        } else if (field.type === 'image') {
+          designResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+        } else if (field.type === 'mcqs') {
+          designResponses[field.name] = value || { questions: ['', '', '', '', ''] };
         } else {
           designResponses[field.name] = value || field.placeholder || '';
         }
@@ -618,13 +622,21 @@ export default function CreateNewLesson() {
       
       const lessonResponses = {};
       builderFields.forEach(field => {
-        const value = fieldValues[field.id];
+        const value = valuesToSave[field.id];
+        console.log(`💾 Builder field ${field.name}: value =`, value);
         if (field.type === 'checklist') {
           lessonResponses[field.name] = Array.isArray(value) ? value : [];
+        } else if (field.type === 'image') {
+          lessonResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+        } else if (field.type === 'mcqs') {
+          lessonResponses[field.name] = value || { questions: ['', '', '', '', ''] };
         } else {
           lessonResponses[field.name] = value || field.placeholder || '';
         }
       });
+
+      console.log('💾 Auto-saving designer responses:', designResponses);
+      console.log('💾 Auto-saving builder responses:', lessonResponses);
 
       const { error } = await supabase
         .from('lessons')
@@ -1112,14 +1124,15 @@ export default function CreateNewLesson() {
           console.log('📦 Builder responses:', lesson.builder_responses);
           
           // Load existing field values from designer_responses and builder_responses
+          // Now using field IDs as keys (matching how we save)
           const loadedValues = {};
           mappedFields.forEach(field => {
-            if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.name]) {
-              loadedValues[field.id] = lesson.designer_responses[field.name];
-              console.log(`✅ Loaded designer field: ${field.name} (${field.id})`);
-            } else if (field.fieldFor === 'builder' && lesson.builder_responses?.[field.name]) {
-              loadedValues[field.id] = lesson.builder_responses[field.name];
-              console.log(`✅ Loaded builder field: ${field.name} (${field.id})`);
+            if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.id]) {
+              loadedValues[field.id] = lesson.designer_responses[field.id];
+              console.log(`✅ Loaded designer field: ${field.name} (${field.id})`, lesson.designer_responses[field.id]);
+            } else if (field.fieldFor === 'builder' && lesson.builder_responses?.[field.id]) {
+              loadedValues[field.id] = lesson.builder_responses[field.id];
+              console.log(`✅ Loaded builder field: ${field.name} (${field.id})`, lesson.builder_responses[field.id]);
             }
           });
           console.log('📦 Final loadedValues:', loadedValues);
@@ -1254,128 +1267,142 @@ export default function CreateNewLesson() {
       return;
     }
     
-    // Create lesson if it doesn't exist yet
-    if (!lessonId) {
-      try {
-        // Get designer fields to save initial responses
-        const designerFields = fields.filter(f => f.fieldFor === 'designer');
-        const designResponses = {};
-        designerFields.forEach(field => {
-          const value = fieldValues[field.id];
-          // For checklist fields, ensure array; for image fields, ensure object; for others, use value or empty string
-          if (field.type === 'checklist') {
-            designResponses[field.name] = Array.isArray(value) ? value : [];
-          } else if (field.type === 'image') {
-            designResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-          } else {
-            designResponses[field.name] = value || '';
-          }
-        });
+    try {
+      // Get current field values from state
+      const currentFieldValues = fieldValues;
+      
+      // Separate designer and builder fields
+      const designerFields = fields.filter(f => f.fieldFor === 'designer');
+      const builderFields = fields.filter(f => f.fieldFor === 'builder');
+      
+      console.log('💾 === SAVING LESSON ===');
+      console.log('💾 Template ID:', templateData.id);
+      console.log('💾 Lesson ID:', lessonId || 'NEW');
+      console.log('💾 Designer fields:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Builder fields:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Current field values:', currentFieldValues);
+      
+      // Build designer responses object - SAVE EVERYTHING
+      const designerResponses = {};
+      for (const field of designerFields) {
+        const value = currentFieldValues[field.id];
         
-        // Create new lesson
-        const { data, error } = await supabase
+        if (value !== undefined && value !== null) {
+          // Save whatever value exists
+          designerResponses[field.id] = value;
+          console.log(`💾 Designer field "${field.name}" (${field.id}):`, value);
+        } else {
+          // Provide appropriate empty value based on field type
+          if (field.type === 'checklist' || field.type === 'assign_standards') {
+            designerResponses[field.id] = [];
+          } else if (field.type === 'mcqs') {
+            designerResponses[field.id] = { questions: ['', '', '', '', ''] };
+          } else if (field.type === 'image') {
+            designerResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+          } else {
+            designerResponses[field.id] = '';
+          }
+          console.log(`💾 Designer field "${field.name}" (${field.id}): [empty]`);
+        }
+      }
+      
+      // Build builder responses object - SAVE EVERYTHING
+      const builderResponses = {};
+      for (const field of builderFields) {
+        const value = currentFieldValues[field.id];
+        
+        if (value !== undefined && value !== null) {
+          // Save whatever value exists
+          builderResponses[field.id] = value;
+          console.log(`💾 Builder field "${field.name}" (${field.id}):`, value);
+        } else {
+          // Provide appropriate empty value based on field type
+          if (field.type === 'checklist' || field.type === 'assign_standards') {
+            builderResponses[field.id] = [];
+          } else if (field.type === 'mcqs') {
+            builderResponses[field.id] = { questions: ['', '', '', '', ''] };
+          } else if (field.type === 'image') {
+            builderResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+          } else {
+            builderResponses[field.id] = '';
+          }
+          console.log(`💾 Builder field "${field.name}" (${field.id}): [empty]`);
+        }
+      }
+      
+      console.log('💾 Final designer responses:', designerResponses);
+      console.log('💾 Final builder responses:', builderResponses);
+      
+      // Create or update lesson
+      if (!lessonId) {
+        // CREATE NEW LESSON
+        console.log('💾 Creating new lesson...');
+        
+        const { data: newLesson, error: insertError } = await supabase
           .from('lessons')
           .insert({
             lesson_template_id: templateData.id,
             template_name: templateData.name,
-            is_test: false,
+            created_by: session?.user?.id,
+            designer_responses: designerResponses,
+            builder_responses: builderResponses,
             status: 'draft',
-            designer_responses: designResponses,
-            builder_responses: {},
-            created_by: session?.user?.id
+            is_test: false,
+            created_at: new Date().toISOString()
           })
           .select()
           .single();
         
-        if (error) throw error;
+        if (insertError) {
+          console.error('❌ Insert error:', insertError);
+          throw insertError;
+        }
         
-        console.log('✅ Lesson created:', data);
+        console.log('✅ NEW LESSON CREATED:', newLesson.id);
+        setCurrentLessonId(newLesson.id);
         
-        // Update state with the new lesson ID
-        setCurrentLessonId(data.id);
+        // Update URL with new lesson ID
+        const newUrl = `${window.location.pathname}?templateId=${templateData.id}&lessonId=${newLesson.id}`;
+        window.history.replaceState({}, '', newUrl);
         
-        // Clear unsaved changes flag
-        setHasUnsavedChanges(false);
+      } else {
+        // UPDATE EXISTING LESSON
+        console.log('💾 Updating existing lesson:', lessonId);
         
-        // Update URL with new lessonId
-        navigate(`/create-new-lesson?templateId=${templateData.id}&lessonId=${data.id}`, { replace: true });
+        const { error: updateError } = await supabase
+          .from('lessons')
+          .update({
+            designer_responses: designerResponses,
+            builder_responses: builderResponses,
+            template_name: templateData.name,
+            updated_by: session?.user?.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', lessonId);
         
-        setShowSaveToast(true);
-        setTimeout(() => setShowSaveToast(false), 3000);
-        return;
-      } catch (error) {
-        console.error('Error creating lesson:', error);
-        alert('Failed to create lesson. Please try again.');
-        return;
+        if (updateError) {
+          console.error('❌ Update error:', updateError);
+          throw updateError;
+        }
+        
+        console.log('✅ LESSON UPDATED:', lessonId);
       }
-    }
-
-    try {
-      // Get all designer and builder fields
-      const designerFields = fields.filter(f => f.fieldFor === 'designer');
-      const builderFields = fields.filter(f => f.fieldFor === 'builder');
-
-      console.log('💾 Saving lesson...');
-      console.log('💾 Designer fields:', designerFields.map(f => f.name));
-      console.log('💾 Builder fields:', builderFields.map(f => f.name));
-      console.log('💾 Current fieldValues:', fieldValues);
-
-      // Collect design responses from actual field values
-      const designResponses = {};
-      designerFields.forEach(field => {
-        const value = fieldValues[field.id];
-        if (field.type === 'checklist') {
-          designResponses[field.name] = Array.isArray(value) ? value : [];
-        } else if (field.type === 'image') {
-          designResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-        } else {
-          designResponses[field.name] = value || '';
-        }
-      });
-      
-      // Collect lesson responses from builder field values
-      const lessonResponses = {};
-      builderFields.forEach(field => {
-        const value = fieldValues[field.id];
-        if (field.type === 'checklist') {
-          lessonResponses[field.name] = Array.isArray(value) ? value : [];
-        } else if (field.type === 'image') {
-          lessonResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-        } else {
-          lessonResponses[field.name] = value || '';
-        }
-      });
-
-      console.log('💾 Designer responses to save:', designResponses);
-      console.log('💾 Builder responses to save:', lessonResponses);
-
-      // Update lesson
-      const { error } = await supabase
-        .from('lessons')
-        .update({
-          designer_responses: designResponses,
-          builder_responses: lessonResponses,
-          template_name: templateData.name
-        })
-        .eq('id', lessonId);
-
-      if (error) throw error;
-
-      console.log('✅ Lesson saved successfully');
       
       // Clear unsaved changes flag
       setHasUnsavedChanges(false);
       
-      // Show toast notification
+      // Show success toast
       setShowSaveToast(true);
-      
-      // Hide toast after delay
       setTimeout(() => {
         setShowSaveToast(false);
       }, 3000);
+      
+      console.log('💾 === SAVE COMPLETE ===');
+      
     } catch (error) {
-      console.error('Error saving lesson:', error);
-      alert('Failed to save lesson. Please try again.');
+      console.error('❌ ERROR SAVING LESSON:', error);
+      console.error('❌ Error details:', error.message, error.details);
+      alert(`Failed to save lesson: ${error.message}`);
     }
   };
 
@@ -1441,6 +1468,8 @@ export default function CreateNewLesson() {
       } else if (field.type === 'image') {
         // For image fields, upload data URL if needed, then save
         designResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+      } else if (field.type === 'mcqs') {
+        designResponses[field.name] = value || { questions: ['', '', '', '', ''] };
       } else {
         designResponses[field.name] = value || field.placeholder || '';
       }
@@ -1456,6 +1485,8 @@ export default function CreateNewLesson() {
       } else if (field.type === 'image') {
         // For image fields, upload data URL if needed, then save
         lessonResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+      } else if (field.type === 'mcqs') {
+        lessonResponses[field.name] = value || { questions: ['', '', '', '', ''] };
       } else {
         lessonResponses[field.name] = value || field.placeholder || '';
       }

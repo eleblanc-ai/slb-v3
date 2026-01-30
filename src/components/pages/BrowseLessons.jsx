@@ -29,6 +29,8 @@ export default function BrowseLessons() {
 
       if (lessonsError) throw lessonsError;
 
+      console.log('📦 Loaded lessons:', lessonsData);
+
       // Get unique user IDs and template IDs
       const userIds = [...new Set([
         ...lessonsData?.map(l => l.created_by).filter(Boolean),
@@ -36,18 +38,27 @@ export default function BrowseLessons() {
       ])];
       const templateIds = [...new Set(lessonsData?.map(l => l.lesson_template_id).filter(Boolean))];
       
+      console.log('👥 User IDs to fetch:', userIds);
+      
       // Fetch profiles for creators
       let profileMap = {};
       if (userIds.length > 0) {
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, display_name')
           .in('id', userIds);
         
+        console.log('👤 Profiles fetched:', profiles);
+        if (profileError) console.error('Profile fetch error:', profileError);
+        
         profiles?.forEach(p => {
-          profileMap[p.id] = p.display_name;
+          if (p.display_name) {
+            profileMap[p.id] = p.display_name;
+          }
         });
       }
+      
+      console.log('👤 Profile map:', profileMap);
 
       // Fetch lesson templates for category and state info
       let templateMap = {};
@@ -62,14 +73,37 @@ export default function BrowseLessons() {
         });
       }
 
+      // Fetch template fields to find Content ID field
+      let templateFieldsMap = {};
+      if (templateIds.length > 0) {
+        const { data: fields } = await supabase
+          .from('lesson_template_fields')
+          .select('id, name, lesson_template_id, field_for, field_order')
+          .in('lesson_template_id', templateIds)
+          .eq('field_for', 'designer')
+          .order('field_order', { ascending: true });
+        
+        fields?.forEach(field => {
+          if (!templateFieldsMap[field.lesson_template_id]) {
+            templateFieldsMap[field.lesson_template_id] = [];
+          }
+          templateFieldsMap[field.lesson_template_id].push(field);
+        });
+      }
+
       // Add creator and template info to lessons
       const lessonsWithCreator = lessonsData?.map(lesson => {
         // Use updated_by if it exists, otherwise fall back to created_by
         const userId = lesson.updated_by || lesson.created_by;
+        const displayName = profileMap[userId] || 'Unknown User';
+        
+        console.log(`Lesson ${lesson.id.slice(0, 8)}: userId=${userId?.slice(0, 8)}, displayName=${displayName}`);
+        
         return {
           ...lesson,
-          creator: { display_name: profileMap[userId] },
-          template: templateMap[lesson.lesson_template_id] || {}
+          creator: { display_name: displayName },
+          template: templateMap[lesson.lesson_template_id] || {},
+          templateFields: templateFieldsMap[lesson.lesson_template_id] || []
         };
       });
 
@@ -371,7 +405,28 @@ export default function BrowseLessons() {
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
-                      {lesson.designer_responses?.["Content ID"] || lesson.id.slice(0, 8) + "..."}
+                      {/* Find Content ID field value from designer_responses */}
+                      {(() => {
+                        const responses = lesson.designer_responses || {};
+                        const fields = lesson.templateFields || [];
+                        
+                        // Find the Content ID field (usually first designer text field or one named "Content ID")
+                        const contentIdField = fields.find(f => 
+                          f.name.toLowerCase().includes('content id') || 
+                          f.name.toLowerCase().includes('contentid')
+                        ) || fields[0]; // fallback to first field
+                        
+                        // Get value using field ID
+                        if (contentIdField && responses[contentIdField.id]) {
+                          const value = responses[contentIdField.id];
+                          if (typeof value === 'string' && value.trim()) {
+                            return value;
+                          }
+                        }
+                        
+                        // Fallback: show lesson ID
+                        return lesson.id.slice(0, 8) + "...";
+                      })()}
                     </h3>
                     <p style={{
                       fontSize: '0.75rem',
@@ -454,14 +509,12 @@ export default function BrowseLessons() {
                   color: 'var(--gray-600)',
                   marginBottom: '0.75rem'
                 }}>
-                  {lesson.creator?.display_name && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                      <User size={12} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {lesson.creator.display_name}
-                      </span>
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                    <User size={12} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {lesson.creator?.display_name || 'Unknown User'}
+                    </span>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                     <Calendar size={12} />
                     <span>{new Date(lesson.updated_at).toLocaleString('en-US', { 
