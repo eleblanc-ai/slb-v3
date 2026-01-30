@@ -891,7 +891,7 @@ export default function CreateNewLessonType() {
       let data, error;
       
       if (testLessonId) {
-        // Update existing test lesson
+        // Try to update existing test lesson
         const result = await supabase
           .from('lessons')
           .update({
@@ -900,10 +900,32 @@ export default function CreateNewLessonType() {
             template_name: lessonTypeData.name
           })
           .eq('id', testLessonId)
-          .select()
-          .single();
-        data = result.data;
-        error = result.error;
+          .select();
+        
+        // If update returns no rows, the lesson doesn't exist - create it instead
+        if (result.data && result.data.length === 0) {
+          const insertResult = await supabase
+            .from('lessons')
+            .insert({
+              lesson_template_id: lessonTypeData.id,
+              template_name: lessonTypeData.name,
+              is_test: true,
+              status: 'draft',
+              designer_responses: designResponses,
+              builder_responses: lessonResponses,
+              created_by: session?.user?.id
+            })
+            .select()
+            .single();
+          data = insertResult.data;
+          error = insertResult.error;
+          if (data) {
+            setTestLessonId(data.id);
+          }
+        } else {
+          data = result.data?.[0];
+          error = result.error;
+        }
       } else {
         // Create new test lesson
         const result = await supabase
