@@ -1,0 +1,4 @@
+.DS_Store
+.env
+/slb-3.3
+/node_modules
