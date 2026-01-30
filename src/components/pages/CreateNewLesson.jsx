@@ -120,6 +120,8 @@ export default function CreateNewLesson() {
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const hasInitializedRef = useRef(false);
+  const previousFieldValuesRef = useRef(null);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -1006,12 +1008,27 @@ export default function CreateNewLesson() {
 
   // Sync fieldValues to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('fieldValues', JSON.stringify(fieldValues));
-    // Mark as having unsaved changes when field values change (except on initial load)
-    if (Object.keys(fieldValues).length > 0 && !loading) {
-      setHasUnsavedChanges(true);
+    const currentFieldValues = JSON.stringify(fieldValues);
+    localStorage.setItem('fieldValues', currentFieldValues);
+    
+    // Skip if empty fieldValues (initial mount)
+    if (Object.keys(fieldValues).length === 0) {
+      return;
     }
-  }, [fieldValues, loading]);
+    
+    // First time we have data - initialize tracking
+    if (previousFieldValuesRef.current === null) {
+      previousFieldValuesRef.current = currentFieldValues;
+      hasInitializedRef.current = true;
+      return; // Don't mark as unsaved on first load
+    }
+    
+    // Only mark as unsaved if fieldValues actually changed
+    if (previousFieldValuesRef.current !== currentFieldValues) {
+      setHasUnsavedChanges(true);
+      previousFieldValuesRef.current = currentFieldValues;
+    }
+  }, [fieldValues]);
 
   const loadTemplate = async (id) => {
     try {
