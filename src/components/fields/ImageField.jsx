@@ -10,7 +10,8 @@ export default function ImageField({
   onAIConfig, 
   onGenerateAI, 
   isGenerating, 
-  hasGenerated 
+  hasGenerated,
+  isMissing
 }) {
   const [imageDescription, setImageDescription] = useState(value?.description || '');
   const [aiGeneratedUrl, setAiGeneratedUrl] = useState(value?.url || '');
@@ -80,6 +81,7 @@ export default function ImageField({
       onGenerateAI={onGenerateAI}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      isMissing={isMissing}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.75rem 0' }}>
         {/* Image Description Input */}

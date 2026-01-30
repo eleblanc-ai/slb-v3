@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddEditFieldModal from '../modals/AddFieldModal';
 import NameLessonTypeModal from '../modals/NameLessonTypeModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
+import MissingFieldsModal from '../modals/MissingFieldsModal';
 import BaseField from '../fields/BaseField';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
@@ -99,6 +100,15 @@ export default function CreateNewLessonType() {
   const [aiConfigField, setAIConfigField] = useState(null);
   const [hasGeneratedMap, setHasGeneratedMap] = useState({});
 
+  // Lesson generation state
+  const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
+  const [generationPaused, setGenerationPaused] = useState(false);
+  const [currentGenerationIndex, setCurrentGenerationIndex] = useState(0);
+  const [totalGenerationFields, setTotalGenerationFields] = useState(0);
+  const [missingFields, setMissingFields] = useState([]);
+  const [showMissingFieldsModal, setShowMissingFieldsModal] = useState(false);
+  const [highlightedMissingFields, setHighlightedMissingFields] = useState(new Set());
+
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
     setAIConfigField(field);
@@ -162,6 +172,207 @@ export default function CreateNewLessonType() {
     } catch (error) {
       console.error('Error updating field order:', error);
       alert('Failed to update field order. Please try again.');
+    }
+  };
+
+  // Handler: Generate entire lesson (all AI-enabled fields)
+  const handleGenerateLesson = async () => {
+    // If paused, continue from where we left off
+    if (generationPaused) {
+      setGenerationPaused(false);
+      setShowMissingFieldsModal(false);
+      setHighlightedMissingFields(new Set());
+      
+      // Re-validate and continue
+      await continueGeneration();
+      return;
+    }
+
+    // Start fresh generation
+    setIsGeneratingLesson(true);
+    setGenerationPaused(false);
+    setCurrentGenerationIndex(0);
+    setHighlightedMissingFields(new Set());
+    
+    // Get all AI-enabled fields in order: designer first, then builder
+    const aiEnabledDesignerFields = fields.filter(f => f.fieldFor === 'designer' && f.aiEnabled);
+    const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
+    const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
+    
+    setTotalGenerationFields(allAIFields.length);
+    
+    // Validate required fields before starting
+    const missing = validateRequiredFields(allAIFields);
+    if (missing.length > 0) {
+      setMissingFields(missing);
+      setShowMissingFieldsModal(true);
+      setGenerationPaused(true);
+      
+      // Highlight missing fields
+      const missingIds = new Set(missing.map(m => m.id));
+      setHighlightedMissingFields(missingIds);
+      setIsGeneratingLesson(false);
+      return;
+    }
+    
+    // Generate all fields
+    await continueGeneration();
+  };
+
+  const continueGeneration = async () => {
+    const aiEnabledDesignerFields = fields.filter(f => f.fieldFor === 'designer' && f.aiEnabled);
+    const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
+    const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
+    
+    for (let i = currentGenerationIndex; i < allAIFields.length; i++) {
+      const field = allAIFields[i];
+      setCurrentGenerationIndex(i);
+      
+      // Validate context fields before generating this field
+      const missing = validateContextFieldsForField(field, allAIFields);
+      if (missing.length > 0) {
+        setMissingFields(missing);
+        setShowMissingFieldsModal(true);
+        setGenerationPaused(true);
+        
+        // Highlight missing fields
+        const missingIds = new Set(missing.map(m => m.id));
+        setHighlightedMissingFields(missingIds);
+        setIsGeneratingLesson(false);
+        return;
+      }
+      
+      // Generate the field
+      try {
+        await handleGenerateAI(field);
+        
+        // Auto-save after generation
+        await autoSaveLesson();
+      } catch (error) {
+        console.error(`Error generating field ${field.name}:`, error);
+        alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
+        setIsGeneratingLesson(false);
+        setGenerationPaused(true);
+        return;
+      }
+    }
+    
+    // All done!
+    setIsGeneratingLesson(false);
+    setGenerationPaused(false);
+    setCurrentGenerationIndex(0);
+    alert('✅ Lesson generation complete!');
+  };
+
+  // Validate required context fields for a specific field
+  const validateContextFieldsForField = (field, allFields) => {
+    const missing = [];
+    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+    
+    // Get AI config for this field
+    let contextFieldIds = field.ai_context_field_ids || [];
+    
+    // Check each context field
+    for (const contextFieldId of contextFieldIds) {
+      const contextField = allFields.find(f => f.id === contextFieldId);
+      if (!contextField) continue;
+      
+      const value = currentValues[contextFieldId];
+      const isEmpty = !value || 
+                      (typeof value === 'string' && value.trim() === '') ||
+                      (Array.isArray(value) && value.length === 0) ||
+                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
+      
+      if (isEmpty) {
+        missing.push({
+          id: contextField.id,
+          name: contextField.name,
+          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
+        });
+      }
+    }
+    
+    return missing;
+  };
+
+  // Validate all required fields before starting generation
+  const validateRequiredFields = (aiFields) => {
+    const missing = [];
+    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+    
+    // Get all unique context field IDs from all AI fields
+    const allContextFieldIds = new Set();
+    aiFields.forEach(field => {
+      const contextIds = field.ai_context_field_ids || [];
+      contextIds.forEach(id => allContextFieldIds.add(id));
+    });
+    
+    // Check each required context field
+    for (const contextFieldId of allContextFieldIds) {
+      const contextField = fields.find(f => f.id === contextFieldId);
+      if (!contextField) continue;
+      
+      // Only validate if field is marked as requiredForGeneration
+      if (!contextField.requiredForGeneration) continue;
+      
+      const value = currentValues[contextFieldId];
+      const isEmpty = !value || 
+                      (typeof value === 'string' && value.trim() === '') ||
+                      (Array.isArray(value) && value.length === 0) ||
+                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
+      
+      if (isEmpty) {
+        missing.push({
+          id: contextField.id,
+          name: contextField.name,
+          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
+        });
+      }
+    }
+    
+    return missing;
+  };
+
+  // Auto-save lesson after field generation
+  const autoSaveLesson = async () => {
+    if (!testLessonId || !lessonTypeData?.id) return;
+    
+    try {
+      const designerFields = fields.filter(f => f.fieldFor === 'designer');
+      const builderFields = fields.filter(f => f.fieldFor === 'builder');
+
+      const designResponses = {};
+      designerFields.forEach(field => {
+        const value = fieldValues[field.id];
+        if (field.type === 'checklist') {
+          designResponses[field.name] = Array.isArray(value) ? value : [];
+        } else {
+          designResponses[field.name] = value || field.placeholder || '';
+        }
+      });
+      
+      const lessonResponses = {};
+      builderFields.forEach(field => {
+        const value = fieldValues[field.id];
+        if (field.type === 'checklist') {
+          lessonResponses[field.name] = Array.isArray(value) ? value : [];
+        } else {
+          lessonResponses[field.name] = value || field.placeholder || '';
+        }
+      });
+
+      await supabase
+        .from('lessons')
+        .update({
+          designer_responses: designResponses,
+          builder_responses: lessonResponses,
+          template_name: lessonTypeData.name
+        })
+        .eq('id', testLessonId);
+      
+      console.log('✅ Auto-saved after field generation');
+    } catch (error) {
+      console.error('Error auto-saving:', error);
     }
   };
 
@@ -318,13 +529,21 @@ export default function CreateNewLessonType() {
         console.log('🎨 Image generation prompt:', imagePrompt);
         
         // Generate the image
-        const { url: imageDataUrl, model: usedModel } = await generateImage(imagePrompt, '1024x1024');
+        const { url: imageDataUrl, model: usedModel, altText: geminiAltText } = await generateImage(imagePrompt, '1024x1024');
         console.log('✅ Image generated with model:', usedModel);
         
-        // Generate alt text
-        console.log('📝 Generating alt text with GPT-4o Vision');
-        const generatedAltText = await generateAltText(imageDataUrl);
-        console.log('✅ Alt text generated:', generatedAltText);
+        // Generate alt text - use Gemini's if available, otherwise use GPT-4o Vision
+        let generatedAltText = geminiAltText;
+        let altTextModel = usedModel;
+        
+        if (!generatedAltText) {
+          console.log('📝 Generating alt text with GPT-4o Vision');
+          generatedAltText = await generateAltText(imageDataUrl);
+          altTextModel = 'gpt-4o';
+          console.log('✅ Alt text generated:', generatedAltText);
+        } else {
+          console.log('✅ Using Gemini alt text:', generatedAltText);
+        }
         
         // Upload to Supabase Storage
         console.log('☁️ Uploading image to Supabase Storage...');
@@ -391,7 +610,7 @@ export default function CreateNewLessonType() {
           url: cacheBustedUrl,
           altText: generatedAltText,
           imageModel: usedModel,
-          altTextModel: 'gpt-4o',
+          altTextModel: altTextModel,
           description: ''
         };
         
@@ -862,72 +1081,30 @@ export default function CreateNewLessonType() {
     const designerFields = fields.filter(f => f.fieldFor === 'designer');
     const builderFields = fields.filter(f => f.fieldFor === 'builder');
 
-    // Helper function to upload data URLs to storage
-    const uploadDataUrlIfNeeded = async (value, fieldName) => {
-      if (value && typeof value === 'object' && value.url && value.url.startsWith('data:image')) {
-        console.log('🔄 Uploading data URL for field:', fieldName);
-        const contentId = fieldValues[designerFields.find(f => f.name === 'Content ID')?.id] || `lesson-${Date.now()}`;
-        const templateName = lessonTypeData?.name || 'unknown-template';
-        const fileName = `${templateName}/${contentId}-${fieldName}.png`;
-        
-        // Convert base64 to blob
-        const base64Data = value.url.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/png' });
-        
-        // Delete old if exists
-        await supabase.storage.from('lesson-images').remove([fileName]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Upload
-        const { error: uploadError } = await supabase.storage
-          .from('lesson-images')
-          .upload(fileName, blob, {
-            contentType: 'image/png',
-            cacheControl: '0'
-          });
-        
-        if (uploadError) throw new Error(`Failed to upload image: ${uploadError.message}`);
-        
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('lesson-images')
-          .getPublicUrl(fileName);
-        
-        return { ...value, url: `${publicUrl}?t=${Date.now()}` };
-      }
-      return value;
-    };
-
     // Collect design responses from actual field values
     const designResponses = {};
-    for (const field of designerFields) {
+    designerFields.forEach(field => {
       const value = fieldValues[field.id];
-      // For image fields, upload data URL if needed, then save
+      // For image fields, save the full object with url, altText, etc.
       if (field.type === 'image') {
-        designResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        designResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
       } else {
         // Use actual entered value, or fallback to placeholder or empty string
         designResponses[field.name] = value || field.placeholder || '';
       }
-    }
+    });
     
     // Collect lesson responses from builder field values
     const lessonResponses = {};
-    for (const field of builderFields) {
+    builderFields.forEach(field => {
       const value = fieldValues[field.id];
-      // For image fields, upload data URL if needed, then save
+      // For image fields, save the full object with url, altText, etc.
       if (field.type === 'image') {
-        lessonResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        lessonResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
       } else {
         lessonResponses[field.name] = value || field.placeholder || '';
       }
-    }
+    });
 
     try {
       let data, error;
@@ -1213,33 +1390,45 @@ export default function CreateNewLessonType() {
             </div>
 
             <button
-              onClick={() => alert('Generate lesson functionality coming soon!')}
+              onClick={handleGenerateLesson}
+              disabled={isGeneratingLesson}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                background: isGeneratingLesson 
+                  ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
+                  : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
                 padding: '0.5rem 0.875rem',
                 fontSize: '0.8125rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: isGeneratingLesson ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)'
+                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                opacity: isGeneratingLesson ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
+                if (!isGeneratingLesson) {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
+                }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+                if (!isGeneratingLesson) {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+                }
               }}
             >
               <Sparkles size={16} />
-              Generate Lesson
+              {isGeneratingLesson 
+                ? `Generating (${currentGenerationIndex + 1}/${totalGenerationFields})...`
+                : generationPaused 
+                  ? 'Continue Generating Lesson'
+                  : 'Generate Lesson'}
             </button>
 
             <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--gray-300)' }} />
@@ -1499,6 +1688,9 @@ export default function CreateNewLessonType() {
                             hasGenerated: !!hasGeneratedMap[field.id],
                           } : {};
                           
+                          // Check if this field is missing
+                          const isMissing = highlightedMissingFields.has(field.id);
+                          
                           let fieldComponent;
                           if (field.type === 'text') {
                             fieldComponent = (
@@ -1509,6 +1701,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1521,6 +1714,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1533,6 +1727,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1545,6 +1740,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1557,6 +1753,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1569,6 +1766,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1584,6 +1782,7 @@ export default function CreateNewLessonType() {
                                 onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
+                                isMissing={isMissing}
                               />
                             );
                           } else {
@@ -1593,6 +1792,7 @@ export default function CreateNewLessonType() {
                                 field={field}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1771,6 +1971,9 @@ export default function CreateNewLessonType() {
                             hasGenerated: !!hasGeneratedMap[field.id],
                           } : {};
                           
+                          // Check if this field is missing
+                          const isMissing = highlightedMissingFields.has(field.id);
+                          
                           let fieldComponent;
                           if (field.type === 'text') {
                             fieldComponent = (
@@ -1781,6 +1984,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1793,6 +1997,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1805,6 +2010,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1817,6 +2023,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1829,6 +2036,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1841,6 +2049,7 @@ export default function CreateNewLessonType() {
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1856,6 +2065,7 @@ export default function CreateNewLessonType() {
                                 onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
+                                isMissing={isMissing}
                               />
                             );
                           } else {
@@ -1865,6 +2075,7 @@ export default function CreateNewLessonType() {
                                 field={field}
                                 onEdit={handleEditField}
                                 onDelete={handleDeleteField}
+                                isMissing={isMissing}
                                 {...aiProps}
                               />
                             );
@@ -1957,6 +2168,12 @@ export default function CreateNewLessonType() {
         allFields={fields}
         onSave={handleAIConfigSave}
         fieldValues={fieldValues}
+      />
+
+      <MissingFieldsModal
+        visible={showMissingFieldsModal}
+        onClose={() => setShowMissingFieldsModal(false)}
+        missingFields={missingFields}
       />
     </div>
   );

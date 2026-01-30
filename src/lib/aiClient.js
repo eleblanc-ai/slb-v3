@@ -91,7 +91,7 @@ export async function callAIWithFunction(prompt, model, functionSchema) {
  * Generate an image using Gemini 3 Pro Image (with DALL-E 3 fallback)
  * @param {string} prompt - The image generation prompt
  * @param {string} size - Image size (ignored for Gemini, used for DALL-E fallback)
- * @returns {Promise<{url: string, model: string}>} - The image URL and model used
+ * @returns {Promise<{url: string, model: string, altText?: string}>} - The image URL, model used, and optional alt text from Gemini
  */
 export async function generateImage(prompt, size = '1024x1024') {
   // Truncate prompt if too long (DALL-E has 4000 char limit)
@@ -130,35 +130,84 @@ export async function generateImage(prompt, size = '1024x1024') {
       }
 
       console.log('📦 Gemini response received');
-      console.log('🔍 Full Gemini response object:', JSON.stringify(response, null, 2));
       
-      // Extract image data from response
-      // The SDK wraps the response, so we need to access response.response
-      const actualResponse = response.response || response;
+      // Extract image data from response - handle multiple response formats
       let base64Data = null;
-      let textResponse = '';
+      let geminiAltText = '';
       
-      if (actualResponse.candidates?.[0]?.content?.parts) {
-        for (const part of actualResponse.candidates[0].content.parts) {
-          if (part.text) {
-            textResponse += part.text;
-            console.log('📝 Gemini returned text (first 200 chars):', part.text.substring(0, 200));
-          } else if (part.inlineData?.data) {
-            base64Data = part.inlineData.data;
-            const mimeType = part.inlineData.mimeType || 'image/png';
-            console.log('✅ Image generated successfully with Gemini 3 Pro Image');
-            console.log('📷 Image format:', mimeType);
-            return {
-              url: `data:${mimeType};base64,${base64Data}`,
-              model: 'gemini-3-pro-image-preview'
-            };
+      // Try to get the actual response from various wrapper levels
+      const possibleResponses = [
+        response,
+        response.response,
+        response.result
+      ].filter(r => r);
+      
+      for (const resp of possibleResponses) {
+        // Check for candidates array
+        const candidates = resp.candidates || resp.response?.candidates;
+        
+        if (candidates && Array.isArray(candidates) && candidates.length > 0) {
+          const candidate = candidates[0];
+          const parts = candidate.content?.parts || candidate.parts;
+          
+          if (parts && Array.isArray(parts)) {
+            for (const part of parts) {
+              // Collect text (Gemini's alt text description)
+              if (part.text) {
+                geminiAltText += part.text;
+              }
+              
+              // Check for inline image data
+              if (part.inlineData?.data) {
+                base64Data = part.inlineData.data;
+                const mimeType = part.inlineData.mimeType || 'image/png';
+                console.log('✅ Image generated successfully with Gemini 3 Pro Image');
+                console.log('📷 Image format:', mimeType);
+                console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+                return {
+                  url: `data:${mimeType};base64,${base64Data}`,
+                  model: 'gemini-3-pro-image-preview',
+                  altText: geminiAltText.trim()
+                };
+              }
+            }
+          }
+        }
+        
+        // Also check direct parts array (some SDK versions)
+        if (resp.parts && Array.isArray(resp.parts)) {
+          for (const part of resp.parts) {
+            // Collect text (Gemini's alt text description)
+            if (part.text) {
+              geminiAltText += part.text;
+            }
+            
+            if (part.inlineData?.data) {
+              base64Data = part.inlineData.data;
+              const mimeType = part.inlineData.mimeType || 'image/png';
+              console.log('✅ Image generated successfully with Gemini 3 Pro Image');
+              console.log('📷 Image format:', mimeType);
+              console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+              return {
+                url: `data:${mimeType};base64,${base64Data}`,
+                model: 'gemini-3-pro-image-preview',
+                altText: geminiAltText.trim()
+              };
+            }
           }
         }
       }
       
-      if (textResponse) {
-        console.log('⚠️ Gemini returned text instead of image. Full response:');
-        console.log(textResponse);
+      // If we got here, no image data was found
+      if (geminiAltText) {
+        console.log('⚠️ Gemini returned text instead of image:');
+        console.log(geminiAltText);
+        console.log('\n🔍 Full response structure:');
+        console.log(JSON.stringify(response, null, 2));
+      } else {
+        console.log('⚠️ No image data or text found in response');
+        console.log('🔍 Full response structure:');
+        console.log(JSON.stringify(response, null, 2));
       }
       console.log('⚠️ Falling back to DALL-E 3');
     } catch (geminiError) {

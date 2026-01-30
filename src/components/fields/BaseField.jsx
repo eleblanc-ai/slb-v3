@@ -14,6 +14,7 @@ export default function BaseField({
   onAIConfig,
   isGenerating = false,
   hasGenerated = false,
+  isMissing = false,
   children 
 }) {
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
@@ -35,11 +36,12 @@ export default function BaseField({
     <div
       style={{
         padding: '1.5rem',
-        border: '2px solid var(--gray-200)',
+        border: isMissing ? '2px solid #ef4444' : '2px solid var(--gray-200)',
         borderRadius: '12px',
-        backgroundColor: '#fff',
+        backgroundColor: isMissing ? '#fef2f2' : '#fff',
         transition: 'all 0.2s',
-        position: 'relative'
+        position: 'relative',
+        boxShadow: isMissing ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none'
       }}
     >
       {/* Action Buttons - top right, absolute - only show in template editing mode */}
