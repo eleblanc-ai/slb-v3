@@ -15,6 +15,7 @@ export default function BaseField({
   isGenerating = false,
   hasGenerated = false,
   isMissing = false,
+  customGenerateLabel,
   children 
 }) {
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
@@ -357,10 +358,10 @@ export default function BaseField({
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(102, 126, 234, 0.3)';
                 }
               }}
-              title={hasGenerated ? 'Regenerate with AI' : 'Generate with AI'}
+              title={customGenerateLabel || (hasGenerated ? 'Regenerate with AI' : 'Generate with AI')}
             >
               <Sparkles size={14} />
-              {isGenerating ? 'Generating...' : (hasGenerated ? 'Regenerate' : 'Generate')}
+              {customGenerateLabel || (isGenerating ? 'Generating...' : (hasGenerated ? 'Regenerate' : 'Generate'))}
             </button>
           )}
         </div>

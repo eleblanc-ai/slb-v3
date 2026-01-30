@@ -73,6 +73,7 @@ export default function MCQsField({
   onAIConfig,
   onEdit,
   onDelete,
+  isGenerating = false,
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [generatingQuestion, setGeneratingQuestion] = useState(null);
@@ -116,42 +117,15 @@ export default function MCQsField({
   console.log('🎨 MCQsField props:', { field: field?.name, hasOnAIGenerate: !!onAIGenerate, hasOnGenerateIndividual: !!onGenerateIndividual });
   
   return (
-    <BaseField field={field} onAIConfig={onAIConfig} onEdit={onEdit} onDelete={onDelete}>
-      {/* Generate All Button */}
-      {onAIGenerate && field.aiEnabled && (
-        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end' }}>
-          <button
-            type="button"
-            onClick={() => onAIGenerate(field.id)}
-            style={{
-              padding: '8px 16px',
-              fontSize: 14,
-              fontWeight: 600,
-              background: 'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)';
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-          >
-            <Sparkles size={16} />
-            Generate All 5 Questions
-          </button>
-        </div>
-      )}
-      
+    <BaseField 
+      field={field} 
+      onAIConfig={onAIConfig} 
+      onEdit={onEdit} 
+      onDelete={onDelete}
+      onGenerateAI={onAIGenerate}
+      customGenerateLabel="Generate All 5 Questions"
+      isGenerating={isGenerating}
+    >
       <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
         {/* Tabs */}
         <div style={{ 

@@ -146,6 +146,7 @@ export default function CreateNewLesson() {
             userAIConfig[field.id] = {
               field_name: field.name,
               ai_prompt: field.ai_prompt,
+              ai_individual_prompt: field.ai_individual_prompt,
               ai_context_field_ids: field.ai_context_field_ids,
               ai_system_instructions: field.ai_system_instructions,
               ai_context_instructions: field.ai_context_instructions,
@@ -159,6 +160,7 @@ export default function CreateNewLesson() {
       userAIConfig[aiConfigField.id] = {
         field_name: aiConfigField.name,
         ai_prompt: config.prompt,
+        ai_individual_prompt: config.individualPrompt,
         ai_context_field_ids: config.selectedFieldIds,
         ai_system_instructions: config.systemInstructions,
         ai_context_instructions: config.contextInstructions,
@@ -260,7 +262,7 @@ export default function CreateNewLesson() {
       if (!fieldAIConfig) {
         const { data: fieldData, error } = await supabase
           .from('lesson_template_fields')
-          .select('ai_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
+          .select('ai_prompt, ai_individual_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
           .eq('id', field.id)
           .single();
         
@@ -271,10 +273,18 @@ export default function CreateNewLesson() {
       // Get field values from localStorage
       const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
       
+      // Use individual prompt if available, otherwise modify the main prompt
+      let questionPrompt;
+      if (fieldAIConfig.ai_individual_prompt && fieldAIConfig.ai_individual_prompt.trim()) {
+        questionPrompt = fieldAIConfig.ai_individual_prompt;
+      } else {
+        questionPrompt = fieldAIConfig.ai_prompt?.replace(/Generate 5 multiple choice questions/gi, 'Generate 1 multiple choice question') || 'Generate 1 multiple choice question';
+      }
+      
       // Build prompt for single question
       const aiConfig = {
         systemInstructions: fieldAIConfig.ai_system_instructions || '',
-        prompt: fieldAIConfig.ai_prompt?.replace('Generate 5 multiple choice questions', 'Generate 1 multiple choice question') || '',
+        prompt: questionPrompt,
         formatRequirements: fieldAIConfig.ai_format_requirements || '',
         contextInstructions: fieldAIConfig.ai_context_instructions || '',
         selectedFieldIds: fieldAIConfig.ai_context_field_ids || [],
@@ -284,7 +294,7 @@ export default function CreateNewLesson() {
       
       // Add selected standard to context if provided
       if (selectedStandard) {
-        aiConfig.prompt += `\n\nUSE THIS SPECIFIC STANDARD:\nStandard Code: ${selectedStandard.fullCode}\nStandard Statement: ${selectedStandard.statement}`;
+        aiConfig.prompt += `\n\nUSE THIS STANDARD AS GUIDANCE:\nStandard Code: ${selectedStandard.fullCode}\nStandard Statement: ${selectedStandard.statement}\n\nCreate a question that aligns with and addresses this standard.`;
       }
       
       const prompt = buildFullPrompt(aiConfig);
@@ -337,9 +347,9 @@ export default function CreateNewLesson() {
       const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
       console.log('✅ Individual MCQ generated (structured):', result);
       
-      // Format the structured response as text
+      // Format the structured response as HTML for TipTap
       const q = result.questions[0];
-      const formattedMCQ = `${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${q.standards.join('; ')}]\nKEY: ${q.correct_answer}`;
+      const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${q.standards.join('; ')}]<br>KEY: ${q.correct_answer}</p>`;
       
       // Update only the specific question in the array
       setFieldValues(prev => {
@@ -409,12 +419,15 @@ export default function CreateNewLesson() {
     const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
     const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
     
+    // Track updated values as we generate each field
+    let currentFieldValues = { ...fieldValues };
+    
     for (let i = currentGenerationIndex; i < allAIFields.length; i++) {
       const field = allAIFields[i];
       setCurrentGenerationIndex(i);
       
-      // Validate context fields before generating this field
-      const missing = validateContextFieldsForField(field, allAIFields);
+      // Validate context fields before generating this field, using current values
+      const missing = validateContextFieldsForField(field, allAIFields, currentFieldValues);
       if (missing.length > 0) {
         setMissingFields(missing);
         setShowMissingFieldsModal(true);
@@ -429,7 +442,10 @@ export default function CreateNewLesson() {
       
       // Generate the field
       try {
-        await handleGenerateAI(field);
+        const generatedValue = await handleGenerateAI(field);
+        
+        // Update our tracking with the newly generated value
+        currentFieldValues = { ...currentFieldValues, [field.id]: generatedValue };
         
         // CRITICAL: Wait for auto-save to complete before moving to next field
         console.log(`💾 Saving "${field.name}" to Supabase before continuing...`);
@@ -455,10 +471,10 @@ export default function CreateNewLesson() {
   };
 
   // Validate required context fields for a specific field
-  const validateContextFieldsForField = (field, allFields) => {
+  const validateContextFieldsForField = (field, allFields, valuesToCheck = null) => {
     const missing = [];
-    // CRITICAL: Use current fieldValues state, not stale localStorage
-    const currentValues = fieldValues;
+    // Use provided values (during generation loop) or fall back to state
+    const currentValues = valuesToCheck || fieldValues;
     
     // Get AI config for this field
     let contextFieldIds = field.ai_context_field_ids || [];
@@ -903,9 +919,9 @@ export default function CreateNewLesson() {
         const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
         console.log('✅ MCQs generated (structured):', result);
         
-        // Format each question as text and store in questions array
+        // Format each question as HTML for TipTap and store in questions array
         const formattedQuestions = result.questions.map((q, i) => 
-          `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${q.standards.join('; ')}]\nKEY: ${q.correct_answer}`
+          `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${q.standards.join('; ')}]<br>KEY: ${q.correct_answer}</p>`
         );
         
         generatedContent = { questions: formattedQuestions };
@@ -922,9 +938,12 @@ export default function CreateNewLesson() {
       setFieldValues(prev => ({ ...prev, [field.id]: generatedContent }));
       setHasGeneratedMap(prev => ({ ...prev, [field.id]: true }));
       
+      // Return the generated content so continueGeneration can track it
+      return generatedContent;
     } catch (error) {
       console.error('Error generating AI content:', error);
       alert(`Failed to generate content: ${error.message}`);
+      throw error; // Re-throw so continueGeneration can catch it
     } finally {
       setGeneratingFieldId(null);
     }
@@ -1933,6 +1952,7 @@ export default function CreateNewLesson() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                isGenerating={generatingFieldId === field.id}
                               />
                             );
                           } else {
@@ -2168,6 +2188,7 @@ export default function CreateNewLesson() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                isGenerating={generatingFieldId === field.id}
                               />
                             );
                           } else {

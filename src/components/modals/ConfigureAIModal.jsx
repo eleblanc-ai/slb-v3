@@ -19,6 +19,7 @@ export default function ConfigureAIModal({
   mode = 'template' // 'template' or 'lesson'
 }) {
   const [prompt, setPrompt] = useState('');
+  const [individualPrompt, setIndividualPrompt] = useState('');
   const [systemInstructions, setSystemInstructions] = useState('');
   const [contextInstructions, setContextInstructions] = useState('');
   const [formatRequirements, setFormatRequirements] = useState('');
@@ -55,7 +56,7 @@ export default function ConfigureAIModal({
         console.log('📥 Loading template AI config');
         const { data, error } = await supabase
           .from('lesson_template_fields')
-          .select('ai_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
+          .select('ai_prompt, ai_individual_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
           .eq('id', field.id)
           .single();
         
@@ -66,12 +67,14 @@ export default function ConfigureAIModal({
       
       if (configData) {
         setPrompt(configData.ai_prompt || `Generate content for the ${field.name} field.`);
+        setIndividualPrompt(configData.ai_individual_prompt || '');
         setSystemInstructions(configData.ai_system_instructions || defaultSystemInstructions);
         setContextInstructions(configData.ai_context_instructions || defaultContextInstructions);
         setFormatRequirements(configData.ai_format_requirements || defaultFormatReqs);
         setSelectedFields(configData.ai_context_field_ids || []);
       } else {
         setPrompt(`Generate content for the ${field.name} field.`);
+        setIndividualPrompt('');
         setSystemInstructions(defaultSystemInstructions);
         setContextInstructions(defaultContextInstructions);
         setFormatRequirements(defaultFormatReqs);
@@ -80,6 +83,7 @@ export default function ConfigureAIModal({
     } catch (err) {
       console.error('Error loading AI config:', err);
       setPrompt(`Generate content for the ${field.name} field.`);
+      setIndividualPrompt('');
       setSystemInstructions(defaultSystemInstructions);
       setContextInstructions(defaultContextInstructions);
       setFormatRequirements(defaultFormatReqs);
@@ -93,6 +97,7 @@ export default function ConfigureAIModal({
     if (visible && field) {
       setLoading(true);
       setPrompt('');
+      setIndividualPrompt('');
       setSystemInstructions('');
       setContextInstructions('');
       setFormatRequirements('');
@@ -120,6 +125,7 @@ export default function ConfigureAIModal({
           .from('lesson_template_fields')
           .update({
             ai_prompt: prompt || null,
+            ai_individual_prompt: individualPrompt || null,
             ai_context_field_ids: selectedFields.length > 0 ? selectedFields : null,
             ai_system_instructions: systemInstructions || null,
             ai_context_instructions: contextInstructions || null,
@@ -134,6 +140,7 @@ export default function ConfigureAIModal({
       if (onSave) {
         onSave({
           prompt,
+          individualPrompt,
           contextFields: selectedFields,
           systemInstructions,
           contextInstructions,
@@ -169,6 +176,7 @@ export default function ConfigureAIModal({
 
   const resetAll = () => {
     setPrompt(`Generate content for the ${field?.name} field.`);
+    setIndividualPrompt('');
     setSystemInstructions('You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.');
     setContextInstructions('Use the following context from other fields to inform your generation:');
     setFormatRequirements('Return plain text without markdown formatting.');
@@ -454,6 +462,54 @@ export default function ConfigureAIModal({
                         }}
                       />
                     </div>
+
+                    {field?.type === 'mcqs' && (
+                      <div style={{
+                        marginBottom: '1.5rem',
+                        background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                        padding: '1.25rem',
+                        borderRadius: '12px',
+                        border: '2px solid #86efac'
+                      }}>
+                        <label style={{
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                          color: '#166534',
+                          display: 'block',
+                          marginBottom: '0.5rem'
+                        }}>
+                          Individual Question Prompt (Optional)
+                        </label>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: '#15803d',
+                          marginBottom: '0.75rem',
+                          lineHeight: 1.5
+                        }}>
+                          This prompt will be used when regenerating a single question. If left blank, the main prompt will be used with "Generate 1 multiple choice question" instead of "Generate 5 multiple choice questions".
+                        </p>
+                        <textarea
+                          value={individualPrompt}
+                          onChange={(e) => setIndividualPrompt(e.target.value)}
+                          placeholder="Example: Generate 1 multiple choice question..."
+                          rows={4}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            border: '2px solid #86efac',
+                            borderRadius: '8px',
+                            fontSize: '0.8125rem',
+                            fontFamily: 'system-ui',
+                            color: 'var(--gray-900)',
+                            backgroundColor: '#fff',
+                            outline: 'none',
+                            transition: 'border-color 0.2s',
+                            resize: 'vertical',
+                            boxSizing: 'border-box'
+                          }}
+                        />
+                      </div>
+                    )}
 
                     <div style={{ marginBottom: '1.5rem' }}>
                       <label style={{
