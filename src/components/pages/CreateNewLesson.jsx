@@ -431,8 +431,13 @@ export default function CreateNewLesson() {
       try {
         await handleGenerateAI(field);
         
-        // Auto-save after generation
+        // CRITICAL: Wait for auto-save to complete before moving to next field
+        console.log(`💾 Saving "${field.name}" to Supabase before continuing...`);
         await autoSaveLesson();
+        console.log(`✅ "${field.name}" saved successfully, moving to next field`);
+        
+        // Add a small delay to ensure database write completes
+        await new Promise(resolve => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`Error generating field ${field.name}:`, error);
         alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
@@ -452,7 +457,8 @@ export default function CreateNewLesson() {
   // Validate required context fields for a specific field
   const validateContextFieldsForField = (field, allFields) => {
     const missing = [];
-    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+    // CRITICAL: Use current fieldValues state, not stale localStorage
+    const currentValues = fieldValues;
     
     // Get AI config for this field
     let contextFieldIds = field.ai_context_field_ids || [];
@@ -489,7 +495,8 @@ export default function CreateNewLesson() {
   // Validate all required fields before starting generation
   const validateRequiredFields = (aiFields) => {
     const missing = [];
-    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+    // CRITICAL: Use current fieldValues state, not stale localStorage
+    const currentValues = fieldValues;
     
     // Get all unique context field IDs from all AI fields
     const allContextFieldIds = new Set();
@@ -552,7 +559,7 @@ export default function CreateNewLesson() {
         }
       });
 
-      await supabase
+      const { error } = await supabase
         .from('lessons')
         .update({
           designer_responses: designResponses,
@@ -561,9 +568,15 @@ export default function CreateNewLesson() {
         })
         .eq('id', lessonId);
       
+      if (error) {
+        console.error('❌ Error saving to Supabase:', error);
+        throw new Error(`Failed to save: ${error.message}`);
+      }
+      
       console.log('✅ Auto-saved after field generation');
     } catch (error) {
       console.error('Error auto-saving:', error);
+      throw error; // Re-throw to stop generation on save failure
     }
   };
 
