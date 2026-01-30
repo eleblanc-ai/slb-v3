@@ -28,6 +28,8 @@ export default function ConfigureAIModal({
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  console.log('🔧 ConfigureAIModal mode:', mode, 'field:', field?.name);
+
   const loadConfiguration = useCallback(async () => {
     const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
     const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
@@ -381,7 +383,7 @@ export default function ConfigureAIModal({
           ) : (
             <>
               <div style={{
-                width: '65%',
+                width: (mode === 'template' || (mode === 'lesson' && selectedFields.length > 0)) ? '65%' : '100%',
                 padding: '1.5rem',
                 overflowY: 'auto',
                 background: '#fff',
@@ -580,133 +582,245 @@ export default function ConfigureAIModal({
                 )}
               </div>
 
-              <div style={{
-                width: '35%',
-                padding: '1.5rem',
-                overflowY: 'auto',
-                background: '#fafafa',
-                borderLeft: '1px solid var(--gray-200)',
-                minHeight: 0
-              }}>
+              {mode === 'lesson' && selectedFields.length > 0 && (
                 <div style={{
-                  background: '#fff',
-                  padding: '1.25rem',
-                  borderRadius: '12px',
-                  border: '2px solid var(--gray-200)'
+                  width: '35%',
+                  padding: '1.5rem',
+                  overflowY: 'auto',
+                  background: '#fafafa',
+                  borderLeft: '1px solid var(--gray-200)',
+                  minHeight: 0
                 }}>
-                  <label style={{
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-900)',
-                    display: 'block',
-                    marginBottom: '0.5rem'
-                  }}>
-                    Context Fields
-                  </label>
-                  
-                  <div style={{ marginBottom: '1rem' }}>
-                    <div style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: '#059669',
-                      marginBottom: '0.5rem'
-                    }}>
-                      DESIGNER
-                    </div>
-                    <div style={{
-                      border: '2px solid #10b981',
-                      borderRadius: '8px',
-                      background: '#f0fdf4',
-                      padding: '0.75rem'
-                    }}>
-                      {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).length === 0 ? (
-                        <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                          No designer fields
-                        </p>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).map(contextField => (
-                            <label key={contextField.id} style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.625rem',
-                              background: selectedFields.includes(contextField.id) ? '#d1fae5' : '#fff',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              fontSize: '0.8125rem'
-                            }}>
-                              <input
-                                type="checkbox"
-                                checked={selectedFields.includes(contextField.id)}
-                                onChange={() => toggleField(contextField.id)}
-                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                              />
-                              <span>{contextField.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: '#7c3aed',
-                      marginBottom: '0.5rem'
-                    }}>
-                      BUILDER
-                    </div>
-                    <div style={{
-                      border: '2px solid #7c3aed',
-                      borderRadius: '8px',
-                      background: '#faf5ff',
-                      padding: '0.75rem'
-                    }}>
-                      {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).length === 0 ? (
-                        <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                          No builder fields
-                        </p>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                          {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).map(contextField => (
-                            <label key={contextField.id} style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem',
-                              padding: '0.625rem',
-                              background: selectedFields.includes(contextField.id) ? '#ede9fe' : '#fff',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              fontSize: '0.8125rem'
-                            }}>
-                              <input
-                                type="checkbox"
-                                checked={selectedFields.includes(contextField.id)}
-                                onChange={() => toggleField(contextField.id)}
-                                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                              />
-                              <span>{contextField.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
                   <div style={{
-                    fontSize: '0.75rem',
-                    color: 'var(--gray-600)',
-                    marginTop: '0.75rem',
-                    fontWeight: 600,
-                    textAlign: 'center'
+                    background: '#fff',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    border: '2px solid #fbbf24'
                   }}>
-                    {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected
+                    <label style={{
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-900)',
+                      display: 'block',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Context Fields (Set by Template)
+                    </label>
+                    <p style={{
+                      fontSize: '0.75rem',
+                      color: '#92400e',
+                      marginBottom: '0.75rem',
+                      lineHeight: 1.5
+                    }}>
+                      These fields are used as context for AI generation. They were configured by the template designer.
+                    </p>
+                    
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#059669',
+                        marginBottom: '0.5rem'
+                      }}>
+                        DESIGNER
+                      </div>
+                      <div style={{
+                        border: '2px solid #10b981',
+                        borderRadius: '8px',
+                        background: '#f0fdf4',
+                        padding: '0.75rem'
+                      }}>
+                        {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id && selectedFields.includes(f.id)).length === 0 ? (
+                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
+                            No designer fields
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id && selectedFields.includes(f.id)).map(contextField => (
+                              <div key={contextField.id} style={{
+                                padding: '0.625rem',
+                                background: '#d1fae5',
+                                borderRadius: '8px',
+                                fontSize: '0.8125rem',
+                                fontWeight: 500
+                              }}>
+                                {contextField.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#7c3aed',
+                        marginBottom: '0.5rem'
+                      }}>
+                        BUILDER
+                      </div>
+                      <div style={{
+                        border: '2px solid #7c3aed',
+                        borderRadius: '8px',
+                        background: '#faf5ff',
+                        padding: '0.75rem'
+                      }}>
+                        {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id && selectedFields.includes(f.id)).length === 0 ? (
+                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
+                            No builder fields
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id && selectedFields.includes(f.id)).map(contextField => (
+                              <div key={contextField.id} style={{
+                                padding: '0.625rem',
+                                background: '#ede9fe',
+                                borderRadius: '8px',
+                                fontSize: '0.8125rem',
+                                fontWeight: 500
+                              }}>
+                                {contextField.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {mode === 'template' && (
+                <div style={{
+                  width: '35%',
+                  padding: '1.5rem',
+                  overflowY: 'auto',
+                  background: '#fafafa',
+                  borderLeft: '1px solid var(--gray-200)',
+                  minHeight: 0
+                }}>
+                  <div style={{
+                    background: '#fff',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    border: '2px solid var(--gray-200)'
+                  }}>
+                    <label style={{
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-900)',
+                      display: 'block',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Context Fields
+                    </label>
+                    
+                    <div style={{ marginBottom: '1rem' }}>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#059669',
+                        marginBottom: '0.5rem'
+                      }}>
+                        DESIGNER
+                      </div>
+                      <div style={{
+                        border: '2px solid #10b981',
+                        borderRadius: '8px',
+                        background: '#f0fdf4',
+                        padding: '0.75rem'
+                      }}>
+                        {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).length === 0 ? (
+                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
+                            No designer fields
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).map(contextField => (
+                              <label key={contextField.id} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.625rem',
+                                background: selectedFields.includes(contextField.id) ? '#d1fae5' : '#fff',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.8125rem'
+                              }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFields.includes(contextField.id)}
+                                  onChange={() => toggleField(contextField.id)}
+                                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                />
+                                <span>{contextField.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: '#7c3aed',
+                        marginBottom: '0.5rem'
+                      }}>
+                        BUILDER
+                      </div>
+                      <div style={{
+                        border: '2px solid #7c3aed',
+                        borderRadius: '8px',
+                        background: '#faf5ff',
+                        padding: '0.75rem'
+                      }}>
+                        {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).length === 0 ? (
+                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
+                            No builder fields
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).map(contextField => (
+                              <label key={contextField.id} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.625rem',
+                                background: selectedFields.includes(contextField.id) ? '#ede9fe' : '#fff',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '0.8125rem'
+                              }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFields.includes(contextField.id)}
+                                  onChange={() => toggleField(contextField.id)}
+                                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                                />
+                                <span>{contextField.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--gray-600)',
+                      marginTop: '0.75rem',
+                      fontWeight: 600,
+                      textAlign: 'center'
+                    }}>
+                      {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

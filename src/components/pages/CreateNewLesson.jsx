@@ -78,6 +78,15 @@ export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
   const { session, profile } = useOutletContext() || {};
   const navigate = useNavigate();
+  
+  // Helper function to check if a field is used as context by any AI-enabled field
+  const isFieldUsedAsContext = (fieldId) => {
+    return fields.some(f => 
+      f.aiEnabled && 
+      f.ai_context_field_ids && 
+      f.ai_context_field_ids.includes(fieldId)
+    );
+  };
   const templateId = searchParams.get('templateId');
   const urlLessonId = searchParams.get('lessonId');
   const [currentLessonId, setCurrentLessonId] = useState(urlLessonId);
@@ -1874,6 +1883,9 @@ export default function CreateNewLesson() {
                           // Check if this field is missing
                           const isMissing = highlightedMissingFields.has(field.id);
                           
+                          // Check if this field is used as context
+                          const isUsedAsContext = isFieldUsedAsContext(field.id);
+                          
                           let fieldComponent;
                           if (field.type === 'text') {
                             fieldComponent = (
@@ -1883,6 +1895,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1894,6 +1907,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1905,6 +1919,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1916,6 +1931,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || []}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1927,6 +1943,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1938,6 +1955,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || []}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -1952,6 +1970,7 @@ export default function CreateNewLesson() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 isGenerating={generatingFieldId === field.id}
                               />
                             );
@@ -1961,6 +1980,7 @@ export default function CreateNewLesson() {
                                 key={field.id}
                                 field={field}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2110,6 +2130,9 @@ export default function CreateNewLesson() {
                           // Check if this field is missing
                           const isMissing = highlightedMissingFields.has(field.id);
                           
+                          // Check if this field is used as context
+                          const isUsedAsContext = isFieldUsedAsContext(field.id);
+                          
                           let fieldComponent;
                           if (field.type === 'text') {
                             fieldComponent = (
@@ -2119,6 +2142,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2130,6 +2154,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2141,6 +2166,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || ''}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2152,6 +2178,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || []}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2163,6 +2190,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2174,6 +2202,7 @@ export default function CreateNewLesson() {
                                 value={fieldValues[field.id] || []}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );
@@ -2188,6 +2217,7 @@ export default function CreateNewLesson() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 isGenerating={generatingFieldId === field.id}
                               />
                             );
@@ -2197,6 +2227,7 @@ export default function CreateNewLesson() {
                                 key={field.id}
                                 field={field}
                                 isMissing={isMissing}
+                                isUsedAsContext={isUsedAsContext}
                                 {...aiProps}
                               />
                             );

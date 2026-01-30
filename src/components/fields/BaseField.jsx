@@ -16,6 +16,7 @@ export default function BaseField({
   hasGenerated = false,
   isMissing = false,
   customGenerateLabel,
+  isUsedAsContext = false,
   children 
 }) {
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
@@ -176,6 +177,23 @@ export default function BaseField({
               }}>
                 <Sparkles size={12} />
                 Default
+              </span>
+            )}
+            
+            {/* Used as Context Badge */}
+            {isUsedAsContext && (
+              <span style={{
+                padding: '0.25rem 0.75rem',
+                backgroundColor: '#fef3c7',
+                color: '#92400e',
+                borderRadius: '9999px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}>
+                📎 Context Field
               </span>
             )}
           </div>
