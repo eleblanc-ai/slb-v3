@@ -1188,7 +1188,7 @@ export default function CreateNewLesson() {
       padding: '2rem 1rem 4rem'
     }}>
       <div style={{
-        maxWidth: '1200px',
+        maxWidth: '1600px',
         margin: '0 auto'
       }}>
         {/* Page Header */}
