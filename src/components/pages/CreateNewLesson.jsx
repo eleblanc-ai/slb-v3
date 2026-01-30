@@ -87,7 +87,7 @@ export default function CreateNewLesson() {
   const [loading, setLoading] = useState(true);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [fieldValues, setFieldValues] = useState({});
-  const [layoutMode, setLayoutMode] = useState('stacked'); // 'stacked' or 'side-by-side'
+  const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const modelButtonRef = useRef(null);

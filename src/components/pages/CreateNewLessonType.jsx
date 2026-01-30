@@ -89,7 +89,7 @@ export default function CreateNewLessonType() {
   const [showTestLessonToast, setShowTestLessonToast] = useState(false);
   const [fieldValues, setFieldValues] = useState({});
   const [testLessonId, setTestLessonId] = useState(testLessonIdParam || null);
-  const [layoutMode, setLayoutMode] = useState('stacked'); // 'stacked' or 'side-by-side'
+  const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const modelButtonRef = useRef(null);
