@@ -125,6 +125,7 @@ export default function CreateNewLesson() {
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
+    console.log('🔧 handleAIConfig called with field:', field);
     setAIConfigField(field);
   };
 
@@ -1106,15 +1107,22 @@ export default function CreateNewLesson() {
         if (lessonError) {
           console.error('Error loading lesson:', lessonError);
         } else if (lesson) {
+          console.log('📦 Loaded lesson data:', lesson);
+          console.log('📦 Designer responses:', lesson.designer_responses);
+          console.log('📦 Builder responses:', lesson.builder_responses);
+          
           // Load existing field values from designer_responses and builder_responses
           const loadedValues = {};
           mappedFields.forEach(field => {
             if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.name]) {
               loadedValues[field.id] = lesson.designer_responses[field.name];
+              console.log(`✅ Loaded designer field: ${field.name} (${field.id})`);
             } else if (field.fieldFor === 'builder' && lesson.builder_responses?.[field.name]) {
               loadedValues[field.id] = lesson.builder_responses[field.name];
+              console.log(`✅ Loaded builder field: ${field.name} (${field.id})`);
             }
           });
+          console.log('📦 Final loadedValues:', loadedValues);
           setFieldValues(loadedValues);
         }
       }
@@ -1307,6 +1315,11 @@ export default function CreateNewLesson() {
       const designerFields = fields.filter(f => f.fieldFor === 'designer');
       const builderFields = fields.filter(f => f.fieldFor === 'builder');
 
+      console.log('💾 Saving lesson...');
+      console.log('💾 Designer fields:', designerFields.map(f => f.name));
+      console.log('💾 Builder fields:', builderFields.map(f => f.name));
+      console.log('💾 Current fieldValues:', fieldValues);
+
       // Collect design responses from actual field values
       const designResponses = {};
       designerFields.forEach(field => {
@@ -1332,6 +1345,9 @@ export default function CreateNewLesson() {
           lessonResponses[field.name] = value || '';
         }
       });
+
+      console.log('💾 Designer responses to save:', designResponses);
+      console.log('💾 Builder responses to save:', lessonResponses);
 
       // Update lesson
       const { error } = await supabase
