@@ -117,6 +117,9 @@ export default function CreateNewLesson() {
   const [missingFields, setMissingFields] = useState([]);
   const [showMissingFieldsModal, setShowMissingFieldsModal] = useState(false);
   const [highlightedMissingFields, setHighlightedMissingFields] = useState(new Set());
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -126,6 +129,42 @@ export default function CreateNewLesson() {
   // Handler: close AI config modal
   const handleAIConfigClose = () => {
     setAIConfigField(null);
+  };
+
+  // Handler: navigate back with unsaved changes check
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedChangesModal(true);
+      setPendingNavigation('back');
+    } else {
+      navigate(-1);
+    }
+  };
+
+  // Handler: confirm navigation without saving
+  const handleDiscardChanges = () => {
+    setShowUnsavedChangesModal(false);
+    setHasUnsavedChanges(false);
+    if (pendingNavigation === 'back') {
+      navigate(-1);
+    }
+    setPendingNavigation(null);
+  };
+
+  // Handler: save and then navigate
+  const handleSaveAndNavigate = async () => {
+    setShowUnsavedChangesModal(false);
+    await handleSave();
+    if (pendingNavigation === 'back') {
+      navigate(-1);
+    }
+    setPendingNavigation(null);
+  };
+
+  // Handler: cancel navigation
+  const handleCancelNavigation = () => {
+    setShowUnsavedChangesModal(false);
+    setPendingNavigation(null);
   };
 
   // Handler: save AI config - implements snapshot system for lesson-specific configs
@@ -968,7 +1007,11 @@ export default function CreateNewLesson() {
   // Sync fieldValues to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('fieldValues', JSON.stringify(fieldValues));
-  }, [fieldValues]);
+    // Mark as having unsaved changes when field values change (except on initial load)
+    if (Object.keys(fieldValues).length > 0 && !loading) {
+      setHasUnsavedChanges(true);
+    }
+  }, [fieldValues, loading]);
 
   const loadTemplate = async (id) => {
     try {
@@ -1226,6 +1269,9 @@ export default function CreateNewLesson() {
         // Update state with the new lesson ID
         setCurrentLessonId(data.id);
         
+        // Clear unsaved changes flag
+        setHasUnsavedChanges(false);
+        
         // Update URL with new lessonId
         navigate(`/create-new-lesson?templateId=${templateData.id}&lessonId=${data.id}`, { replace: true });
         
@@ -1283,6 +1329,9 @@ export default function CreateNewLesson() {
       if (error) throw error;
 
       console.log('✅ Lesson saved successfully');
+      
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
       
       // Show toast notification
       setShowSaveToast(true);
@@ -1423,6 +1472,9 @@ export default function CreateNewLesson() {
 
       console.log('Test lesson saved:', data);
       
+      // Clear unsaved changes flag
+      setHasUnsavedChanges(false);
+      
       // Show success toast
       setShowTestLessonToast(true);
       setTimeout(() => {
@@ -1465,7 +1517,7 @@ export default function CreateNewLesson() {
           marginBottom: '2.5rem'
         }}>
           <button
-            onClick={() => navigate(-1)}
+            onClick={handleBack}
             style={{
               position: 'absolute',
               left: 0,
@@ -2303,6 +2355,105 @@ export default function CreateNewLesson() {
           message="All AI-enabled fields have been successfully generated."
           onClose={() => setShowSuccessModal(false)}
         />
+      )}
+
+      {/* Unsaved Changes Modal */}
+      {showUnsavedChangesModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '2rem',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+          }}>
+            <h2 style={{
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              color: 'var(--gray-900)',
+              marginBottom: '1rem'
+            }}>
+              Unsaved Changes
+            </h2>
+            <p style={{
+              fontSize: '1rem',
+              color: 'var(--gray-700)',
+              marginBottom: '2rem',
+              lineHeight: 1.6
+            }}>
+              You have unsaved changes. Would you like to save your lesson before leaving?
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={handleCancelNavigation}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: 'var(--gray-700)',
+                  background: '#fff',
+                  border: '2px solid var(--gray-300)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDiscardChanges}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#ef4444',
+                  background: '#fff',
+                  border: '2px solid #ef4444',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Discard Changes
+              </button>
+              <button
+                onClick={handleSaveAndNavigate}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(102, 126, 234, 0.3)'
+                }}
+              >
+                Save & Leave
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
