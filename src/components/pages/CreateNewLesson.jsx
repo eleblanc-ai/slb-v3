@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddEditFieldModal from '../modals/AddFieldModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
+import SuccessModal from '../modals/SuccessModal';
 import BaseField from '../fields/BaseField';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
@@ -97,6 +98,7 @@ export default function CreateNewLesson() {
   const [generatingFieldId, setGeneratingFieldId] = useState(null);
   const [aiConfigField, setAIConfigField] = useState(null);
   const [hasGeneratedMap, setHasGeneratedMap] = useState({});
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Lesson generation state
   const [isGeneratingLesson, setIsGeneratingLesson] = useState(false);
@@ -444,7 +446,7 @@ export default function CreateNewLesson() {
     setIsGeneratingLesson(false);
     setGenerationPaused(false);
     setCurrentGenerationIndex(0);
-    alert('✅ Lesson generation complete!');
+    setShowSuccessModal(true);
   };
 
   // Validate required context fields for a specific field
@@ -2229,6 +2231,14 @@ export default function CreateNewLesson() {
         onClose={() => setShowMissingFieldsModal(false)}
         missingFields={missingFields}
       />
+
+      {showSuccessModal && (
+        <SuccessModal
+          title="Lesson Generation Complete!"
+          message="All AI-enabled fields have been successfully generated."
+          onClose={() => setShowSuccessModal(false)}
+        />
+      )}
     </div>
   );
 }
