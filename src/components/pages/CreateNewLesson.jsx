@@ -718,7 +718,14 @@ export default function CreateNewLesson() {
         };
 
         // Build the prompt using the shared function
-        const imagePrompt = buildFullPrompt(aiConfig);
+        let imagePrompt = buildFullPrompt(aiConfig);
+        
+        // Add the optional user-provided image description if it exists
+        const currentFieldValue = storedFieldValues[field.id];
+        if (currentFieldValue && currentFieldValue.description && currentFieldValue.description.trim()) {
+          imagePrompt = `${currentFieldValue.description}\n\n${imagePrompt}`;
+          console.log('✏️ Added user-provided image description to prompt');
+        }
         
         console.log('🎨 Image generation prompt:', imagePrompt);
         
@@ -811,7 +818,7 @@ export default function CreateNewLesson() {
           altText: generatedAltText,
           imageModel: usedModel,
           altTextModel: altTextModel,
-          description: ''
+          description: currentFieldValue?.description || ''
         };
         
         console.log('📦 Setting image field value:', imageFieldValue);
