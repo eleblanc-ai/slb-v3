@@ -14,6 +14,8 @@ export default function BrowseLessonTemplates() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [showCleanupModal, setShowCleanupModal] = useState(false);
+  const [deletedTemplateName, setDeletedTemplateName] = useState(null);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -95,7 +97,11 @@ export default function BrowseLessonTemplates() {
       // Remove from local state
       setLessonTypes(prev => prev.filter(t => t.id !== templateToDelete.id));
       
-      // Close modal
+      // Show cleanup reminder modal
+      setDeletedTemplateName(templateToDelete.name);
+      setShowCleanupModal(true);
+      
+      // Close delete modal
       setShowDeleteModal(false);
       setTemplateToDelete(null);
     } catch (error) {
@@ -465,6 +471,157 @@ export default function BrowseLessonTemplates() {
               }}
             >
               {deleting ? 'Deleting...' : 'Yes, Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Cleanup Reminder Modal */}
+      {showCleanupModal && deletedTemplateName && (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '1rem'
+      }}>
+        <div style={{
+          background: '#fff',
+          borderRadius: '12px',
+          maxWidth: '600px',
+          width: '100%',
+          padding: '0',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+        }}>
+          <div style={{
+            padding: '1.5rem',
+            borderBottom: '1px solid var(--gray-200)',
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            color: '#fff',
+            borderRadius: '12px 12px 0 0'
+          }}>
+            <h3 style={{
+              margin: 0,
+              fontSize: '1.25rem',
+              fontWeight: 600
+            }}>
+              ⚠️ Don't Forget to Clean Up!
+            </h3>
+          </div>
+          
+          <div style={{ padding: '1.5rem' }}>
+            <p style={{
+              margin: '0 0 1rem 0',
+              color: 'var(--gray-700)',
+              fontSize: '0.9375rem',
+              lineHeight: '1.5'
+            }}>
+              Template "<strong>{deletedTemplateName}</strong>" has been deleted from the database.
+            </p>
+            
+            <p style={{
+              margin: '0 0 1rem 0',
+              color: 'var(--gray-700)',
+              fontSize: '0.9375rem',
+              lineHeight: '1.5'
+            }}>
+              <strong>Remember to manually remove these files from your codebase:</strong>
+            </p>
+
+            <div style={{
+              backgroundColor: '#fef3c7',
+              border: '1px solid #fbbf24',
+              borderRadius: '8px',
+              padding: '1rem',
+              marginBottom: '1rem'
+            }}>
+              <ol style={{
+                margin: 0,
+                paddingLeft: '1.5rem',
+                color: '#92400e',
+                fontSize: '0.875rem',
+                lineHeight: '1.6'
+              }}>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  Delete the markdown export file from{' '}
+                  <code style={{
+                    backgroundColor: '#fff',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    src/lib/markdown-export/
+                  </code>
+                </li>
+                <li style={{ marginBottom: '0.5rem' }}>
+                  Remove the import statement from{' '}
+                  <code style={{
+                    backgroundColor: '#fff',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    CreateNewLesson.jsx
+                  </code>
+                </li>
+                <li>
+                  Remove the entry from{' '}
+                  <code style={{
+                    backgroundColor: '#fff',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    templateNameToFunctionMap
+                  </code>{' '}
+                  in {' '}
+                  <code style={{
+                    backgroundColor: '#fff',
+                    padding: '0.125rem 0.375rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    CreateNewLesson.jsx
+                  </code>{' '}
+                </li>
+              </ol>
+            </div>
+          </div>
+          
+          <div style={{
+            padding: '1rem 1.5rem',
+            borderTop: '1px solid var(--gray-200)',
+            display: 'flex',
+            justifyContent: 'flex-end'
+          }}>
+            <button
+              onClick={() => {
+                setShowCleanupModal(false);
+                setDeletedTemplateName(null);
+              }}
+              style={{
+                padding: '0.5rem 1.25rem',
+                border: 'none',
+                borderRadius: '6px',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: '#fff',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 600
+              }}
+            >
+              Got it, thanks!
             </button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical } from 'lucide-react';
+import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, X } from 'lucide-react';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -24,7 +24,7 @@ import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
-
+import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalReadingPracticeMarkdownExport';
 // Sortable Field Wrapper Component
 function SortableField({ id, children }) {
   const {
@@ -122,6 +122,8 @@ export default function CreateNewLesson() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const hasInitializedRef = useRef(false);
   const previousFieldValuesRef = useRef(null);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportMarkdown, setExportMarkdown] = useState('');
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -168,6 +170,32 @@ export default function CreateNewLesson() {
   const handleCancelNavigation = () => {
     setShowUnsavedChangesModal(false);
     setPendingNavigation(null);
+  };
+
+  // Handler: export lesson as markdown
+  const handleExportLesson = async () => {
+    // Auto-save before exporting
+    await handleSave();
+    
+    // Map template name to markdown export function
+    // Template names should be converted to camelCase for function lookup
+    const templateNameToFunctionMap = {
+      'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
+
+      // Future templates will be added here manually
+    };
+    
+    const generateFunction = templateNameToFunctionMap[templateData?.name];
+    
+    if (!generateFunction) {
+      console.error('No markdown export function found for template:', templateData?.name);
+      alert(`No export function found for template "${templateData?.name}". Please contact support.`);
+      return;
+    }
+    
+    const markdown = generateFunction(templateData, fields, fieldValues);
+    setExportMarkdown(markdown);
+    setShowExportModal(true);
   };
 
   // Handler: save AI config - implements snapshot system for lesson-specific configs
@@ -1838,6 +1866,36 @@ export default function CreateNewLesson() {
               <Save size={16} />
               Save Lesson
             </button>
+
+            <button
+              onClick={handleExportLesson}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.5rem 0.875rem',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.2)';
+              }}
+            >
+              <Download size={16} />
+              Export Lesson
+            </button>
           </div>
 
 
@@ -2520,6 +2578,197 @@ export default function CreateNewLesson() {
                 }}
               >
                 Save & Leave
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(4px)',
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            padding: '2rem',
+            maxWidth: '900px',
+            width: '90%',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '1.5rem'
+            }}>
+              <h2 style={{
+                fontSize: '1.5rem',
+                fontWeight: 700,
+                color: 'var(--gray-900)',
+                margin: 0
+              }}>
+                Export Lesson - Markdown
+              </h2>
+              <button
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--gray-500)',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--gray-100)';
+                  e.currentTarget.style.color = 'var(--gray-700)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--gray-500)';
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              backgroundColor: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              padding: '1.5rem',
+              marginBottom: '1.5rem'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                color: 'var(--gray-800)'
+              }}>
+                {exportMarkdown}
+              </pre>
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowExportModal(false)}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: 'var(--gray-700)',
+                  background: '#fff',
+                  border: '2px solid var(--gray-300)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const blob = new Blob([exportMarkdown], { type: 'text/markdown' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  // Get Content ID from fieldValues
+                  const contentIdField = fields.find(f => f.name === 'Content ID');
+                  const contentId = contentIdField ? fieldValues[contentIdField.id] : null;
+                  const filename = contentId ? `${contentId}.md` : `${templateData?.name || 'lesson'}-export.md`;
+                  a.download = filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
+                }}
+              >
+                <Download size={16} />
+                Download
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(exportMarkdown);
+                  alert('Markdown copied to clipboard!');
+                }}
+                style={{
+                  padding: '0.625rem 1.25rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(99, 102, 241, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.3)';
+                }}
+              >
+                Copy to Clipboard
               </button>
             </div>
           </div>

@@ -108,6 +108,8 @@ export default function CreateNewLessonType() {
   const [missingFields, setMissingFields] = useState([]);
   const [showMissingFieldsModal, setShowMissingFieldsModal] = useState(false);
   const [highlightedMissingFields, setHighlightedMissingFields] = useState(new Set());
+  const [showMarkdownExportModal, setShowMarkdownExportModal] = useState(false);
+  const [markdownExportData, setMarkdownExportData] = useState(null);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -1043,6 +1045,36 @@ export default function CreateNewLessonType() {
       if (error) throw error;
       
       setLessonTypeData({ ...data, id: lessonType.id });
+      
+      // Generate markdown export file for the new template
+      try {
+        // Import the utility functions dynamically
+        const { 
+          templateNameToCamelCase, 
+          generateMarkdownExportFileContent,
+          generateImportStatement,
+          generateMapEntry
+        } = await import('../../lib/generateMarkdownExportFile.js');
+        
+        const camelCaseName = templateNameToCamelCase(data.name);
+        const fileName = `${camelCaseName}MarkdownExport.js`;
+        const fileContent = generateMarkdownExportFileContent(data.name);
+        const importStatement = generateImportStatement(data.name);
+        const mapEntry = generateMapEntry(data.name);
+        
+        // Show modal with instructions
+        setMarkdownExportData({
+          fileName,
+          filePath: `src/lib/markdown-export/${fileName}`,
+          fileContent,
+          importStatement,
+          mapEntry,
+          templateName: data.name
+        });
+        setShowMarkdownExportModal(true);
+      } catch (exportError) {
+        console.error('Error generating markdown export file instructions:', exportError);
+      }
       
       // Load existing fields if any
       const { data: existingFields } = await supabase
@@ -2182,6 +2214,233 @@ export default function CreateNewLessonType() {
         onClose={() => setShowMissingFieldsModal(false)}
         missingFields={missingFields}
       />
+
+      {/* Markdown Export Instructions Modal */}
+      {showMarkdownExportModal && markdownExportData && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '2rem'
+          }}
+          onClick={() => setShowMarkdownExportModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              maxWidth: '900px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              padding: '1.5rem 2rem',
+              borderBottom: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#fff'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>
+                📝 Markdown Export File Setup
+              </h2>
+              <p style={{ margin: '0.5rem 0 0 0', opacity: 0.9, fontSize: '0.875rem' }}>
+                Template: {markdownExportData.templateName}
+              </p>
+            </div>
+
+            {/* Content */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '2rem'
+            }}>
+              {/* Step 1 */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ margin: '0 0 0.75rem 0', color: '#1f2937', fontSize: '1.125rem', fontWeight: 600 }}>
+                  Step 1: Create the markdown export file
+                </h3>
+                <div style={{
+                  backgroundColor: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  color: '#374151',
+                  position: 'relative'
+                }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>File path:</strong> {markdownExportData.filePath}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(markdownExportData.fileContent);
+                      alert('File content copied to clipboard!');
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      right: '1rem',
+                      padding: '0.375rem 0.75rem',
+                      backgroundColor: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy Content
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ margin: '0 0 0.75rem 0', color: '#1f2937', fontSize: '1.125rem', fontWeight: 600 }}>
+                  Step 2: Add import to CreateNewLesson.jsx
+                </h3>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontSize: '0.875rem' }}>
+                  Add this after the other markdown export imports:
+                </p>
+                <div style={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  color: '#10b981',
+                  position: 'relative'
+                }}>
+                  <code>{markdownExportData.importStatement}</code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(markdownExportData.importStatement);
+                      alert('Import statement copied!');
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      right: '1rem',
+                      padding: '0.375rem 0.75rem',
+                      backgroundColor: '#374151',
+                      color: '#fff',
+                      border: '1px solid #4b5563',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div style={{ marginBottom: '2rem' }}>
+                <h3 style={{ margin: '0 0 0.75rem 0', color: '#1f2937', fontSize: '1.125rem', fontWeight: 600 }}>
+                  Step 3: Add entry to templateNameToFunctionMap
+                </h3>
+                <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontSize: '0.875rem' }}>
+                  Add this inside the templateNameToFunctionMap object:
+                </p>
+                <div style={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.875rem',
+                  color: '#10b981',
+                  position: 'relative'
+                }}>
+                  <code>{markdownExportData.mapEntry}</code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(markdownExportData.mapEntry);
+                      alert('Map entry copied!');
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      right: '1rem',
+                      padding: '0.375rem 0.75rem',
+                      backgroundColor: '#374151',
+                      color: '#fff',
+                      border: '1px solid #4b5563',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* File Content Preview */}
+              <div>
+                <h3 style={{ margin: '0 0 0.75rem 0', color: '#1f2937', fontSize: '1.125rem', fontWeight: 600 }}>
+                  File Content Preview
+                </h3>
+                <div style={{
+                  backgroundColor: '#1f2937',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.75rem',
+                  color: '#d1d5db',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: '1.5'
+                }}>
+                  {markdownExportData.fileContent}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '1.5rem 2rem',
+              borderTop: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowMarkdownExportModal(false)}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  backgroundColor: '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
