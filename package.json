@@ -23,6 +23,7 @@
     "@tiptap/extension-underline": "^3.18.0",
     "@tiptap/react": "^3.18.0",
     "@tiptap/starter-kit": "^3.18.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "openai": "^6.17.0",
     "react": "^18.3.1",

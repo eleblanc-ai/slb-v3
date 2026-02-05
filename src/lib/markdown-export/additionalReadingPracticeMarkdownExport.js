@@ -56,7 +56,18 @@ export function generateMarkdown(templateData, fields, fieldValues) {
       return value.questions
         .filter(q => q)
         .map((q, idx) => {
-          const cleanQuestion = q.replace(/<[^>]*>/g, '\n').trim();
+          let cleanQuestion = '';
+          if (typeof q === 'string') {
+            // Replace closing block tags with single newlines
+            cleanQuestion = q
+              .replace(/<\/(p|div|li|ul|ol|h[1-6])>/gi, '\n')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<[^>]*>/g, '')  // Remove remaining HTML tags
+              .replace(/\n\s*\n+/g, '\n')  // Collapse multiple newlines to single
+              .trim();
+          } else {
+            cleanQuestion = q;
+          }
           return `${cleanQuestion}`;
         })
         .join('\n\n');
@@ -120,7 +131,18 @@ export function generateMarkdown(templateData, fields, fieldValues) {
   // Just-in Time Words
   markdown += `#Just-in-Time Words\n`;
   const glossary = getFieldValue('Glossary');
-  const glossaryText = typeof glossary === 'string' ? glossary.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : glossary;
+  let glossaryText = '';
+  if (typeof glossary === 'string') {
+    // Replace closing block tags with double newlines to separate definitions
+    glossaryText = glossary
+      .replace(/<\/(p|div|li|ul|ol|h[1-6])>/gi, '\n\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, '')  // Remove remaining HTML tags
+      .replace(/\n\s*\n\s*\n/g, '\n\n')  // Collapse multiple newlines to max 2
+      .trim();
+  } else {
+    glossaryText = glossary;
+  }
   markdown += `${glossaryText}\n\n`;
   
   // Close Reading Questions

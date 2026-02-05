@@ -82,7 +82,15 @@ export default function MCQsField({
   const hasInitializedRef = useRef(false);
   
   // Track selected standards per question (index -> standard object or null)
-  const [questionStandards, setQuestionStandards] = useState({});
+  // Initialize from value prop if available
+  const [questionStandards, setQuestionStandards] = useState(value?.standards || {});
+  
+  // Sync questionStandards when value.standards changes (e.g., when loaded from database)
+  useEffect(() => {
+    if (value?.standards) {
+      setQuestionStandards(value.standards);
+    }
+  }, [value?.standards]);
   
   // Initialize value structure if empty
   const questions = value?.questions || Array(5).fill('');
@@ -90,14 +98,23 @@ export default function MCQsField({
   const handleQuestionChange = (index, content) => {
     const updatedQuestions = [...questions];
     updatedQuestions[index] = content;
-    onChange({ questions: updatedQuestions });
+    onChange({ 
+      questions: updatedQuestions,
+      standards: questionStandards 
+    });
   };
   
   const handleStandardChange = (index, standard) => {
-    setQuestionStandards(prev => ({
-      ...prev,
+    const updatedStandards = {
+      ...questionStandards,
       [index]: standard
-    }));
+    };
+    setQuestionStandards(updatedStandards);
+    // Propagate the change to parent component
+    onChange({ 
+      questions: questions,
+      standards: updatedStandards 
+    });
   };
   
   const handleRegenerateQuestion = (index) => {
@@ -209,7 +226,10 @@ function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenera
     onUpdate: ({ editor }) => {
       if (!onChange) return;
       
-      if (!hasInitializedRef.current) return;
+      // Mark as initialized on first update
+      if (!hasInitializedRef.current) {
+        hasInitializedRef.current = true;
+      }
       
       isUserEditingRef.current = true;
       

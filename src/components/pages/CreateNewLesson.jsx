@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, X } from 'lucide-react';
+import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, Upload, X } from 'lucide-react';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -9,6 +9,7 @@ import AddEditFieldModal from '../modals/AddFieldModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
 import SuccessModal from '../modals/SuccessModal';
+import UploadCoverImageModal from '../modals/UploadCoverImageModal';
 import BaseField from '../fields/BaseField';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
@@ -122,8 +123,10 @@ export default function CreateNewLesson() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const hasInitializedRef = useRef(false);
   const previousFieldValuesRef = useRef(null);
+  const autoSaveTimeoutRef = useRef(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMarkdown, setExportMarkdown] = useState('');
+  const [showUploadCoverImageModal, setShowUploadCoverImageModal] = useState(false);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -177,6 +180,34 @@ export default function CreateNewLesson() {
     // Auto-save before exporting
     await handleSave();
     
+    // Reload the lesson data from database to ensure we have the most recent data
+    let freshFieldValues = fieldValues;
+    if (lessonId) {
+      try {
+        const { data: lesson, error: lessonError } = await supabase
+          .from('lessons')
+          .select('*')
+          .eq('id', lessonId)
+          .single();
+        
+        if (lessonError) {
+          console.error('Error reloading lesson data for export:', lessonError);
+        } else if (lesson) {
+          // Rebuild field values from fresh database data
+          freshFieldValues = {};
+          fields.forEach(field => {
+            if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.id]) {
+              freshFieldValues[field.id] = lesson.designer_responses[field.id];
+            } else if (field.fieldFor === 'builder' && lesson.builder_responses?.[field.id]) {
+              freshFieldValues[field.id] = lesson.builder_responses[field.id];
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching fresh lesson data:', error);
+      }
+    }
+    
     // Map template name to markdown export function
     // Template names should be converted to camelCase for function lookup
     const templateNameToFunctionMap = {
@@ -193,7 +224,7 @@ export default function CreateNewLesson() {
       return;
     }
     
-    const markdown = generateFunction(templateData, fields, fieldValues);
+    const markdown = generateFunction(templateData, fields, freshFieldValues);
     setExportMarkdown(markdown);
     setShowExportModal(true);
   };
@@ -629,61 +660,79 @@ export default function CreateNewLesson() {
       const designerFields = fields.filter(f => f.fieldFor === 'designer');
       const builderFields = fields.filter(f => f.fieldFor === 'builder');
 
-      console.log('💾 Designer fields found:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
-      console.log('💾 Builder fields found:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
-      console.log('💾 Values to save:', valuesToSave);
+      console.log('💾 Auto-save: Designer fields found:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Auto-save: Builder fields found:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
+      console.log('💾 Auto-save: Values to save:', valuesToSave);
 
-      const designResponses = {};
-      designerFields.forEach(field => {
+      // Build designer responses object using field IDs as keys (matching handleSave)
+      const designerResponses = {};
+      for (const field of designerFields) {
         const value = valuesToSave[field.id];
-        console.log(`💾 Designer field ${field.name}: value =`, value);
-        if (field.type === 'checklist') {
-          designResponses[field.name] = Array.isArray(value) ? value : [];
-        } else if (field.type === 'image') {
-          designResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-        } else if (field.type === 'mcqs') {
-          designResponses[field.name] = value || { questions: ['', '', '', '', ''] };
+        
+        if (value !== undefined && value !== null) {
+          designerResponses[field.id] = value;
+          console.log(`💾 Auto-save: Designer field "${field.name}" (${field.id}):`, value);
         } else {
-          designResponses[field.name] = value || field.placeholder || '';
+          // Provide appropriate empty value based on field type
+          if (field.type === 'checklist' || field.type === 'assign_standards') {
+            designerResponses[field.id] = [];
+          } else if (field.type === 'mcqs') {
+            designerResponses[field.id] = { questions: ['', '', '', '', ''] };
+          } else if (field.type === 'image') {
+            designerResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+          } else {
+            designerResponses[field.id] = '';
+          }
+          console.log(`💾 Auto-save: Designer field "${field.name}" (${field.id}): [empty]`);
         }
-      });
+      }
       
-      const lessonResponses = {};
-      builderFields.forEach(field => {
+      // Build builder responses object using field IDs as keys (matching handleSave)
+      const builderResponses = {};
+      for (const field of builderFields) {
         const value = valuesToSave[field.id];
-        console.log(`💾 Builder field ${field.name}: value =`, value);
-        if (field.type === 'checklist') {
-          lessonResponses[field.name] = Array.isArray(value) ? value : [];
-        } else if (field.type === 'image') {
-          lessonResponses[field.name] = value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-        } else if (field.type === 'mcqs') {
-          lessonResponses[field.name] = value || { questions: ['', '', '', '', ''] };
+        
+        if (value !== undefined && value !== null) {
+          builderResponses[field.id] = value;
+          console.log(`💾 Auto-save: Builder field "${field.name}" (${field.id}):`, value);
         } else {
-          lessonResponses[field.name] = value || field.placeholder || '';
+          // Provide appropriate empty value based on field type
+          if (field.type === 'checklist' || field.type === 'assign_standards') {
+            builderResponses[field.id] = [];
+          } else if (field.type === 'mcqs') {
+            builderResponses[field.id] = { questions: ['', '', '', '', ''] };
+          } else if (field.type === 'image') {
+            builderResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
+          } else {
+            builderResponses[field.id] = '';
+          }
+          console.log(`💾 Auto-save: Builder field "${field.name}" (${field.id}): [empty]`);
         }
-      });
+      }
 
-      console.log('💾 Auto-saving designer responses:', designResponses);
-      console.log('💾 Auto-saving builder responses:', lessonResponses);
+      console.log('💾 Auto-save: Final designer responses:', designerResponses);
+      console.log('💾 Auto-save: Final builder responses:', builderResponses);
 
       const { error } = await supabase
         .from('lessons')
         .update({
-          designer_responses: designResponses,
-          builder_responses: lessonResponses,
+          designer_responses: designerResponses,
+          builder_responses: builderResponses,
           template_name: templateData.name
         })
         .eq('id', lessonId);
       
       if (error) {
-        console.error('❌ Error saving to Supabase:', error);
-        throw new Error(`Failed to save: ${error.message}`);
+        console.error('❌ Auto-save error:', error);
+        throw new Error(`Failed to auto-save: ${error.message}`);
       }
       
-      console.log('✅ Auto-saved after field generation');
+      console.log('✅ Auto-saved successfully');
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.error('Error auto-saving:', error);
-      throw error; // Re-throw to stop generation on save failure
+      // Don't re-throw for auto-save - just log the error
+      console.error('Auto-save failed, but continuing...');
     }
   };
 
@@ -1075,6 +1124,16 @@ export default function CreateNewLesson() {
     if (previousFieldValuesRef.current !== currentFieldValues) {
       setHasUnsavedChanges(true);
       previousFieldValuesRef.current = currentFieldValues;
+      
+      // Auto-save the lesson after a short delay
+      if (lessonId && templateData?.id) {
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          autoSaveLesson();
+        }, 1000); // Auto-save after 1 second of inactivity
+      }
     }
   }, [fieldValues]);
 
@@ -1894,7 +1953,37 @@ export default function CreateNewLesson() {
               }}
             >
               <Download size={16} />
-              Export Lesson
+              Export Lesson Content
+            </button>
+            
+            <button
+              onClick={() => setShowUploadCoverImageModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                background: 'linear-gradient(135deg, #108fb9 0%, #051396 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.5rem 0.875rem',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.2)';
+              }}
+            >
+              <Upload size={16} />
+              Manage Cover Image
             </button>
           </div>
 
@@ -2483,6 +2572,15 @@ export default function CreateNewLesson() {
           title="Lesson Generation Complete!"
           message="All AI-enabled fields have been successfully generated."
           onClose={() => setShowSuccessModal(false)}
+        />
+      )}
+
+      {/* Upload Cover Image Modal */}
+      {showUploadCoverImageModal && (
+        <UploadCoverImageModal
+          contentId={fieldValues[fields.find(f => f.name === 'Content ID')?.id]}
+          coverImageUrl={fieldValues[fields.find(f => f.name === 'Thumbnail Image')?.id]?.url}
+          onClose={() => setShowUploadCoverImageModal(false)}
         />
       )}
 

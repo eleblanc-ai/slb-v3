@@ -194,29 +194,7 @@ export default function ImageField({
                 <div style={{ fontSize: '0.6875rem', color: 'var(--gray-500)' }}>
                   <span style={{ fontWeight: 600 }}>Image model:</span> {imageModel || 'N/A'}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDownloadImage}
-                  style={{
-                    padding: '0.375rem 0.75rem',
-                    fontSize: '0.6875rem',
-                    color: '#3b82f6',
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#dbeafe';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = '#eff6ff';
-                  }}
-                >
-                  ⬇️ Download
-                </button>
+                
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--gray-500)' }}>
                 <span style={{ fontWeight: 600 }}>Alt text model:</span> {altTextModel || 'N/A'}
