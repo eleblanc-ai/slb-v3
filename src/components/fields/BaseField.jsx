@@ -136,18 +136,6 @@ export default function BaseField({
               )}
             </h3>
             
-            {/* Type Badge */}
-            <span style={{
-              padding: '0.25rem 0.75rem',
-              backgroundColor: '#eff6ff',
-              color: 'var(--primary)',
-              borderRadius: '9999px',
-              fontSize: '0.75rem',
-              fontWeight: 600
-            }}>
-              {getTypeLabel(field.type)}
-            </span>
-            
             {/* AI-Enabled Badge */}
             {field.aiEnabled && (
               <span style={{
@@ -162,7 +150,7 @@ export default function BaseField({
               </span>
             )}
             
-            {/* Required for Default Generation Badge */}
+            {/* Required Badge (for fields marked as required for generation) */}
             {field.requiredForGeneration && (
               <span style={{
                 padding: '0.25rem 0.75rem',
@@ -176,7 +164,21 @@ export default function BaseField({
                 gap: '0.25rem'
               }}>
                 <Sparkles size={12} />
-                Default
+                Required for AI Generation
+              </span>
+            )}
+            
+            {/* Optional Badge (for fields not required for generation and not AI-enabled) */}
+            {!field.requiredForGeneration && !field.aiEnabled && field.type !== 'section_header' && (
+              <span style={{
+                padding: '0.25rem 0.75rem',
+                backgroundColor: '#e0e7ff',
+                color: '#4f46e5',
+                borderRadius: '9999px',
+                fontSize: '0.75rem',
+                fontWeight: 600
+              }}>
+                Optional
               </span>
             )}
             

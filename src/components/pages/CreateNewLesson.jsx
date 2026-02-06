@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import AddEditFieldModal from '../modals/AddFieldModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
+import PreFormModal from '../modals/PreFormModal';
 import SuccessModal from '../modals/SuccessModal';
 import UploadCoverImageModal from '../modals/UploadCoverImageModal';
 import BaseField from '../fields/BaseField';
@@ -127,6 +128,10 @@ export default function CreateNewLesson() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMarkdown, setExportMarkdown] = useState('');
   const [showUploadCoverImageModal, setShowUploadCoverImageModal] = useState(false);
+  const [showPreFormModal, setShowPreFormModal] = useState(false);
+  const [preFormCompleted, setPreFormCompleted] = useState(false);
+  const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
+  const generateButtonRef = useRef(null);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -1137,6 +1142,23 @@ export default function CreateNewLesson() {
     }
   }, [fieldValues]);
 
+  // Prevent accidental page refresh/close when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Click Save before refreshing to avoid losing your work.';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
   const loadTemplate = async (id) => {
     try {
       setLoading(true);
@@ -1201,6 +1223,47 @@ export default function CreateNewLesson() {
       );
       
       setFields(mappedFields);
+      
+      // ⭐ REQUIRED FOR GENERATION ⭐
+      const requiredForGen = mappedFields.filter(f => f.requiredForGeneration === true);
+      if (requiredForGen.length > 0) {
+        console.log('\n%c🎯 FIELDS REQUIRED FOR GENERATION 🎯', 'background: #ff0; color: #000; font-size: 16px; font-weight: bold; padding: 8px;');
+        requiredForGen.forEach(field => {
+          console.log(`%c  • ${field.name} (${field.fieldFor})`, 'color: #0080ff; font-weight: bold; font-size: 14px;');
+        });
+        console.log('\n');
+      }
+      
+      // ⚠️ NON-AI-ENABLED FIELDS ⚠️
+      const nonAIFields = mappedFields.filter(f => !f.aiEnabled);
+      if (nonAIFields.length > 0) {
+        console.log('%c⚠️ FIELDS NOT AI-ENABLED ⚠️', 'background: #f80; color: #fff; font-size: 16px; font-weight: bold; padding: 8px;');
+        nonAIFields.forEach(field => {
+          console.log(`%c  • ${field.name} (${field.fieldFor})`, 'color: #f80; font-weight: bold; font-size: 14px;');
+        });
+        console.log('\n');
+      }
+      
+      // Show pre-form modal if there are required non-AI fields
+      // Show all fields that are EITHER required for generation OR not AI-enabled (union of both lists)
+      const preFormFields = mappedFields.filter(f => f.requiredForGeneration || !f.aiEnabled);
+      console.log('🔍 Pre-form fields check:', {
+        preFormFieldsCount: preFormFields.length,
+        preFormFields: preFormFields.map(f => f.name),
+        lessonId,
+        preFormCompleted
+      });
+      
+      if (!lessonId && preFormFields.length > 0 && !preFormCompleted) {
+        console.log('✅ Showing pre-form modal!');
+        setShowPreFormModal(true);
+      } else {
+        console.log('❌ Not showing pre-form modal because:', {
+          hasLessonId: !!lessonId,
+          hasPreFormFields: preFormFields.length > 0,
+          alreadyCompleted: preFormCompleted
+        });
+      }
       
       // Load existing lesson if lessonId is provided
       if (lessonId) {
@@ -1660,15 +1723,47 @@ export default function CreateNewLesson() {
   }
 
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 60px)',
+    <>
+      <style>
+        {`
+          @keyframes pulse {
+            0%, 100% {
+              transform: scale(1.05);
+              box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+            }
+            50% {
+              transform: scale(1.08);
+              box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+            }
+          }
+          @keyframes arrowBounce {
+            0%, 100% {
+              transform: translateX(0) scale(1);
+            }
+            50% {
+              transform: translateX(-8px) scale(1.1);
+            }
+          }
+          @keyframes arrowGlow {
+            0%, 100% {
+              filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.8));
+            }
+            50% {
+              filter: drop-shadow(0 0 16px rgba(245, 158, 11, 1));
+            }
+          }
+        `}
+      </style>
+      <div style={{
+        minHeight: 'calc(100vh - 60px)',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       padding: '2rem 1rem 4rem'
     }}>
-      <div style={{
-        maxWidth: '1600px',
-        margin: '0 auto'
-      }}>
+      {!showPreFormModal && (
+        <div style={{
+          maxWidth: '1600px',
+          margin: '0 auto'
+        }}>
         {/* Page Header */}
         <div style={{
           position: 'relative',
@@ -1755,17 +1850,15 @@ export default function CreateNewLesson() {
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(10px)',
           borderRadius: '12px',
-          padding: '0.75rem 1rem',
+          padding: '1rem',
           marginBottom: '1.5rem',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexWrap: 'wrap',
-          gap: '0.75rem'
+          flexDirection: 'column',
+          gap: '1rem'
         }}>
-          {/* Toolbar Content - AI Model, Generate, Save Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {/* Row 1: AI Model + Generate */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', position: 'relative' }}>
             {/* AI Model with Label */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}> 🤖 AI Model</span>
@@ -1851,7 +1944,11 @@ export default function CreateNewLesson() {
             </div>
 
             <button
-              onClick={handleGenerateLesson}
+              ref={generateButtonRef}
+              onClick={() => {
+                setPulseGenerateButton(false);
+                handleGenerateLesson();
+              }}
               disabled={isGeneratingLesson}
               style={{
                 display: 'flex',
@@ -1868,8 +1965,12 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: isGeneratingLesson ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
-                opacity: isGeneratingLesson ? 0.7 : 1
+                boxShadow: pulseGenerateButton 
+                  ? '0 0 0 4px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.6)' 
+                  : '0 2px 4px rgba(245, 158, 11, 0.3)',
+                opacity: isGeneratingLesson ? 0.7 : 1,
+                animation: pulseGenerateButton ? 'pulse 1s ease-in-out infinite' : 'none',
+                transform: pulseGenerateButton ? 'scale(1.05)' : 'scale(1)'
               }}
               onMouseEnter={(e) => {
                 if (!isGeneratingLesson) {
@@ -1892,10 +1993,23 @@ export default function CreateNewLesson() {
                   : 'Generate Lesson'}
             </button>
 
-            <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--gray-300)' }} />
+            {/* Animated Arrow Indicator */}
+            {pulseGenerateButton && !isGeneratingLesson && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                animation: 'arrowBounce 1s ease-in-out infinite, arrowGlow 1s ease-in-out infinite',
+                fontSize: '2.5rem',
+                marginLeft: '1rem',
+                pointerEvents: 'none'
+              }}>
+                👈
+              </div>
+            )}
+          </div>
 
-            
-            
+          {/* Row 2: Save, Export, Manage Cover Image */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
             <button
               onClick={handleSave}
               style={{
@@ -1986,8 +2100,6 @@ export default function CreateNewLesson() {
               Manage Cover Image
             </button>
           </div>
-
-
         </div>
 
         {/* Fields Card */}
@@ -2517,6 +2629,7 @@ export default function CreateNewLesson() {
             </div>
         </div>
       </div>
+      )}
 
       {/* Save Toast Notification */}
       {showSaveToast && (
@@ -2873,6 +2986,23 @@ export default function CreateNewLesson() {
         </div>,
         document.body
       )}
+
+      {/* Pre-Form Modal */}
+      <PreFormModal
+        visible={showPreFormModal}
+        onClose={() => {
+          setShowPreFormModal(false);
+          setPreFormCompleted(true);
+          // Trigger generate button animation
+          setPulseGenerateButton(true);
+        }}
+        fields={fields}
+        fieldValues={fieldValues}
+        onFieldChange={(fieldId, value) => {
+          setFieldValues(prev => ({ ...prev, [fieldId]: value }));
+        }}
+      />
     </div>
+    </>
   );
 }
