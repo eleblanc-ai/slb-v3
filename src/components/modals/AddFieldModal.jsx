@@ -90,6 +90,9 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setAiEnabled(field.aiEnabled || false);
       setRequiredForGeneration(field.requiredForGeneration || false);
       setFieldFor(field.fieldFor || 'designer');
+      setDropdownOptions(field.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
+      setMinSelections(field.min_selections || 0);
+      setMaxSelections(field.max_selections || 0);
     }
   }, [field]);
 
