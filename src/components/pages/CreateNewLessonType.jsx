@@ -22,6 +22,7 @@ import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
+import { getFormattedMappedStandards, extractGradeFromBand } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 
@@ -466,7 +467,20 @@ export default function CreateNewLessonType() {
       
       // Format the structured response as text
       const q = result.questions[0];
-      const formattedMCQ = `${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${q.standards.join('; ')}]\nKEY: ${q.correct_answer}`;
+      
+      // Extract grade level from fieldValues
+      const gradeField = fields.find(f => f.type === 'grade_band_selector');
+      const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
+      const gradeLevel = extractGradeFromBand(gradeValue);
+      
+      // Map standards if user selected a CCSS standard
+      let standardsText = q.standards.join('; ');
+      if (selectedStandard && selectedStandard.fullCode) {
+        const mappedStandards = await getFormattedMappedStandards(selectedStandard.fullCode, gradeLevel);
+        standardsText = mappedStandards || standardsText;
+      }
+      
+      const formattedMCQ = `${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`;
       
       // Update only the specific question in the array
       setFieldValues(prev => {
@@ -767,10 +781,27 @@ export default function CreateNewLessonType() {
         const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
         console.log('✅ MCQs generated (structured):', result);
         
+        // Extract grade level from fieldValues
+        const gradeField = fields.find(f => f.type === 'grade_band_selector');
+        const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
+        const gradeLevel = extractGradeFromBand(gradeValue);
+        
         // Format each question as text and store in questions array
-        const formattedQuestions = result.questions.map((q, i) => 
-          `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${q.standards.join('; ')}]\nKEY: ${q.correct_answer}`
-        );
+        // Map standards for each question
+        const formattedQuestions = await Promise.all(result.questions.map(async (q, i) => {
+          let standardsText = q.standards.join('; ');
+          
+          // If AI returned CCSS codes, map them to other frameworks
+          if (q.standards && q.standards.length > 0) {
+            const firstStandard = q.standards[0];
+            if (firstStandard.startsWith('CCSS')) {
+              const mappedStandards = await getFormattedMappedStandards(firstStandard, gradeLevel);
+              standardsText = mappedStandards || standardsText;
+            }
+          }
+          
+          return `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`;
+        }));
         
         generatedContent = { questions: formattedQuestions };
       } else {

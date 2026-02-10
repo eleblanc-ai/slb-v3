@@ -24,6 +24,7 @@ import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
+import { getFormattedMappedStandards, extractGradeFromBand } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalReadingPracticeMarkdownExport';
@@ -464,7 +465,20 @@ export default function CreateNewLesson() {
       
       // Format the structured response as HTML for TipTap
       const q = result.questions[0];
-      const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${q.standards.join('; ')}]<br>KEY: ${q.correct_answer}</p>`;
+      
+      // Extract grade level from fieldValues
+      const gradeField = fields.find(f => f.type === 'grade_band_selector');
+      const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
+      const gradeLevel = extractGradeFromBand(gradeValue);
+      
+      // Map standards if user selected a CCSS standard
+      let standardsText = q.standards.join('; ');
+      if (selectedStandard && selectedStandard.fullCode) {
+        const mappedStandards = await getFormattedMappedStandards(selectedStandard.fullCode, gradeLevel);
+        standardsText = mappedStandards || standardsText;
+      }
+      
+      const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
       
       // Build updated questions array
       const currentValue = fieldValues[fieldId] || { questions: ['', '', '', '', ''] };
@@ -1071,10 +1085,27 @@ export default function CreateNewLesson() {
         const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
         console.log('✅ MCQs generated (structured):', result);
         
+        // Extract grade level from fieldValues
+        const gradeField = fields.find(f => f.type === 'grade_band_selector');
+        const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
+        const gradeLevel = extractGradeFromBand(gradeValue);
+        
         // Format each question as HTML for TipTap and store in questions array
-        const formattedQuestions = result.questions.map((q, i) => 
-          `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${q.standards.join('; ')}]<br>KEY: ${q.correct_answer}</p>`
-        );
+        // Map standards for each question
+        const formattedQuestions = await Promise.all(result.questions.map(async (q, i) => {
+          let standardsText = q.standards.join('; ');
+          
+          // If AI returned CCSS codes, map them to other frameworks
+          if (q.standards && q.standards.length > 0) {
+            const firstStandard = q.standards[0];
+            if (firstStandard.startsWith('CCSS')) {
+              const mappedStandards = await getFormattedMappedStandards(firstStandard, gradeLevel);
+              standardsText = mappedStandards || standardsText;
+            }
+          }
+          
+          return `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
+        }));
         
         generatedContent = { questions: formattedQuestions };
       } else {
