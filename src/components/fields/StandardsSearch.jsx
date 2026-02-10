@@ -16,6 +16,7 @@ export default function StandardsSearch({
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [showTooltip, setShowTooltip] = useState(false);
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
 
@@ -205,18 +206,60 @@ export default function StandardsSearch({
           padding: '6px 10px',
           background: '#eff6ff',
           border: '1px solid #bfdbfe',
-          borderRadius: 6,
-          fontSize: 13
+          borderRadius,
+          position: 'relative'
         }}>
-          <span style={{ 
-            fontWeight: 600, 
-            color: '#1e40af',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}>
+          <span 
+            style={{ 
+              fontWeight: 600, 
+              color: '#1e40af',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              cursor: 'help'
+            }}
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+            title={selectedStandard.statement}
+          >
             {selectedStandard.fullCode}
           </span>
+          
+          {/* Tooltip */}
+          {showTooltip && (
+            <div style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              right: 0,
+              marginBottom: 8,
+              padding: '8px 10px',
+              background: '#1e293b',
+              color: '#fff',
+              fontSize: 12,
+              lineHeight: 1.4,
+              borderRadius: 6,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              zIndex: 1001,
+              pointerEvents: 'none',
+              whiteSpace: 'normal',
+              wordBreak: 'break-word'
+            }}>
+              {selectedStandard.statement}
+              {/* Arrow */}
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: '20px',
+                width: 0,
+                height: 0,
+                borderLeft: '6px solid transparent',
+                borderRight: '6px solid transparent',
+                borderTop: '6px solid #1e293b'
+              }} />
+            </div>
+          )}
+          
           <button
             type="button"
             onClick={handleClear}

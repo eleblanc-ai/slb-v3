@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import BaseField from './BaseField';
 import StandardsSearch from './StandardsSearch';
+import StandardsBadges from './StandardsBadges';
 
 const ToolbarButton = ({
   onClick,
@@ -458,6 +459,12 @@ function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenera
           />
         </div>
       </div>
+      
+      {/* Display standards badges with tooltips */}
+      <StandardsBadges 
+        htmlContent={value} 
+        onChange={onChange ? (updatedContent) => onChange(updatedContent) : null}
+      />
     </div>
   );
 }

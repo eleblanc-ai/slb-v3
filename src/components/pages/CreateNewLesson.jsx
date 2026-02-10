@@ -548,11 +548,21 @@ export default function CreateNewLesson() {
       const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
       const gradeLevel = extractGradeFromBand(gradeValue);
       
-      // Map standards if user selected a CCSS standard
+      // Map standards - either from selected standard or from AI-generated standards
       let standardsText = q.standards.join('; ');
+      
+      // First check if user selected a specific standard to use
       if (selectedStandard && selectedStandard.fullCode) {
         const mappedStandards = await getFormattedMappedStandards(selectedStandard.fullCode, gradeLevel);
         standardsText = mappedStandards || standardsText;
+      } 
+      // Otherwise map the AI-generated standards if they start with CCSS
+      else if (q.standards && q.standards.length > 0) {
+        const firstStandard = q.standards[0];
+        if (firstStandard.startsWith('CCSS')) {
+          const mappedStandards = await getFormattedMappedStandards(firstStandard, gradeLevel);
+          standardsText = mappedStandards || standardsText;
+        }
       }
       
       const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;

@@ -40,14 +40,17 @@ async function loadMOACData() {
       }
       values.push(current.trim());
       
+      // Clean up values by removing leading/trailing quotes
+      const cleanValues = values.map(v => v.replace(/^"+|"+$/g, '').trim());
+      
       // Parse row: A=CCSS Code, B=CCSS Standard, C=Mapped Framework, D=Mapped Code, E=Mapped Standard
-      if (values.length >= 5) {
+      if (cleanValues.length >= 5) {
         data.push({
-          ccssCode: values[0],
-          ccssStatement: values[1],
-          mappedFramework: values[2],
-          mappedCode: values[3],
-          mappedStatement: values[4]
+          ccssCode: cleanValues[0],
+          ccssStatement: cleanValues[1],
+          mappedFramework: cleanValues[2],
+          mappedCode: cleanValues[3],
+          mappedStatement: cleanValues[4]
         });
       }
     }
@@ -69,8 +72,8 @@ function extractGrade(code) {
   // Match patterns like:
   // BEST.ELA.11.R.2.1 -> 11
   // 11.T.T.2 -> 11
-  // TEKS.ELAR.E3.5(J) -> 3
-  // TEKS.ELAR.E4.7(D) -> 4
+  // TEKS.ELAR.E3.5(J) -> 11 (E3 = English 3 = 11th grade)
+  // TEKS.ELAR.E4.7(D) -> 12 (E4 = English 4 = 12th grade)
   
   // For codes starting with just a number (GSE format like "11.T.T.2")
   const gseMatch = code.match(/^(\d+)\./);
@@ -81,8 +84,12 @@ function extractGrade(code) {
   if (bestMatch) return parseInt(bestMatch[1]);
   
   // For TEKS format: TEKS.ELAR.E3.5 or TEKS.ELAR.E4.7
+  // E1=9th, E2=10th, E3=11th, E4=12th grade
   const teksMatch = code.match(/TEKS\.ELAR\.E(\d+)\./);
-  if (teksMatch) return parseInt(teksMatch[1]);
+  if (teksMatch) {
+    const englishLevel = parseInt(teksMatch[1]);
+    return englishLevel + 8; // E1->9, E2->10, E3->11, E4->12
+  }
   
   return null;
 }
