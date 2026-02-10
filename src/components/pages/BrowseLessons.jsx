@@ -60,28 +60,27 @@ export default function BrowseLessons() {
       
       console.log('👤 Profile map:', profileMap);
 
-      // Fetch lesson templates for category and state info
+      // Fetch lesson templates for template name and state info
       let templateMap = {};
       if (templateIds.length > 0) {
         const { data: templates } = await supabase
           .from('lesson_templates')
-          .select('id, category, state')
+          .select('id, name, state')
           .in('id', templateIds);
         
         templates?.forEach(t => {
-          templateMap[t.id] = { category: t.category, state: t.state };
+          templateMap[t.id] = { name: t.name, state: t.state };
         });
       }
 
-      // Fetch template fields to find Content ID field
+      // Fetch template fields to find Content ID field for each template
       let templateFieldsMap = {};
       if (templateIds.length > 0) {
         const { data: fields } = await supabase
           .from('lesson_template_fields')
-          .select('id, name, lesson_template_id, field_for, field_order')
+          .select('id, name, lesson_template_id, field_for')
           .in('lesson_template_id', templateIds)
-          .eq('field_for', 'designer')
-          .order('field_order', { ascending: true });
+          .eq('field_for', 'designer');
         
         fields?.forEach(field => {
           if (!templateFieldsMap[field.lesson_template_id]) {
@@ -93,8 +92,8 @@ export default function BrowseLessons() {
 
       // Add creator and template info to lessons
       const lessonsWithCreator = lessonsData?.map(lesson => {
-        // Use updated_by if it exists, otherwise fall back to created_by
-        const userId = lesson.updated_by || lesson.created_by;
+        // Use created_by for the creator display
+        const userId = lesson.created_by;
         const displayName = profileMap[userId] || 'Unknown User';
         
         console.log(`Lesson ${lesson.id.slice(0, 8)}: userId=${userId?.slice(0, 8)}, displayName=${displayName}`);
@@ -193,6 +192,193 @@ export default function BrowseLessons() {
       console.error('Error deleting lesson:', error);
       alert('Failed to delete lesson. Please try again.');
     }
+  };
+
+  const renderLessonCard = (lesson) => {
+    const allResponses = { ...(lesson.designer_responses || {}), ...(lesson.builder_responses || {}) };
+    const thumbnailUrl = Object.values(allResponses).find(
+      val => val && typeof val === 'object' && val.url && !val.url.startsWith('data:')
+    )?.url;
+
+    // Find Content ID field from template fields
+    const contentIdField = lesson.templateFields?.find(
+      field => field.name === 'Content ID' || 
+               field.name.toLowerCase() === 'content id' ||
+               field.name.toLowerCase().includes('content') && field.name.toLowerCase().includes('id')
+    );
+    
+    // Get the actual Content ID value using the field ID
+    const contentId = contentIdField && lesson.designer_responses?.[contentIdField.id]
+      ? lesson.designer_responses[contentIdField.id]
+      : `Lesson ${lesson.id.slice(0, 8)}`;
+
+    return (
+      <div
+        key={lesson.id}
+        onClick={() => handleLessonClick(lesson)}
+        style={{
+          backgroundColor: '#fff',
+          border: '1px solid var(--gray-200)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+          position: 'relative'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
+        }}
+      >
+        {/* Delete Button */}
+        {canDeleteLesson(lesson) && (
+          <button
+            onClick={(e) => handleDeleteClick(e, lesson)}
+            style={{
+              position: 'absolute',
+              top: '0.75rem',
+              right: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              color: '#dc2626',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              zIndex: 2,
+              backdropFilter: 'blur(4px)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#fee2e2';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+            }}
+            title="Delete lesson"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+
+        {/* Thumbnail */}
+        <div style={{
+          width: '100%',
+          height: '200px',
+          backgroundColor: 'var(--gray-100)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt=""
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            <FileText size={48} style={{ color: 'var(--gray-400)' }} />
+          )}
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '1.25rem' }}>
+          <h3 style={{
+            fontSize: '0.9375rem',
+            fontWeight: 600,
+            marginBottom: '0.5rem',
+            color: 'var(--gray-900)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {contentId}
+          </h3>
+          
+          <div style={{
+            fontSize: '0.8125rem',
+            color: 'var(--gray-600)',
+            marginBottom: '0.25rem'
+          }}>
+            {lesson.template?.name || 'Unknown Template'}
+          </div>
+
+          <div style={{
+            fontSize: '0.8125rem',
+            color: 'var(--gray-500)',
+            marginBottom: '0.75rem'
+          }}>
+            {lesson.template?.state ? US_STATES.find(s => s.value === lesson.template.state)?.label || lesson.template.state : 'Core ELA'}
+          </div>
+
+          {/* Creator and timestamp */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.75rem',
+            color: 'var(--gray-600)',
+            marginBottom: '0.5rem'
+          }}>
+            <User size={12} />
+            <span>{lesson.creator?.display_name || 'Unknown User'}</span>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '0.75rem',
+            color: 'var(--gray-600)',
+            marginBottom: '0.75rem'
+          }}>
+            <Calendar size={12} />
+            <span>
+              {new Date(lesson.created_at).toLocaleString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              })}
+            </span>
+          </div>
+
+          {/* Response counts */}
+          <div style={{
+            display: 'flex',
+            gap: '1rem',
+            fontSize: '0.75rem',
+            color: 'var(--gray-600)'
+          }}>
+            <div>
+              <span style={{ fontWeight: 600 }}>
+                {Object.keys(lesson.designer_responses || {}).length}
+              </span> designer
+            </div>
+            <div>
+              <span style={{ fontWeight: 600 }}>
+                {Object.keys(lesson.builder_responses || {}).length}
+              </span> builder
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -304,255 +490,78 @@ export default function BrowseLessons() {
               </p>
             </div>
           ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: '1rem'
-            }}>
-          {lessons.map((lesson) => {
-            // Find first image from designer or builder responses for thumbnail
-            const allResponses = { ...(lesson.designer_responses || {}), ...(lesson.builder_responses || {}) };
-            const thumbnailUrl = Object.values(allResponses).find(
-              val => val && typeof val === 'object' && val.url && !val.url.startsWith('data:')
-            )?.url;
-
-            return (
-            <div
-              key={lesson.id}
-              onClick={() => handleLessonClick(lesson)}
-              style={{
-                backgroundColor: '#fff',
-                border: '1px solid var(--gray-200)',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.1)';
-                e.currentTarget.style.borderColor = 'var(--primary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
-                e.currentTarget.style.borderColor = 'var(--gray-200)';
-              }}
-            >
-              {/* Thumbnail Image */}
-              {thumbnailUrl && (
-                <div style={{
-                  width: '100%',
-                  height: '140px',
-                  backgroundColor: 'var(--gray-100)',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <img
-                    src={thumbnailUrl}
-                    alt="Lesson thumbnail"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover'
-                    }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
+            <>
+              {/* Core Lessons Section */}
+              {lessons.filter(l => !l.template?.state).length > 0 && (
+                <div style={{ marginBottom: '3rem' }}>
+                  <h2 style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 700,
+                    color: 'var(--gray-900)',
+                    marginBottom: '1.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: '#10b981'
+                    }}></span>
+                    Core Lessons
+                  </h2>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '1rem'
+                  }}>
+                    {lessons.filter(l => !l.template?.state).map(renderLessonCard)}
+                  </div>
                 </div>
               )}
 
-              <div style={{ padding: '1rem' }}>
-                {/* State Badge (if exists) */}
-                {lesson.template?.state && (
-                  <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '0.375rem 0.75rem',
-                      backgroundColor: '#1e40af',
-                      color: '#ffffff',
-                      borderRadius: '12px',
-                      fontSize: '0.625rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      {US_STATES.find(s => s.value === lesson.template.state)?.label || lesson.template.state}
-                    </span>
-                  </div>
-                )}
-
-                {/* Content ID and Template Name */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'space-between',
-                  marginBottom: '0.75rem'
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-900)',
-                      margin: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {/* Find Content ID field value from designer_responses */}
-                      {(() => {
-                        const responses = lesson.designer_responses || {};
-                        const fields = lesson.templateFields || [];
-                        
-                        // Find the Content ID field (usually first designer text field or one named "Content ID")
-                        const contentIdField = fields.find(f => 
-                          f.name.toLowerCase().includes('content id') || 
-                          f.name.toLowerCase().includes('contentid')
-                        ) || fields[0]; // fallback to first field
-                        
-                        // Get value using field ID
-                        if (contentIdField && responses[contentIdField.id]) {
-                          const value = responses[contentIdField.id];
-                          if (typeof value === 'string' && value.trim()) {
-                            return value;
-                          }
-                        }
-                        
-                        // Fallback: show lesson ID
-                        return lesson.id.slice(0, 8) + "...";
-                      })()}
-                    </h3>
-                    <p style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--gray-500)',
-                      margin: '0.25rem 0 0 0',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {lesson.template_name}
-                    </p>
-                    {/* Category */}
-                    {lesson.template?.category && (
-                      <p style={{
-                        fontSize: '0.6875rem',
-                        color: 'var(--gray-400)',
-                        margin: '0.25rem 0 0 0',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {lesson.template.category}
-                      </p>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0, marginLeft: '0.5rem' }}>
-                    {lesson.is_test && (
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        padding: '0.25rem 0.5rem',
-                        backgroundColor: '#fef3c7',
-                        color: '#92400e',
-                        borderRadius: '9999px',
-                        fontSize: '0.625rem',
-                        fontWeight: 600
-                      }}>
-                        <Beaker size={10} />
-                      </span>
-                    )}
-                    {canDeleteLesson(lesson) && (
-                      <button
-                        onClick={(e) => handleDeleteClick(e, lesson)}
-                        style={{
+              {/* State-Specific Lessons - Organized by State */}
+              {lessons.filter(l => l.template?.state).length > 0 && (
+                <>
+                  {[...new Set(lessons.filter(l => l.template?.state).map(l => l.template.state))].sort().map(state => {
+                    const stateLessons = lessons.filter(l => l.template?.state === state);
+                    const stateLabel = US_STATES.find(s => s.value === state)?.label || state;
+                    
+                    return (
+                      <div key={state} style={{ marginBottom: '3rem' }}>
+                        <h2 style={{
+                          fontSize: '1.5rem',
+                          fontWeight: 700,
+                          color: 'var(--gray-900)',
+                          marginBottom: '1.5rem',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          width: '24px',
-                          height: '24px',
-                          background: '#fee2e2',
-                          color: '#dc2626',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#dc2626';
-                          e.currentTarget.style.color = '#fff';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#fee2e2';
-                          e.currentTarget.style.color = '#dc2626';
-                        }}
-                        title="Delete lesson"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Metadata */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.375rem',
-                  fontSize: '0.75rem',
-                  color: 'var(--gray-600)',
-                  marginBottom: '0.75rem'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                    <User size={12} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {lesson.creator?.display_name || 'Unknown User'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                    <Calendar size={12} />
-                    <span>{new Date(lesson.updated_at).toLocaleString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric', 
-                      year: 'numeric', 
-                      hour: 'numeric', 
-                      minute: '2-digit',
-                      hour12: true 
-                    })}</span>
-                  </div>
-                </div>
-
-                {/* Field Counts */}
-                <div style={{
-                  paddingTop: '0.75rem',
-                  borderTop: '1px solid var(--gray-200)',
-                  display: 'flex',
-                  gap: '0.75rem',
-                  fontSize: '0.6875rem',
-                  color: 'var(--gray-600)'
-                }}>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>
-                      {Object.keys(lesson.designer_responses || {}).length}
-                    </span> designer
-                  </div>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>
-                      {Object.keys(lesson.builder_responses || {}).length}
-                    </span> builder
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-          })}
-            </div>
+                          gap: '0.5rem'
+                        }}>
+                          <span style={{
+                            display: 'inline-block',
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: '#3b82f6'
+                          }}></span>
+                          {stateLabel} Lessons
+                        </h2>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                          gap: '1rem'
+                        }}>
+                          {stateLessons.map(renderLessonCard)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import BaseField from './BaseField';
+import { supabase } from '../../lib/supabaseClient';
 
 /**
  * AssignStandardsField - A field that allows designers to assign educational standards
@@ -292,10 +293,36 @@ export default function AssignStandardsField({
           {/* Framework Dropdown */}
           <select
             value={selectedFramework}
-            onChange={(e) => {
-              setSelectedFramework(e.target.value);
+            onChange={async (e) => {
+              const newFramework = e.target.value;
+              setSelectedFramework(newFramework);
               setSuggestions([]);
               setShowSuggestions(false);
+              
+              // Auto-save framework to database
+              try {
+                const { data: existingField, error: fetchError } = await supabase
+                  .from('lesson_template_fields')
+                  .select('field_config')
+                  .eq('id', field.id)
+                  .single();
+                
+                if (fetchError) throw fetchError;
+                
+                const updatedConfig = { ...(existingField.field_config || {}), framework: newFramework };
+                
+                const { error: updateError } = await supabase
+                  .from('lesson_template_fields')
+                  .update({ field_config: updatedConfig })
+                  .eq('id', field.id);
+                
+                if (updateError) throw updateError;
+                
+                console.log('✅ Framework auto-saved:', newFramework);
+              } catch (error) {
+                console.error('Error saving framework:', error);
+                alert('Failed to save framework selection. Please try again.');
+              }
             }}
             disabled={isLoading}
             style={{

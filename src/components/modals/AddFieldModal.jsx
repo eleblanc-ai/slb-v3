@@ -63,6 +63,15 @@ const fieldTypes = [
 ];
 
 export default function AddEditFieldModal({ visible, onClose, onFieldAdded, field = null }) {
+  console.log('🔵 AddEditFieldModal rendered:', { 
+    visible, 
+    isEditMode: !!field, 
+    fieldId: field?.id,
+    fieldType: field?.type,
+    fieldFramework: field?.framework,
+    field 
+  });
+
   const isEditMode = !!field;
   const [step, setStep] = useState(isEditMode ? 'configure' : 'selectType'); // 'selectType' or 'configure'
   const [selectedType, setSelectedType] = useState(field?.type || null);
@@ -79,9 +88,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
   const [maxSelections, setMaxSelections] = useState(field?.max_selections || 0);
   const [framework, setFramework] = useState(field?.framework || 'CCSS');
 
+  console.log('📊 Initial framework state:', framework);
+
   // Update state when field prop changes
   useEffect(() => {
+    console.log('🔄 useEffect triggered, field changed:', field);
     if (field) {
+      console.log('📝 Setting framework from field:', field.framework);
       setStep('configure');
       setSelectedType(field.type);
       setFieldName(field.name);
@@ -95,6 +108,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setMinSelections(field.min_selections || 0);
       setMaxSelections(field.max_selections || 0);
       setFramework(field.framework || 'CCSS');
+      console.log('✅ Framework state updated to:', field.framework || 'CCSS');
     }
   }, [field]);
 
@@ -152,6 +166,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       return;
     }
 
+    console.log('📝 Submitting field:', { 
+      isEditMode, 
+      fieldId: field?.id, 
+      framework, 
+      selectedType 
+    });
+
     const fieldData = {
       id: field?.id || Date.now().toString(),
       type: selectedType,
@@ -182,13 +203,16 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     // Add framework for assign_standards field
     if (selectedType === 'assign_standards') {
       fieldData.framework = framework;
+      console.log('✅ Setting assign_standards framework:', framework);
     }
     
     // Add framework for mcqs field
     if (selectedType === 'mcqs') {
       fieldData.framework = framework;
+      console.log('✅ Setting mcqs framework:', framework);
     }
 
+    console.log('📤 Final fieldData:', fieldData);
     onFieldAdded(fieldData, isEditMode);
     handleClose();
   };
@@ -558,7 +582,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   </label>
                   <select
                     value={framework}
-                    onChange={(e) => setFramework(e.target.value)}
+                    onChange={(e) => {
+                      console.log('🎯 Framework changed in assign_standards field:', e.target.value);
+                      setFramework(e.target.value);
+                    }}
                     style={{
                       width: '100%',
                       padding: '0.625rem',
@@ -641,7 +668,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     </label>
                     <select
                       value={framework}
-                      onChange={(e) => setFramework(e.target.value)}
+                      onChange={(e) => {
+                        console.log('🎯 Framework changed in MCQs field:', e.target.value);
+                        setFramework(e.target.value);
+                      }}
                       style={{
                         width: '100%',
                         padding: '0.625rem',

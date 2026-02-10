@@ -28,6 +28,7 @@ import { getFormattedMappedStandards, extractGradeFromBand } from '../../lib/sta
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalReadingPracticeMarkdownExport';
+import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../lib/markdown-export/additionalreadingpracticefloridaMarkdownExport';
 // Sortable Field Wrapper Component
 function SortableField({ id, children }) {
   const {
@@ -218,7 +219,7 @@ export default function CreateNewLesson() {
     // Template names should be converted to camelCase for function lookup
     const templateNameToFunctionMap = {
       'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-
+      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
       // Future templates will be added here manually
     };
     
