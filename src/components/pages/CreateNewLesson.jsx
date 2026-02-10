@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, Upload, X } from 'lucide-react';
+import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, Upload, X, Eye } from 'lucide-react';
+import { marked } from 'marked';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -131,6 +132,9 @@ export default function CreateNewLesson() {
   const [exportMarkdown, setExportMarkdown] = useState('');
   const [showUploadCoverImageModal, setShowUploadCoverImageModal] = useState(false);
   const [showPreFormModal, setShowPreFormModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewMarkdown, setPreviewMarkdown] = useState('');
+  const [previewCoverImage, setPreviewCoverImage] = useState(null);
   const [preFormCompleted, setPreFormCompleted] = useState(false);
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
   const generateButtonRef = useRef(null);
@@ -234,6 +238,78 @@ export default function CreateNewLesson() {
     const markdown = generateFunction(templateData, fields, freshFieldValues);
     setExportMarkdown(markdown);
     setShowExportModal(true);
+  };
+
+  // Handler: preview lesson
+  const handlePreviewLesson = async () => {
+    // Reload the lesson data from database to ensure we have the most recent data
+    let freshFieldValues = fieldValues;
+    let coverImageUrl = null;
+    
+    if (lessonId) {
+      try {
+        const { data: lesson, error: lessonError } = await supabase
+          .from('lessons')
+          .select('designer_responses, builder_responses, cover_image_url')
+          .eq('id', lessonId)
+          .single();
+        
+        if (lessonError) {
+          console.error('Error reloading lesson data for preview:', lessonError);
+        } else if (lesson) {
+          // Rebuild field values from fresh database data
+          freshFieldValues = {};
+          fields.forEach(field => {
+            if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.id]) {
+              freshFieldValues[field.id] = lesson.designer_responses[field.id];
+            } else if (field.fieldFor === 'builder' && lesson.builder_responses?.[field.id]) {
+              freshFieldValues[field.id] = lesson.builder_responses[field.id];
+            }
+          });
+          
+          coverImageUrl = lesson.cover_image_url;
+        }
+      } catch (error) {
+        console.error('Error fetching fresh lesson data:', error);
+      }
+    }
+    
+    // Map template name to markdown export function
+    const templateNameToFunctionMap = {
+      'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
+      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
+    };
+    
+    const generateFunction = templateNameToFunctionMap[templateData?.name];
+    
+    if (!generateFunction) {
+      alert(`No preview available for template "${templateData?.name}".`);
+      return;
+    }
+    
+    let markdown = generateFunction(templateData, fields, freshFieldValues);
+    
+    // Extract image URL from markdown (look for #Photo Link section)
+    let imageUrl = coverImageUrl; // Start with cover image if available
+    const photoLinkMatch = markdown.match(/#Photo Link\s*\n\s*([^\s\n]+)/);
+    if (photoLinkMatch && photoLinkMatch[1]) {
+      imageUrl = photoLinkMatch[1];
+      // Remove the Photo Link section from markdown
+      markdown = markdown.replace(/#Photo Link\s*\n\s*[^\n]+\n*/g, '');
+    }
+    
+    // Remove Additional Notes section from preview
+    markdown = markdown.replace(/#Additional Notes\s*\n[\s\S]*?(?=\n#|\n*$)/g, '');
+    
+    // Convert single # to ### for h3 headings
+    markdown = markdown.replace(/^#([^#\s])/gm, '### $1');
+    
+    // Convert *word* to bold blue spans (but not **word** which is already bold)
+    markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span style="font-weight: 600; color: #3b82f6;">$1</span>');
+    
+    setPreviewMarkdown(markdown);
+    setPreviewCoverImage(imageUrl);
+    setShowPreviewModal(true);
   };
 
   // Handler: save AI config - implements snapshot system for lesson-specific configs
@@ -2074,6 +2150,36 @@ export default function CreateNewLesson() {
             </button>
 
             <button
+              onClick={handlePreviewLesson}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0.5rem 0.875rem',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.2)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.2)';
+              }}
+            >
+              <Eye size={16} />
+              Preview Lesson
+            </button>
+
+            <button
               onClick={handleExportLesson}
               style={{
                 display: 'flex',
@@ -3013,6 +3119,220 @@ export default function CreateNewLesson() {
                 }}
               >
                 Copy to Clipboard
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          backdropFilter: 'blur(4px)',
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '16px',
+            maxWidth: '1000px',
+            width: '90%',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1.5rem 2rem',
+              borderBottom: '1px solid var(--gray-200)'
+            }}>
+              <h2 style={{
+                fontSize: '1.5rem',
+                fontWeight: 700,
+                color: 'var(--gray-900)',
+                margin: 0
+              }}>
+                Lesson Preview
+              </h2>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--gray-500)',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--gray-100)';
+                  e.currentTarget.style.color = 'var(--gray-700)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--gray-500)';
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '2rem'
+            }}>
+              {/* Cover Image */}
+              {previewCoverImage && (
+                <div style={{
+                  marginBottom: '2rem',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <img 
+                    src={previewCoverImage} 
+                    alt="Cover" 
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block'
+                    }}
+                  />
+                </div>
+              )}
+              
+              {/* Rendered Markdown */}
+              <div 
+                className="markdown-preview"
+                style={{
+                  fontSize: '1rem',
+                  lineHeight: '1.75',
+                  color: 'var(--gray-800)'
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: marked.parse(previewMarkdown || '', {
+                    breaks: true,
+                    gfm: true
+                  })
+                }}
+              />
+              <style>{`
+                .markdown-preview h1 {
+                  font-size: 2rem;
+                  font-weight: 700;
+                  margin: 1.5rem 0 1rem;
+                  color: var(--gray-900);
+                }
+                .markdown-preview h2 {
+                  font-size: 1.5rem;
+                  font-weight: 700;
+                  margin: 1.25rem 0 0.75rem;
+                  color: var(--gray-900);
+                }
+                .markdown-preview h3 {
+                  font-size: 1.25rem;
+                  font-weight: 600;
+                  margin: 1rem 0 0.5rem;
+                  color: #3b82f6;
+                }
+                .markdown-preview h4 {
+                  font-size: 1.125rem;
+                  font-weight: 600;
+                  margin: 0.875rem 0 0.5rem;
+                  color: var(--gray-900);
+                }
+                .markdown-preview p {
+                  margin: 1rem 0;
+                }
+                .markdown-preview ul, .markdown-preview ol {
+                  margin: 0.75rem 0;
+                  padding-left: 1.5rem;
+                }
+                .markdown-preview li {
+                  margin: 0.25rem 0;
+                }
+                .markdown-preview strong {
+                  font-weight: 600;
+                }
+                .markdown-preview code {
+                  background-color: #f3f4f6;
+                  padding: 0.125rem 0.375rem;
+                  border-radius: 0.25rem;
+                  font-family: monospace;
+                  font-size: 0.875em;
+                }
+                .markdown-preview pre {
+                  background-color: #f3f4f6;
+                  padding: 1rem;
+                  border-radius: 0.5rem;
+                  overflow-x: auto;
+                  margin: 1rem 0;
+                }
+                .markdown-preview pre code {
+                  background: none;
+                  padding: 0;
+                }
+                .markdown-preview blockquote {
+                  border-left: 4px solid #e5e7eb;
+                  padding-left: 1rem;
+                  margin: 1rem 0;
+                  color: var(--gray-600);
+                }
+              `}</style>
+            </div>
+            
+            {/* Footer */}
+            <div style={{
+              padding: '1.5rem 2rem',
+              borderTop: '1px solid var(--gray-200)',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+                }}
+              >
+                Close
               </button>
             </div>
           </div>
