@@ -6,11 +6,11 @@ import { useState, useEffect, useRef } from 'react';
  */
 export default function StandardsSearch({
   selectedStandard,
-  onStandardChange
+  onStandardChange,
+  defaultFramework = 'CCSS'
 }) {
-  const [framework, setFramework] = useState('CCSS');
+  const [framework, setFramework] = useState(defaultFramework);
   const [standardsData, setStandardsData] = useState([]);
-  const [mappingData, setMappingData] = useState([]);
   const [inputCode, setInputCode] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [suggestions, setSuggestions] = useState([]);
@@ -18,44 +18,24 @@ export default function StandardsSearch({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
-  
-  // Available frameworks
-  const frameworks = ['CCSS', 'TEKS', 'BEST', 'BLOOM'];
 
-  // Filter out category headers
-  const isValidStandardCode = (code) => {
-    if (!code) return false;
-    if (code.endsWith(':')) return false;
-    if (code.includes('Acquisition') || code.includes('Knowledge of Language') || 
-        code.includes('Text Types') || code.includes('Comprehension and') ||
-        code.includes('Conventions of') || code.includes('Integration of') ||
-        code.includes('Key Ideas') || code.includes('Craft and Structure') ||
-        code.includes('Speaking and Listening') || code.includes('Presentation of')) {
-      return false;
-    }
-    return true;
-  };
+  // Update framework when defaultFramework prop changes
+  useEffect(() => {
+    setFramework(defaultFramework);
+  }, [defaultFramework]);
 
-  // Load standards-mapping.csv on mount
+  // Load standards from MOAC CSV based on selected framework
   useEffect(() => {
     const loadStandards = async () => {
       try {
-        const response = await fetch(new URL('../../assets/standards-mapping.csv', import.meta.url).href);
+        const response = await fetch(new URL('../../assets/MOAC SLB – No Letter CCSS.csv', import.meta.url).href);
         const text = await response.text();
         
         const lines = text.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim());
-        
-        const ccssCodeIndex = headers.indexOf('ccss_code');
-        const ccssDescIndex = headers.indexOf('ccss_description');
-        const frameworkIndex = headers.indexOf('framework');
-        const frameworkCodeIndex = headers.indexOf('framework_code');
-        const frameworkDescIndex = headers.indexOf('framework_description');
-        
         const parsed = [];
         const seen = new Set();
-        const mappings = [];
         
+        // Skip header row, read data starting from line 1
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
           if (!line.trim()) continue;
@@ -76,40 +56,38 @@ export default function StandardsSearch({
           }
           values.push(current.trim());
           
-          const ccssCode = values[ccssCodeIndex];
-          const frameworkCode = values[frameworkCodeIndex];
-          if (ccssCode || frameworkCode) {
-            mappings.push({
-              ccssCode: ccssCode || '',
-              ccssDesc: values[ccssDescIndex] || '',
-              framework: values[frameworkIndex] || '',
-              frameworkCode: frameworkCode || '',
-              frameworkDesc: values[frameworkDescIndex] || ''
-            });
-          }
-          
-          const ccssDesc = values[ccssDescIndex];
-          if (framework === 'CCSS' && ccssCode && isValidStandardCode(ccssCode) && !seen.has(ccssCode)) {
-            parsed.push({ 
-              fullCode: ccssCode, 
-              statement: ccssDesc || '(No description available)' 
-            });
-            seen.add(ccssCode);
-          }
-          
-          const frameworkValue = values[frameworkIndex];
-          const frameworkDesc = values[frameworkDescIndex];
-          if (framework !== 'CCSS' && frameworkValue === framework && frameworkCode && isValidStandardCode(frameworkCode) && !seen.has(frameworkCode)) {
-            parsed.push({ 
-              fullCode: frameworkCode, 
-              statement: frameworkDesc || '(No description available)' 
-            });
-            seen.add(frameworkCode);
+          if (framework === 'CCSS') {
+            // Column A = CCSS Code, Column B = CCSS Standard
+            const ccssCode = values[0];
+            const ccssStandard = values[1];
+            
+            if (ccssCode && !seen.has(ccssCode)) {
+              parsed.push({ 
+                fullCode: ccssCode, 
+                statement: ccssStandard || '(No description available)' 
+              });
+              seen.add(ccssCode);
+            }
+          } else {
+            // For BLOOM, TEKS, BEST, GSE: Column C = Mapped Framework, Column D = Mapped Code, Column E = Mapped Standard
+            const mappedFramework = values[2];
+            const mappedCode = values[3];
+            const mappedStandard = values[4];
+            
+            if (mappedFramework === framework && mappedCode && !seen.has(mappedCode)) {
+              parsed.push({ 
+                fullCode: mappedCode, 
+                statement: mappedStandard || '(No description available)' 
+              });
+              seen.add(mappedCode);
+            }
           }
         }
         
+        // Sort lexicographically by code
+        parsed.sort((a, b) => a.fullCode.localeCompare(b.fullCode));
+        
         setStandardsData(parsed);
-        setMappingData(mappings);
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading standards:', err);
@@ -152,48 +130,8 @@ export default function StandardsSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const getRelatedStandards = (code) => {
-    const related = new Set();
-    const isCCSS = code.startsWith('CCSS.');
-    
-    if (isCCSS) {
-      const matchingRows = mappingData.filter(row => row.ccssCode === code);
-      matchingRows.forEach(row => {
-        if (row.frameworkCode && isValidStandardCode(row.frameworkCode)) {
-          related.add(row.frameworkCode);
-        }
-      });
-    } else {
-      const rowsWithThisCode = mappingData.filter(row => row.frameworkCode === code);
-      const ccssCodes = new Set();
-      
-      rowsWithThisCode.forEach(row => {
-        if (row.ccssCode && isValidStandardCode(row.ccssCode)) {
-          ccssCodes.add(row.ccssCode);
-        }
-      });
-      
-      ccssCodes.forEach(ccssCode => {
-        related.add(ccssCode);
-        
-        const allMappings = mappingData.filter(row => row.ccssCode === ccssCode);
-        allMappings.forEach(row => {
-          if (row.frameworkCode && isValidStandardCode(row.frameworkCode) && row.frameworkCode !== code) {
-            related.add(row.frameworkCode);
-          }
-        });
-      });
-    }
-    
-    return Array.from(related).sort();
-  };
-
   const handleSelectSuggestion = (standard) => {
-    const relatedStandards = getRelatedStandards(standard.fullCode);
-    onStandardChange({
-      ...standard,
-      relatedStandards
-    });
+    onStandardChange(standard);
     setInputCode('');
     setShowSuggestions(false);
     setSuggestions([]);
@@ -251,9 +189,11 @@ export default function StandardsSearch({
             minWidth: 80
           }}
         >
-          {frameworks.map(fw => (
-            <option key={fw} value={fw}>{fw}</option>
-          ))}
+          <option value="CCSS">CCSS</option>
+          <option value="BLOOM">BLOOM</option>
+          <option value="TEKS">TEKS</option>
+          <option value="BEST">B.E.S.T.</option>
+          <option value="GSE">GSE</option>
         </select>
         
       {selectedStandard ? (

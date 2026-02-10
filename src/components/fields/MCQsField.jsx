@@ -189,6 +189,7 @@ export default function MCQsField({
                 onRegenerate={() => handleRegenerateQuestion(index)}
                 selectedStandard={questionStandards[index]}
                 onStandardChange={(standard) => handleStandardChange(index, standard)}
+                field={field}
               />
             </div>
           ))}
@@ -199,7 +200,7 @@ export default function MCQsField({
 }
 
 // Individual Question Editor Component
-function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange }) {
+function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange, field }) {
   const updateTimerRef = useRef(null);
   const isUserEditingRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -315,6 +316,7 @@ function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenera
           <StandardsSearch
             selectedStandard={selectedStandard}
             onStandardChange={onStandardChange}
+            defaultFramework={field.framework || 'CCSS'}
           />
           <button
             type="button"

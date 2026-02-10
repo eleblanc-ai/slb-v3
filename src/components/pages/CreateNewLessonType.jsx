@@ -854,6 +854,7 @@ export default function CreateNewLessonType() {
           if (field.field_config.options) mappedField.options = field.field_config.options;
           if (field.field_config.min_selections !== undefined) mappedField.min_selections = field.field_config.min_selections;
           if (field.field_config.max_selections !== undefined) mappedField.max_selections = field.field_config.max_selections;
+          if (field.field_config.framework) mappedField.framework = field.field_config.framework;
         }
         
         return mappedField;
@@ -906,6 +907,7 @@ export default function CreateNewLessonType() {
         if (fieldData.options) fieldConfig.options = fieldData.options;
         if (fieldData.min_selections !== undefined) fieldConfig.min_selections = fieldData.min_selections;
         if (fieldData.max_selections !== undefined) fieldConfig.max_selections = fieldData.max_selections;
+        if (fieldData.framework) fieldConfig.framework = fieldData.framework;
         
         const updateData = {
           field_type: fieldData.type,
@@ -933,6 +935,7 @@ export default function CreateNewLessonType() {
         if (fieldData.options) fieldConfig.options = fieldData.options;
         if (fieldData.min_selections !== undefined) fieldConfig.min_selections = fieldData.min_selections;
         if (fieldData.max_selections !== undefined) fieldConfig.max_selections = fieldData.max_selections;
+        if (fieldData.framework) fieldConfig.framework = fieldData.framework;
         
         const insertData = {
           lesson_template_id: lessonTypeData.id,

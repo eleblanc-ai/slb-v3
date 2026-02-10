@@ -1212,6 +1212,7 @@ export default function CreateNewLesson() {
           if (field.field_config.options) mappedField.options = field.field_config.options;
           if (field.field_config.min_selections !== undefined) mappedField.min_selections = field.field_config.min_selections;
           if (field.field_config.max_selections !== undefined) mappedField.max_selections = field.field_config.max_selections;
+          if (field.field_config.framework) mappedField.framework = field.field_config.framework;
         }
         
         return mappedField;

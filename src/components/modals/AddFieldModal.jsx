@@ -77,6 +77,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
   const [dropdownOptions, setDropdownOptions] = useState(field?.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
   const [minSelections, setMinSelections] = useState(field?.min_selections || 0);
   const [maxSelections, setMaxSelections] = useState(field?.max_selections || 0);
+  const [framework, setFramework] = useState(field?.framework || 'CCSS');
 
   // Update state when field prop changes
   useEffect(() => {
@@ -93,6 +94,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setDropdownOptions(field.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
       setMinSelections(field.min_selections || 0);
       setMaxSelections(field.max_selections || 0);
+      setFramework(field.framework || 'CCSS');
     }
   }, [field]);
 
@@ -113,6 +115,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setDropdownOptions('');
       setMinSelections(0);
       setMaxSelections(0);
+      setFramework('CCSS');
     }
   }, [visible, field]);
 
@@ -174,6 +177,16 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     if (selectedType === 'checklist') {
       fieldData.min_selections = minSelections || 0;
       fieldData.max_selections = maxSelections || fieldData.options.length;
+    }
+    
+    // Add framework for assign_standards field
+    if (selectedType === 'assign_standards') {
+      fieldData.framework = framework;
+    }
+    
+    // Add framework for mcqs field
+    if (selectedType === 'mcqs') {
+      fieldData.framework = framework;
     }
 
     onFieldAdded(fieldData, isEditMode);
@@ -531,7 +544,46 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   </div>
                 </div>
               )}
-
+              {/* Framework Selection for Assign Standards */}
+              {selectedType === 'assign_standards' && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'var(--gray-700)'
+                  }}>
+                    Standards Framework
+                  </label>
+                  <select
+                    value={framework}
+                    onChange={(e) => setFramework(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.625rem',
+                      border: '1px solid var(--gray-300)',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      backgroundColor: '#fff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="CCSS">CCSS</option>
+                    <option value="BLOOM">BLOOM</option>
+                    <option value="TEKS">TEKS</option>
+                    <option value="BEST">B.E.S.T.</option>
+                    <option value="GSE">GSE</option>
+                  </select>
+                  <p style={{
+                    marginTop: '0.5rem',
+                    fontSize: '0.75rem',
+                    color: '#6b7280'
+                  }}>
+                    Select which framework standards to use for this field. Available: CCSS, BLOOM, TEKS, B.E.S.T., GSE.
+                  </p>
+                </div>
+              )}
               {/* Grade Band Selector Info */}
               {selectedType === 'grade_band_selector' && (
                 <div style={{
@@ -574,19 +626,59 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 </div>
               )}
 
-              {/* MCQs Note */}
+              {/* MCQs Framework Selection */}
               {selectedType === 'mcqs' && (
-                <div style={{
-                  marginBottom: '1.5rem',
-                  padding: '1rem',
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
-                  border: '1px solid #bfdbfe',
-                  borderRadius: '8px',
-                  fontSize: '0.875rem',
-                  color: '#1e40af'
-                }}>
-                  <strong>Note:</strong> This field generates 5 multiple choice questions. Each question can be individually regenerated with specific standards selected during the lesson creation process.
-                </div>
+                <>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-700)'
+                    }}>
+                      Standards Framework
+                    </label>
+                    <select
+                      value={framework}
+                      onChange={(e) => setFramework(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem',
+                        border: '1px solid var(--gray-300)',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        backgroundColor: '#fff',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="CCSS">CCSS</option>
+                      <option value="BLOOM">BLOOM</option>
+                      <option value="TEKS">TEKS</option>
+                      <option value="BEST">B.E.S.T.</option>
+                      <option value="GSE">GSE</option>
+                    </select>
+                    <p style={{
+                      marginTop: '0.5rem',
+                      fontSize: '0.75rem',
+                      color: '#6b7280'
+                    }}>
+                      Select which framework standards to use for MCQ generation.
+                    </p>
+                  </div>
+                  
+                  <div style={{
+                    marginBottom: '1.5rem',
+                    padding: '1rem',
+                    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    color: '#1e40af'
+                  }}>
+                    <strong>Note:</strong> This field generates 5 multiple choice questions. Each question can be individually regenerated with specific standards selected during the lesson creation process.
+                  </div>
+                </>
               )}
 
               {/* Checkboxes */}

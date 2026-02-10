@@ -34,8 +34,18 @@ export default function AssignStandardsField({
     'CCSS': 'CCSS',
     'BEST': 'B.E.S.T.',
     'TEKS': 'TEKS',
-    'BLOOM': 'BLOOM'
+    'BLOOM': 'BLOOM',
+    'GSE': 'GSE'
   };
+
+  // Update selectedFramework when field.framework changes
+  useEffect(() => {
+    if (field.framework && field.framework !== 'All Frameworks') {
+      setSelectedFramework(field.framework);
+    } else {
+      setSelectedFramework('CCSS'); // Default to CCSS
+    }
+  }, [field.framework]);
 
   // Filter out category headers (codes ending with ':' or looking like headers)
   const isValidStandardCode = (code) => {
@@ -53,26 +63,21 @@ export default function AssignStandardsField({
     return true;
   };
 
-  // Load standards from both CSV files on mount
+  // Load standards from MOAC CSV file on mount - CCSS and BLOOM
   useEffect(() => {
     const loadStandards = async () => {
       try {
         const parsed = [];
-        const frameworkSet = new Set();
         const seen = new Set(); // Track unique codes to avoid duplicates
         
-        // Load CCSS, BEST, TEKS from standards.csv
-        const standardsResponse = await fetch(new URL('../../assets/standards.csv', import.meta.url).href);
-        const standardsText = await standardsResponse.text();
-        const standardsLines = standardsText.split('\n');
-        const standardsHeaders = standardsLines[0].split(',').map(h => h.trim());
+        // Load MOAC CSV file
+        const response = await fetch(new URL('../../assets/MOAC SLB – No Letter CCSS.csv', import.meta.url).href);
+        const text = await response.text();
+        const lines = text.split('\n');
         
-        const initiativeNameIndex = standardsHeaders.findIndex(h => h.includes('initiative_name'));
-        const fullCodeIndex = standardsHeaders.findIndex(h => h.includes('full_code'));
-        const statementIndex = standardsHeaders.findIndex(h => h.includes('standard_statement'));
-        
-        for (let i = 1; i < standardsLines.length; i++) {
-          const line = standardsLines[i];
+        // Skip header row, read data starting from line 1
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
           if (!line.trim()) continue;
           
           const values = [];
@@ -91,91 +96,41 @@ export default function AssignStandardsField({
           }
           values.push(current.trim());
           
-          const initiativeName = values[initiativeNameIndex] || '';
-          const fullCode = values[fullCodeIndex] || '';
-          const statement = values[statementIndex] || '';
+          // Column A = CCSS Code, Column B = CCSS Standard
+          const ccssCode = values[0];
+          const ccssStandard = values[1];
           
-          // Map framework names to our standardized names
-          let normalizedFramework = '';
-          if (initiativeName === 'CCSS') {
-            normalizedFramework = 'CCSS';
-          } else if (initiativeName === 'Florida BEST' || initiativeName.includes('BEST')) {
-            normalizedFramework = 'BEST';
-          } else if (initiativeName === 'Texas Education Agency' || initiativeName.includes('TEKS')) {
-            normalizedFramework = 'TEKS';
+          // Add CCSS standards
+          if (ccssCode && isValidStandardCode(ccssCode) && !seen.has(ccssCode)) {
+            parsed.push({ 
+              initiativeName: 'CCSS',
+              fullCode: ccssCode, 
+              statement: ccssStandard || '(No description available)' 
+            });
+            seen.add(ccssCode);
           }
           
-          if (!normalizedFramework) continue;
+          // Column C = Mapped Framework, Column D = Mapped Code, Column E = Mapped Standard
+          const mappedFramework = values[2];
+          const mappedCode = values[3];
+          const mappedStandard = values[4];
           
-          frameworkSet.add(normalizedFramework);
-          
-          if (fullCode && isValidStandardCode(fullCode) && !seen.has(fullCode)) {
+          // Add BLOOM, TEKS, BEST, GSE standards
+          if (['BLOOM', 'TEKS', 'BEST', 'GSE'].includes(mappedFramework) && mappedCode && isValidStandardCode(mappedCode) && !seen.has(mappedCode)) {
             parsed.push({ 
-              initiativeName: normalizedFramework,
-              fullCode, 
-              statement: statement || '(No description available)' 
+              initiativeName: mappedFramework,
+              fullCode: mappedCode, 
+              statement: mappedStandard || '(No description available)' 
             });
-            seen.add(fullCode);
+            seen.add(mappedCode);
           }
         }
         
-        // Load BLOOM from standards-mapping.csv
-        const mappingResponse = await fetch(new URL('../../assets/standards-mapping.csv', import.meta.url).href);
-        const mappingText = await mappingResponse.text();
-        const mappingLines = mappingText.split('\n');
-        const mappingHeaders = mappingLines[0].split(',').map(h => h.trim());
-        
-        const frameworkIndex = mappingHeaders.indexOf('framework');
-        const frameworkCodeIndex = mappingHeaders.indexOf('framework_code');
-        const frameworkDescIndex = mappingHeaders.indexOf('framework_description');
-        
-        for (let i = 1; i < mappingLines.length; i++) {
-          const line = mappingLines[i];
-          if (!line.trim()) continue;
-          
-          const values = [];
-          let current = '';
-          let inQuotes = false;
-          
-          for (let char of line) {
-            if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              values.push(current.trim());
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          values.push(current.trim());
-          
-          const framework = values[frameworkIndex] || '';
-          const frameworkCode = values[frameworkCodeIndex] || '';
-          const frameworkDesc = values[frameworkDescIndex] || '';
-          
-          if (framework !== 'BLOOM') continue;
-          
-          frameworkSet.add('BLOOM');
-          
-          if (frameworkCode && isValidStandardCode(frameworkCode) && !seen.has(frameworkCode)) {
-            parsed.push({ 
-              initiativeName: 'BLOOM',
-              fullCode: frameworkCode, 
-              statement: frameworkDesc || '(No description available)' 
-            });
-            seen.add(frameworkCode);
-          }
-        }
-        
-        // Sort frameworks with CCSS first
-        const sortedFrameworks = Array.from(frameworkSet).sort((a, b) => {
-          if (a === 'CCSS') return -1;
-          if (b === 'CCSS') return 1;
-          return a.localeCompare(b);
-        });
+        // Sort lexicographically by code
+        parsed.sort((a, b) => a.fullCode.localeCompare(b.fullCode));
         
         setStandardsData(parsed);
-        setFrameworks(sortedFrameworks);
+        setFrameworks(['CCSS', 'BLOOM', 'TEKS', 'BEST', 'GSE']);
         setIsLoading(false);
       } catch (err) {
         console.error('Error loading standards:', err);
@@ -194,15 +149,13 @@ export default function AssignStandardsField({
     setError('');
     
     if (input.trim().length > 0) {
-      // Filter standards by full_code (case-insensitive, contains match)
+      // Filter by selected framework and search input
       let filtered = standardsData;
       
-      // Filter by selected framework if one is chosen
       if (selectedFramework) {
         filtered = filtered.filter(s => s.initiativeName === selectedFramework);
       }
       
-      // Filter by search input
       filtered = filtered
         .filter(s => s.fullCode.toLowerCase().includes(input.toLowerCase()))
         .slice(0, 100); // Limit to 100 suggestions
@@ -273,7 +226,7 @@ export default function AssignStandardsField({
       return;
     }
     
-    // Look up the standard in the loaded data (exact match)
+    // Look up the standard in the loaded data (exact match, case-insensitive)
     let found = standardsData.find(s => 
       s.fullCode.toLowerCase() === inputCode.trim().toLowerCase()
     );
@@ -341,7 +294,6 @@ export default function AssignStandardsField({
             value={selectedFramework}
             onChange={(e) => {
               setSelectedFramework(e.target.value);
-              // Clear suggestions when framework changes
               setSuggestions([]);
               setShowSuggestions(false);
             }}
@@ -356,7 +308,6 @@ export default function AssignStandardsField({
               minWidth: '150px'
             }}
           >
-            <option value="">All Frameworks</option>
             {frameworks.map(fw => (
               <option key={fw} value={fw}>{frameworkDisplayNames[fw] || fw}</option>
             ))}
