@@ -370,28 +370,52 @@ export default function PreFormModal({
                 <ArrowRight size={18} />
               </button>
             ) : (
-              <button
-                onClick={handleContinue}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: '#3b82f6',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#2563eb';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = '#3b82f6';
-                }}
-              >
-                Continue to Lesson Editor
-              </button>
+              <>
+                <button
+                  onClick={handleContinue}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#fff',
+                    color: '#374151',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9fafb';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fff';
+                  }}
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={handleContinue}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#2563eb';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#3b82f6';
+                  }}
+                >
+                  Continue to Lesson Editor
+                </button>
+              </>
             )}
           </div>
         </div>
