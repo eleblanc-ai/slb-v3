@@ -201,7 +201,7 @@ export default function BrowseLessonTemplates() {
           field_for: field.field_for,
           field_order: field.field_order,
           ai_prompt: field.ai_prompt,
-          ai_individual_prompt: field.ai_individual_prompt,
+          ai_question_prompts: field.ai_question_prompts,
           ai_system_instructions: field.ai_system_instructions,
           ai_context_instructions: field.ai_context_instructions,
           ai_format_requirements: field.ai_format_requirements,

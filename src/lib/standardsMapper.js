@@ -192,6 +192,52 @@ export function formatMappedStandards(mappedStandards) {
 }
 
 /**
+ * Insert a standard code into a standards string, maintaining framework order: CCSS; TEKS; BEST; BLOOM; GSE
+ * @param {string} standardsString - Semicolon-separated standards string
+ * @param {string} standardToInsert - Standard code to insert
+ * @returns {string} - Updated standards string with the standard inserted in correct position
+ */
+export function insertStandardInOrder(standardsString, standardToInsert) {
+  if (!standardToInsert) return standardsString;
+  if (!standardsString) return standardToInsert;
+  
+  const order = ['CCSS', 'TEKS', 'BEST', 'BLOOM', 'GSE'];
+  const insertFramework = detectFramework(standardToInsert);
+  const insertIndex = order.indexOf(insertFramework);
+  
+  // Parse existing standards into ordered buckets
+  const existingStandards = standardsString.split(';').map(s => s.trim()).filter(s => s);
+  
+  // Check if it's already in the list
+  if (existingStandards.includes(standardToInsert)) {
+    return standardsString;
+  }
+  
+  // Build ordered result
+  const buckets = { CCSS: [], TEKS: [], BEST: [], BLOOM: [], GSE: [] };
+  
+  for (const std of existingStandards) {
+    const fw = detectFramework(std);
+    if (fw && buckets[fw]) {
+      buckets[fw].push(std);
+    }
+  }
+  
+  // Insert the new standard at the beginning of its framework bucket
+  if (insertFramework && buckets[insertFramework]) {
+    buckets[insertFramework].unshift(standardToInsert);
+  }
+  
+  // Rebuild the string in order
+  const result = [];
+  for (const fw of order) {
+    result.push(...buckets[fw]);
+  }
+  
+  return result.join('; ');
+}
+
+/**
  * Get formatted standards string for a CCSS code
  * @param {string} ccssCode - The CCSS code to look up
  * @param {number|string} gradeLevel - Optional grade level to filter results

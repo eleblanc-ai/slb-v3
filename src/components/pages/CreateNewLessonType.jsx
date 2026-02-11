@@ -22,9 +22,10 @@ import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
-import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI } from '../../lib/standardsMapper';
+import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
+import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 
 // Sortable Field Wrapper Component
 function SortableField({ id, children }) {
@@ -390,7 +391,7 @@ export default function CreateNewLessonType() {
       // Fetch AI config from Supabase
       const { data: fieldData, error } = await supabase
         .from('lesson_template_fields')
-        .select('ai_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
+        .select('ai_prompt, ai_question_prompts, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
         .eq('id', field.id)
         .single();
       
@@ -399,16 +400,52 @@ export default function CreateNewLessonType() {
       // Get field values from localStorage
       const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
       
+      // Get question-specific prompt based on questionIndex (0-4 -> q1-q5)
+      const questionKey = `q${questionIndex + 1}`;
+      let questionPrompt;
+      
+      // Get default question prompts from aiPromptDefaults.json
+      const defaultQuestionPrompts = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts || {};
+      
+      // Check for question-specific prompt in ai_question_prompts, fall back to defaults
+      // Handle both old format (string) and new format (object with prompt property)
+      if (fieldData.ai_question_prompts && fieldData.ai_question_prompts[questionKey]) {
+        const saved = fieldData.ai_question_prompts[questionKey];
+        questionPrompt = typeof saved === 'string' ? saved : saved.prompt;
+      } else if (defaultQuestionPrompts[questionKey]) {
+        // Fall back to default prompt for this specific question
+        const defaultQ = defaultQuestionPrompts[questionKey];
+        questionPrompt = typeof defaultQ === 'string' ? defaultQ : defaultQ.prompt;
+        console.log(`📋 Using default prompt for ${questionKey}`);
+      } else {
+        // Last resort: modify main prompt for single question
+        questionPrompt = fieldData.ai_prompt?.replace(/Generate 5 multiple choice questions/gi, 'Generate 1 multiple choice question') || 'Generate 1 multiple choice question';
+      }
+      
+      // Get MCQ-specific format requirements, falling back to defaults
+      const mcqFormatRequirements = fieldData.ai_format_requirements || 
+        aiPromptDefaults.formatRequirements?.mcqs || 
+        '';
+      
+      // Log context field configuration for debugging
+      console.log('🔧 AI Config context fields:', fieldData.ai_context_field_ids);
+      console.log('🔧 Available field values keys:', Object.keys(storedFieldValues));
+      
       // Build prompt for single question
       const aiConfig = {
         systemInstructions: fieldData.ai_system_instructions || '',
-        prompt: fieldData.ai_prompt?.replace('Generate 5 multiple choice questions', 'Generate 1 multiple choice question') || '',
-        formatRequirements: fieldData.ai_format_requirements || '',
+        prompt: questionPrompt,
+        formatRequirements: mcqFormatRequirements,
         contextInstructions: fieldData.ai_context_instructions || '',
         selectedFieldIds: fieldData.ai_context_field_ids || [],
         allFields: fields,
         fieldValues: storedFieldValues
       };
+      
+      // Warn if no context fields are configured
+      if (!fieldData.ai_context_field_ids || fieldData.ai_context_field_ids.length === 0) {
+        console.warn('⚠️ No context fields configured for MCQ generation - AI may not have passage content');
+      }
       
       // Add selected standard to context if provided
       if (selectedStandard) {
@@ -465,8 +502,19 @@ export default function CreateNewLessonType() {
       const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
       console.log('✅ Individual MCQ generated (structured):', result);
       
+      // Validate the response structure
+      if (!result || !result.questions || !result.questions[0]) {
+        throw new Error('AI returned invalid response structure');
+      }
+      
       // Format the structured response as text
       const q = result.questions[0];
+      
+      // Validate question has required content
+      if (!q.question_text || !q.choices || !q.choices.A || !q.choices.B || !q.choices.C || !q.choices.D) {
+        console.error('❌ Invalid MCQ response:', q);
+        throw new Error('AI generated incomplete question - missing question text or choices. Check that context fields (passage) are configured in AI Config.');
+      }
       
       // Extract grade level from fieldValues
       const gradeField = fields.find(f => f.type === 'grade_band_selector');
@@ -539,6 +587,11 @@ export default function CreateNewLessonType() {
         // Track what was filtered out
         filteredOutForQuestion = candidateStandards.filter(s => !filteredStandards.includes(s));
         standardsText = filteredStandards.join('; ');
+      }
+      
+      // Insert source standard in its proper framework position (CCSS; TEKS; BEST; BLOOM; GSE order)
+      if (sourceStandardInfo && sourceStandardInfo.code) {
+        standardsText = insertStandardInOrder(standardsText, sourceStandardInfo.code);
       }
       
       const questionNumber = questionIndex + 1;
@@ -922,6 +975,11 @@ export default function CreateNewLessonType() {
             // Track which standards were filtered out
             filteredOutForQuestion = candidateStandards.filter(s => !filteredStandards.includes(s));
             standardsText = filteredStandards.join('; ');
+          }
+          
+          // Insert source standard in its proper framework position (CCSS; TEKS; BEST; BLOOM; GSE order)
+          if (sourceStandards[i] && sourceStandards[i].code) {
+            standardsText = insertStandardInOrder(standardsText, sourceStandards[i].code);
           }
           
           return {
@@ -1980,10 +2038,24 @@ export default function CreateNewLessonType() {
                               />
                             );
                           } else if (field.type === 'mcqs') {
+                            // Extract question labels from ai_question_prompts for display (designer)
+                            const questionLabelsD = {};
+                            if (field.ai_question_prompts) {
+                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
+                                const qData = field.ai_question_prompts[qKey];
+                                if (qData) {
+                                  questionLabelsD[qKey] = {
+                                    label: typeof qData === 'string' ? null : qData.label,
+                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
+                                  };
+                                }
+                              });
+                            }
+                            
                             fieldComponent = (
                               <MCQsField
                                 key={field.id}
-                                field={field}
+                                field={{ ...field, questionLabels: questionLabelsD }}
                                 value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}
@@ -2263,10 +2335,24 @@ export default function CreateNewLessonType() {
                               />
                             );
                           } else if (field.type === 'mcqs') {
+                            // Extract question labels from ai_question_prompts for display (builder)
+                            const questionLabelsB = {};
+                            if (field.ai_question_prompts) {
+                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
+                                const qData = field.ai_question_prompts[qKey];
+                                if (qData) {
+                                  questionLabelsB[qKey] = {
+                                    label: typeof qData === 'string' ? null : qData.label,
+                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
+                                  };
+                                }
+                              });
+                            }
+                            
                             fieldComponent = (
                               <MCQsField
                                 key={field.id}
-                                field={field}
+                                field={{ ...field, questionLabels: questionLabelsB }}
                                 value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
                                 onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
                                 onEdit={handleEditField}

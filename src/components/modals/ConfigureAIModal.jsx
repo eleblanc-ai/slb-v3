@@ -3,6 +3,7 @@ import { X, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
 import { buildFullPrompt } from '../../lib/promptBuilder';
+import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 
 /**
  * ConfigureAIModal - Modal for configuring AI generation settings for a field
@@ -19,7 +20,15 @@ export default function ConfigureAIModal({
   mode = 'template' // 'template' or 'lesson'
 }) {
   const [prompt, setPrompt] = useState('');
-  const [individualPrompt, setIndividualPrompt] = useState('');
+  // MCQ question prompts (q1-q5) - each question has its own prompt, label, and tooltip
+  const [questionPrompts, setQuestionPrompts] = useState({
+    q1: { prompt: '', label: '', tooltip: '' },
+    q2: { prompt: '', label: '', tooltip: '' },
+    q3: { prompt: '', label: '', tooltip: '' },
+    q4: { prompt: '', label: '', tooltip: '' },
+    q5: { prompt: '', label: '', tooltip: '' }
+  });
+  const [activeQuestionTab, setActiveQuestionTab] = useState(0);
   const [systemInstructions, setSystemInstructions] = useState('');
   const [contextInstructions, setContextInstructions] = useState('');
   const [formatRequirements, setFormatRequirements] = useState('');
@@ -28,12 +37,25 @@ export default function ConfigureAIModal({
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Get default prompts for MCQ questions
+  const getDefaultQuestionPrompts = useCallback(() => {
+    const defaults = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts || {};
+    return {
+      q1: { prompt: defaults.q1?.prompt || '', label: defaults.q1?.label || 'Central Idea', tooltip: defaults.q1?.tooltip || '' },
+      q2: { prompt: defaults.q2?.prompt || '', label: defaults.q2?.label || 'Vocabulary', tooltip: defaults.q2?.tooltip || '' },
+      q3: { prompt: defaults.q3?.prompt || '', label: defaults.q3?.label || 'Evidence', tooltip: defaults.q3?.tooltip || '' },
+      q4: { prompt: defaults.q4?.prompt || '', label: defaults.q4?.label || 'Inference', tooltip: defaults.q4?.tooltip || '' },
+      q5: { prompt: defaults.q5?.prompt || '', label: defaults.q5?.label || 'Structure', tooltip: defaults.q5?.tooltip || '' }
+    };
+  }, []);
+
   console.log('🔧 ConfigureAIModal mode:', mode, 'field:', field?.name);
 
   const loadConfiguration = useCallback(async () => {
     const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
     const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
     const defaultFormatReqs = 'Return plain text without markdown formatting.';
+    const defaultQuestionPrompts = getDefaultQuestionPrompts();
     
     try {
       let configData = null;
@@ -58,7 +80,7 @@ export default function ConfigureAIModal({
         console.log('📥 Loading template AI config');
         const { data, error } = await supabase
           .from('lesson_template_fields')
-          .select('ai_prompt, ai_individual_prompt, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
+          .select('ai_prompt, ai_question_prompts, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
           .eq('id', field.id)
           .single();
         
@@ -69,14 +91,46 @@ export default function ConfigureAIModal({
       
       if (configData) {
         setPrompt(configData.ai_prompt || `Generate content for the ${field.name} field.`);
-        setIndividualPrompt(configData.ai_individual_prompt || '');
+        // Load question prompts for MCQs
+        if (configData.ai_question_prompts) {
+          const savedPrompts = configData.ai_question_prompts;
+          setQuestionPrompts({
+            q1: { 
+              prompt: savedPrompts.q1?.prompt || savedPrompts.q1 || defaultQuestionPrompts.q1.prompt, 
+              label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
+              tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip
+            },
+            q2: { 
+              prompt: savedPrompts.q2?.prompt || savedPrompts.q2 || defaultQuestionPrompts.q2.prompt, 
+              label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
+              tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip
+            },
+            q3: { 
+              prompt: savedPrompts.q3?.prompt || savedPrompts.q3 || defaultQuestionPrompts.q3.prompt, 
+              label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
+              tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip
+            },
+            q4: { 
+              prompt: savedPrompts.q4?.prompt || savedPrompts.q4 || defaultQuestionPrompts.q4.prompt, 
+              label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
+              tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip
+            },
+            q5: { 
+              prompt: savedPrompts.q5?.prompt || savedPrompts.q5 || defaultQuestionPrompts.q5.prompt, 
+              label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
+              tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip
+            }
+          });
+        } else {
+          setQuestionPrompts(defaultQuestionPrompts);
+        }
         setSystemInstructions(configData.ai_system_instructions || defaultSystemInstructions);
         setContextInstructions(configData.ai_context_instructions || defaultContextInstructions);
         setFormatRequirements(configData.ai_format_requirements || defaultFormatReqs);
         setSelectedFields(configData.ai_context_field_ids || []);
       } else {
         setPrompt(`Generate content for the ${field.name} field.`);
-        setIndividualPrompt('');
+        setQuestionPrompts(defaultQuestionPrompts);
         setSystemInstructions(defaultSystemInstructions);
         setContextInstructions(defaultContextInstructions);
         setFormatRequirements(defaultFormatReqs);
@@ -85,7 +139,7 @@ export default function ConfigureAIModal({
     } catch (err) {
       console.error('Error loading AI config:', err);
       setPrompt(`Generate content for the ${field.name} field.`);
-      setIndividualPrompt('');
+      setQuestionPrompts(defaultQuestionPrompts);
       setSystemInstructions(defaultSystemInstructions);
       setContextInstructions(defaultContextInstructions);
       setFormatRequirements(defaultFormatReqs);
@@ -93,13 +147,22 @@ export default function ConfigureAIModal({
     }
     
     setLoading(false);
-  }, [field?.id, field?.name, mode, lessonId]);
+  }, [field?.id, field?.name, mode, lessonId, getDefaultQuestionPrompts]);
+
+  const emptyQuestionPrompts = {
+    q1: { prompt: '', label: '', tooltip: '' },
+    q2: { prompt: '', label: '', tooltip: '' },
+    q3: { prompt: '', label: '', tooltip: '' },
+    q4: { prompt: '', label: '', tooltip: '' },
+    q5: { prompt: '', label: '', tooltip: '' }
+  };
 
   useEffect(() => {
     if (visible && field) {
       setLoading(true);
       setPrompt('');
-      setIndividualPrompt('');
+      setQuestionPrompts(emptyQuestionPrompts);
+      setActiveQuestionTab(0);
       setSystemInstructions('');
       setContextInstructions('');
       setFormatRequirements('');
@@ -108,6 +171,8 @@ export default function ConfigureAIModal({
       loadConfiguration();
     } else if (!visible) {
       setPrompt('');
+      setQuestionPrompts(emptyQuestionPrompts);
+      setActiveQuestionTab(0);
       setSystemInstructions('');
       setContextInstructions('');
       setFormatRequirements('');
@@ -127,7 +192,7 @@ export default function ConfigureAIModal({
           .from('lesson_template_fields')
           .update({
             ai_prompt: prompt || null,
-            ai_individual_prompt: individualPrompt || null,
+            ai_question_prompts: field?.type === 'mcqs' ? questionPrompts : null,
             ai_context_field_ids: selectedFields.length > 0 ? selectedFields : null,
             ai_system_instructions: systemInstructions || null,
             ai_context_instructions: contextInstructions || null,
@@ -142,7 +207,7 @@ export default function ConfigureAIModal({
       if (onSave) {
         onSave({
           prompt,
-          individualPrompt,
+          questionPrompts,
           contextFields: selectedFields,
           systemInstructions,
           contextInstructions,
@@ -178,7 +243,7 @@ export default function ConfigureAIModal({
 
   const resetAll = () => {
     setPrompt(`Generate content for the ${field?.name} field.`);
-    setIndividualPrompt('');
+    setQuestionPrompts(getDefaultQuestionPrompts());
     setSystemInstructions('You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.');
     setContextInstructions('Use the following context from other fields to inform your generation:');
     setFormatRequirements('Return plain text without markdown formatting.');
@@ -480,7 +545,7 @@ export default function ConfigureAIModal({
                           display: 'block',
                           marginBottom: '0.5rem'
                         }}>
-                          Individual Question Prompt (Optional)
+                          Question Prompts
                         </label>
                         <p style={{
                           fontSize: '0.75rem',
@@ -488,28 +553,160 @@ export default function ConfigureAIModal({
                           marginBottom: '0.75rem',
                           lineHeight: 1.5
                         }}>
-                          This prompt will be used when regenerating a single question. If left blank, the main prompt will be used with "Generate 1 multiple choice question" instead of "Generate 5 multiple choice questions".
+                          Each question has its own customizable prompt with a specific focus area. Click each tab to edit its prompt.
                         </p>
-                        <textarea
-                          value={individualPrompt}
-                          onChange={(e) => setIndividualPrompt(e.target.value)}
-                          placeholder="Example: Generate 1 multiple choice question..."
-                          rows={4}
-                          style={{
-                            width: '100%',
-                            padding: '0.75rem',
-                            border: '2px solid #86efac',
-                            borderRadius: '8px',
-                            fontSize: '0.8125rem',
-                            fontFamily: 'system-ui',
-                            color: 'var(--gray-900)',
-                            backgroundColor: '#fff',
-                            outline: 'none',
-                            transition: 'border-color 0.2s',
-                            resize: 'vertical',
-                            boxSizing: 'border-box'
-                          }}
-                        />
+                        
+                        {/* Question Tabs */}
+                        <div style={{
+                          display: 'flex',
+                          borderBottom: '2px solid #86efac',
+                          marginBottom: '1rem',
+                          background: '#f0fdf4',
+                          borderRadius: '8px 8px 0 0'
+                        }}>
+                          {[
+                            { key: 'q1', label: 'Q1' },
+                            { key: 'q2', label: 'Q2' },
+                            { key: 'q3', label: 'Q3' },
+                            { key: 'q4', label: 'Q4' },
+                            { key: 'q5', label: 'Q5' }
+                          ].map((tab, index) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setActiveQuestionTab(index)}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: 'none',
+                                background: activeQuestionTab === index ? '#fff' : 'transparent',
+                                borderBottom: activeQuestionTab === index ? '3px solid #16a34a' : '3px solid transparent',
+                                color: activeQuestionTab === index ? '#166534' : '#15803d',
+                                fontWeight: activeQuestionTab === index ? 600 : 400,
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                marginBottom: '-2px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '2px'
+                              }}
+                            >
+                              <span>{tab.label}</span>
+                              <span style={{ fontSize: 10, opacity: 0.8 }}>{questionPrompts[tab.key]?.label || ''}</span>
+                            </button>
+                          ))}
+                        </div>
+                        
+                        {/* Question Prompt Content */}
+                        {['q1', 'q2', 'q3', 'q4', 'q5'].map((qKey, index) => (
+                          <div
+                            key={qKey}
+                            style={{ display: activeQuestionTab === index ? 'block' : 'none' }}
+                          >
+                            {/* Label and Tooltip row - only show in template mode */}
+                            {mode === 'template' && (
+                              <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    color: '#166534',
+                                    display: 'block',
+                                    marginBottom: '0.25rem'
+                                  }}>
+                                    Tab Label
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={questionPrompts[qKey]?.label || ''}
+                                    onChange={(e) => setQuestionPrompts(prev => ({
+                                      ...prev,
+                                      [qKey]: { ...prev[qKey], label: e.target.value }
+                                    }))}
+                                    placeholder="e.g., Central Idea"
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.5rem',
+                                      border: '2px solid #86efac',
+                                      borderRadius: '6px',
+                                      fontSize: '0.8125rem',
+                                      color: 'var(--gray-900)',
+                                      backgroundColor: '#fff',
+                                      outline: 'none',
+                                      boxSizing: 'border-box'
+                                    }}
+                                  />
+                                </div>
+                                <div style={{ flex: 2 }}>
+                                  <label style={{
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    color: '#166534',
+                                    display: 'block',
+                                    marginBottom: '0.25rem'
+                                  }}>
+                                    Tooltip Description
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={questionPrompts[qKey]?.tooltip || ''}
+                                    onChange={(e) => setQuestionPrompts(prev => ({
+                                      ...prev,
+                                      [qKey]: { ...prev[qKey], tooltip: e.target.value }
+                                    }))}
+                                    placeholder="e.g., Asks about the main idea or central claim"
+                                    style={{
+                                      width: '100%',
+                                      padding: '0.5rem',
+                                      border: '2px solid #86efac',
+                                      borderRadius: '6px',
+                                      fontSize: '0.8125rem',
+                                      color: 'var(--gray-900)',
+                                      backgroundColor: '#fff',
+                                      outline: 'none',
+                                      boxSizing: 'border-box'
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            <label style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              color: '#166534',
+                              display: 'block',
+                              marginBottom: '0.25rem'
+                            }}>
+                              Question {index + 1} Prompt
+                            </label>
+                            <textarea
+                              value={questionPrompts[qKey]?.prompt || ''}
+                              onChange={(e) => setQuestionPrompts(prev => ({
+                                ...prev,
+                                [qKey]: { ...prev[qKey], prompt: e.target.value }
+                              }))}
+                              placeholder={`Enter the prompt for Question ${index + 1}...`}
+                              rows={8}
+                              style={{
+                                width: '100%',
+                                padding: '0.75rem',
+                                border: '2px solid #86efac',
+                                borderRadius: '8px',
+                                fontSize: '0.8125rem',
+                                fontFamily: 'system-ui',
+                                color: 'var(--gray-900)',
+                                backgroundColor: '#fff',
+                                outline: 'none',
+                                transition: 'border-color 0.2s',
+                                resize: 'vertical',
+                                boxSizing: 'border-box'
+                              }}
+                            />
+                          </div>
+                        ))}
                       </div>
                     )}
 

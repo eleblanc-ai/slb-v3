@@ -17,10 +17,12 @@ import {
   Undo2,
   Redo2,
   Sparkles,
+  Info,
 } from 'lucide-react';
 import BaseField from './BaseField';
 import StandardsSearch from './StandardsSearch';
 import StandardsBadges from './StandardsBadges';
+import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 
 const ToolbarButton = ({
   onClick,
@@ -78,9 +80,22 @@ export default function MCQsField({
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [generatingQuestion, setGeneratingQuestion] = useState(null);
+  const [hoveredTab, setHoveredTab] = useState(null);
   const updateTimerRef = useRef(null);
   const isUserEditingRef = useRef(false);
   const hasInitializedRef = useRef(false);
+  
+  // Get question labels from field config or defaults
+  const getQuestionConfig = (index) => {
+    const questionKey = `q${index + 1}`;
+    const defaults = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts?.[questionKey] || {};
+    const fieldConfig = field?.questionLabels?.[questionKey] || {};
+    
+    return {
+      label: fieldConfig.label || defaults.label || `Q${index + 1}`,
+      tooltip: fieldConfig.tooltip || defaults.tooltip || ''
+    };
+  };
   
   // Track selected standards per question (index -> standard object or null)
   // Initialize from value prop if available
@@ -170,28 +185,77 @@ export default function MCQsField({
           borderBottom: '2px solid #e2e8f0',
           background: '#f8fafc'
         }}>
-          {[0, 1, 2, 3, 4].map((index) => (
-            <button
-              key={index}
-              type="button"
-              onClick={() => setActiveTab(index)}
-              style={{
-                flex: 1,
-                padding: '12px 16px',
-                border: 'none',
-                background: activeTab === index ? '#fff' : 'transparent',
-                borderBottom: activeTab === index ? '3px solid #3b82f6' : '3px solid transparent',
-                color: activeTab === index ? '#1e293b' : '#64748b',
-                fontWeight: activeTab === index ? 600 : 400,
-                fontSize: 14,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                marginBottom: '-2px'
-              }}
-            >
-              Question {index + 1}
-            </button>
-          ))}
+          {[0, 1, 2, 3, 4].map((index) => {
+            const config = getQuestionConfig(index);
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setActiveTab(index)}
+                onMouseEnter={() => setHoveredTab(index)}
+                onMouseLeave={() => setHoveredTab(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  border: 'none',
+                  background: activeTab === index ? '#fff' : 'transparent',
+                  borderBottom: activeTab === index ? '3px solid #3b82f6' : '3px solid transparent',
+                  color: activeTab === index ? '#1e293b' : '#64748b',
+                  fontWeight: activeTab === index ? 600 : 400,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginBottom: '-2px',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '2px'
+                }}
+              >
+                <span style={{ fontSize: 13 }}>Q{index + 1}</span>
+                <span style={{ 
+                  fontSize: 10, 
+                  opacity: activeTab === index ? 1 : 0.7,
+                  color: activeTab === index ? '#3b82f6' : '#64748b'
+                }}>
+                  {config.label}
+                </span>
+                
+                {/* Tooltip */}
+                {hoveredTab === index && config.tooltip && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginTop: 8,
+                    padding: '8px 12px',
+                    background: '#1e293b',
+                    color: '#fff',
+                    fontSize: 11,
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    zIndex: 100,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    {config.tooltip}
+                    <div style={{
+                      position: 'absolute',
+                      top: -4,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 0,
+                      height: 0,
+                      borderLeft: '5px solid transparent',
+                      borderRight: '5px solid transparent',
+                      borderBottom: '5px solid #1e293b'
+                    }} />
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
         
         {/* Tab Content */}
