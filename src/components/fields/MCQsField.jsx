@@ -95,13 +95,17 @@ export default function MCQsField({
   
   // Initialize value structure if empty
   const questions = value?.questions || Array(5).fill('');
+  const sourceStandards = value?.sourceStandards || {};
+  const filteredOutStandards = value?.filteredOutStandards || {};
   
-  const handleQuestionChange = (index, content) => {
+  const handleQuestionChange = (index, content, updatedFilteredOut = null) => {
     const updatedQuestions = [...questions];
     updatedQuestions[index] = content;
     onChange({ 
       questions: updatedQuestions,
-      standards: questionStandards 
+      standards: questionStandards,
+      sourceStandards: sourceStandards,
+      filteredOutStandards: updatedFilteredOut !== null ? updatedFilteredOut : filteredOutStandards
     });
   };
   
@@ -111,11 +115,26 @@ export default function MCQsField({
       [index]: standard
     };
     setQuestionStandards(updatedStandards);
-    // Propagate the change to parent component
+    // Propagate the change to parent component, preserving sourceStandards and filteredOutStandards
     onChange({ 
       questions: questions,
-      standards: updatedStandards 
+      standards: updatedStandards,
+      sourceStandards: sourceStandards,
+      filteredOutStandards: filteredOutStandards
     });
+  };
+  
+  const handleRestoreStandard = (index, code, updatedContent) => {
+    // Remove the restored standard from filteredOutStandards for this question
+    const currentFiltered = filteredOutStandards[index] || [];
+    const newFiltered = currentFiltered.filter(s => s !== code);
+    const updatedFilteredOut = {
+      ...filteredOutStandards,
+      [index]: newFiltered
+    };
+    
+    // Update the question content and filteredOutStandards together
+    handleQuestionChange(index, updatedContent, updatedFilteredOut);
   };
   
   const handleRegenerateQuestion = (index) => {
@@ -191,6 +210,9 @@ export default function MCQsField({
                 selectedStandard={questionStandards[index]}
                 onStandardChange={(standard) => handleStandardChange(index, standard)}
                 field={field}
+                sourceStandard={sourceStandards[index]}
+                filteredOutStandards={filteredOutStandards[index]}
+                onRestoreStandard={(code, updatedContent) => handleRestoreStandard(index, code, updatedContent)}
               />
             </div>
           ))}
@@ -201,7 +223,7 @@ export default function MCQsField({
 }
 
 // Individual Question Editor Component
-function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange, field }) {
+function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange, field, sourceStandard, filteredOutStandards, onRestoreStandard }) {
   const updateTimerRef = useRef(null);
   const isUserEditingRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -460,10 +482,14 @@ function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenera
         </div>
       </div>
       
-      {/* Display standards badges with tooltips */}
+      {/* Display standards badges with tooltips and source standard */}
       <StandardsBadges 
         htmlContent={value} 
         onChange={onChange ? (updatedContent) => onChange(updatedContent) : null}
+        sourceStandard={sourceStandard}
+        pendingStandard={selectedStandard}
+        filteredOutStandards={filteredOutStandards}
+        onRestoreStandard={onRestoreStandard}
       />
     </div>
   );

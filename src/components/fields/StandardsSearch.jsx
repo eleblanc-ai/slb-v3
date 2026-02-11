@@ -206,7 +206,7 @@ export default function StandardsSearch({
           padding: '6px 10px',
           background: '#eff6ff',
           border: '1px solid #bfdbfe',
-          borderRadius,
+          borderRadius: 6,
           position: 'relative'
         }}>
           <span 

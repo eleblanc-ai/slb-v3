@@ -25,7 +25,7 @@ import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
-import { getFormattedMappedStandards, extractGradeFromBand } from '../../lib/standardsMapper';
+import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalReadingPracticeMarkdownExport';
@@ -548,30 +548,101 @@ export default function CreateNewLesson() {
       const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
       const gradeLevel = extractGradeFromBand(gradeValue);
       
+      // Build context text from configured context fields (e.g., reading passage)
+      let contextText = '';
+      if (fieldAIConfig.ai_context_field_ids && fieldAIConfig.ai_context_field_ids.length > 0) {
+        const contextParts = [];
+        for (const contextFieldId of fieldAIConfig.ai_context_field_ids) {
+          const contextField = fields.find(f => f.id === contextFieldId);
+          const contextValue = storedFieldValues[contextFieldId];
+          if (contextField && contextValue) {
+            const displayVal = typeof contextValue === 'string' 
+              ? contextValue 
+              : (contextValue.text || contextValue.value || JSON.stringify(contextValue));
+            // Strip HTML tags for cleaner context
+            const cleanVal = displayVal.replace(/<[^>]*>/g, '').trim();
+            if (cleanVal) {
+              contextParts.push(`${contextField.name}:\n${cleanVal}`);
+            }
+          }
+        }
+        contextText = contextParts.join('\n\n');
+      }
+      
       // Map standards - either from selected standard or from AI-generated standards
       let standardsText = q.standards.join('; ');
+      let sourceStandardInfo = null;
+      let candidateStandards = [];
       
       // First check if user selected a specific standard to use
       if (selectedStandard && selectedStandard.fullCode) {
-        const mappedStandards = await getFormattedMappedStandards(selectedStandard.fullCode, gradeLevel);
-        standardsText = mappedStandards || standardsText;
+        const mappingResult = await getMappedStandardsWithSource(selectedStandard.fullCode, gradeLevel);
+        standardsText = mappingResult.mappedStandards || standardsText;
+        sourceStandardInfo = mappingResult.sourceStandard;
+        
+        // Get candidate standards for filtering (excluding source standard)
+        candidateStandards = standardsText
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s && s !== mappingResult.sourceStandard?.code);
       } 
-      // Otherwise map the AI-generated standards if they start with CCSS
+      // Otherwise map the AI-generated standards (works for any framework)
       else if (q.standards && q.standards.length > 0) {
         const firstStandard = q.standards[0];
-        if (firstStandard.startsWith('CCSS')) {
-          const mappedStandards = await getFormattedMappedStandards(firstStandard, gradeLevel);
-          standardsText = mappedStandards || standardsText;
-        }
+        const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+        standardsText = mappingResult.mappedStandards || standardsText;
+        sourceStandardInfo = mappingResult.sourceStandard;
+        
+        // Get candidate standards for filtering (excluding source standard)
+        candidateStandards = standardsText
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s && s !== mappingResult.sourceStandard?.code);
       }
       
-      const formattedMCQ = `<p>${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
+      // Filter aligned standards using AI if we have context and candidates
+      let filteredOutForQuestion = [];
+      if (contextText && candidateStandards.length > 0) {
+        console.log(`🔍 Filtering ${candidateStandards.length} aligned standards for individual question...`);
+        const questionText = `${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}`;
+        const filteredStandards = await filterAlignedStandardsWithAI(
+          questionText,
+          contextText,
+          candidateStandards,
+          callAI,
+          selectedModel
+        );
+        console.log(`✅ Filtered to ${filteredStandards.length} standards`);
+        
+        // Track which standards were filtered out
+        filteredOutForQuestion = candidateStandards.filter(s => !filteredStandards.includes(s));
+        standardsText = filteredStandards.join('; ');
+      }
       
-      // Build updated questions array
-      const currentValue = fieldValues[fieldId] || { questions: ['', '', '', '', ''] };
+      const questionNumber = questionIndex + 1;
+      const formattedMCQ = `<p>${questionNumber}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
+      
+      // Build updated questions array and source standards
+      const currentValue = fieldValues[fieldId] || { questions: ['', '', '', '', ''], sourceStandards: {}, filteredOutStandards: {} };
       const updatedQuestions = [...(currentValue.questions || ['', '', '', '', ''])];
       updatedQuestions[questionIndex] = formattedMCQ;
-      const newFieldValue = { questions: updatedQuestions };
+      
+      // Track source standard for this question
+      const updatedSourceStandards = { ...(currentValue.sourceStandards || {}) };
+      if (sourceStandardInfo) {
+        updatedSourceStandards[questionIndex] = sourceStandardInfo;
+      }
+      
+      // Track filtered-out standards for this question
+      const updatedFilteredOutStandards = { ...(currentValue.filteredOutStandards || {}) };
+      updatedFilteredOutStandards[questionIndex] = filteredOutForQuestion;
+      
+      const newFieldValue = { 
+        questions: updatedQuestions,
+        sourceStandards: updatedSourceStandards,
+        filteredOutStandards: updatedFilteredOutStandards,
+        standards: currentValue.standards || {}
+      };
       
       // Update state
       setFieldValues(prev => ({
@@ -1204,24 +1275,83 @@ export default function CreateNewLesson() {
         const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
         const gradeLevel = extractGradeFromBand(gradeValue);
         
-        // Format each question as HTML for TipTap and store in questions array
-        // Map standards for each question
-        const formattedQuestions = await Promise.all(result.questions.map(async (q, i) => {
-          let standardsText = q.standards.join('; ');
-          
-          // If AI returned CCSS codes, map them to other frameworks
-          if (q.standards && q.standards.length > 0) {
-            const firstStandard = q.standards[0];
-            if (firstStandard.startsWith('CCSS')) {
-              const mappedStandards = await getFormattedMappedStandards(firstStandard, gradeLevel);
-              standardsText = mappedStandards || standardsText;
+        // Build context text from configured context fields (e.g., reading passage)
+        let contextText = '';
+        if (fieldAIConfig.ai_context_field_ids && fieldAIConfig.ai_context_field_ids.length > 0) {
+          const contextParts = [];
+          for (const contextFieldId of fieldAIConfig.ai_context_field_ids) {
+            const contextField = fields.find(f => f.id === contextFieldId);
+            const contextValue = storedFieldValues[contextFieldId];
+            if (contextField && contextValue) {
+              const displayVal = typeof contextValue === 'string' 
+                ? contextValue 
+                : (contextValue.text || contextValue.value || JSON.stringify(contextValue));
+              // Strip HTML tags for cleaner context
+              const cleanVal = displayVal.replace(/<[^>]*>/g, '').trim();
+              if (cleanVal) {
+                contextParts.push(`${contextField.name}:\n${cleanVal}`);
+              }
             }
           }
+          contextText = contextParts.join('\n\n');
+        }
+        
+        // Format each question as HTML for TipTap and store in questions array
+        // Map standards for each question and track source standards
+        const sourceStandards = {};
+        const questionResults = await Promise.all(result.questions.map(async (q, i) => {
+          let standardsText = q.standards.join('; ');
+          let candidateStandards = [];
           
-          return `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
+          // Map standards to all frameworks (works for any starting framework)
+          if (q.standards && q.standards.length > 0) {
+            const firstStandard = q.standards[0];
+            const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+            standardsText = mappingResult.mappedStandards || standardsText;
+            sourceStandards[i] = mappingResult.sourceStandard;
+            
+            // Get candidate standards for filtering (excluding source standard)
+            candidateStandards = standardsText
+              .split(';')
+              .map(s => s.trim())
+              .filter(s => s && s !== mappingResult.sourceStandard?.code);
+          }
+          
+          // Filter aligned standards using AI if we have context and candidates
+          let filteredOutForQuestion = [];
+          if (contextText && candidateStandards.length > 0) {
+            console.log(`🔍 Filtering ${candidateStandards.length} aligned standards for question ${i + 1}...`);
+            const questionText = `${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}`;
+            const filteredStandards = await filterAlignedStandardsWithAI(
+              questionText,
+              contextText,
+              candidateStandards,
+              callAI,
+              selectedModel
+            );
+            console.log(`✅ Filtered to ${filteredStandards.length} standards for question ${i + 1}`);
+            
+            // Track which standards were filtered out
+            filteredOutForQuestion = candidateStandards.filter(s => !filteredStandards.includes(s));
+            standardsText = filteredStandards.join('; ');
+          }
+          
+          return {
+            html: `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`,
+            filteredOut: filteredOutForQuestion
+          };
         }));
         
-        generatedContent = { questions: formattedQuestions };
+        // Extract formatted questions and filtered-out standards from results
+        const formattedQuestions = questionResults.map(r => r.html);
+        const filteredOutStandards = {};
+        questionResults.forEach((r, i) => {
+          if (r.filteredOut && r.filteredOut.length > 0) {
+            filteredOutStandards[i] = r.filteredOut;
+          }
+        });
+        
+        generatedContent = { questions: formattedQuestions, sourceStandards, filteredOutStandards };
       } else {
         // Regular text generation for other field types
         generatedContent = await callAI(prompt, selectedModel, 4096);

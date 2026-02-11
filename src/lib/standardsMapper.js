@@ -201,3 +201,226 @@ export async function getFormattedMappedStandards(ccssCode, gradeLevel = null) {
   const mapped = await getMappedStandards(ccssCode, gradeLevel);
   return formatMappedStandards(mapped);
 }
+
+/**
+ * Detect which framework a standard code belongs to
+ * @param {string} code - Standard code to identify
+ * @returns {string|null} - Framework name ('CCSS', 'TEKS', 'BEST', 'BLOOM', 'GSE') or null if unknown
+ */
+export function detectFramework(code) {
+  if (!code) return null;
+  
+  if (code.startsWith('CCSS.')) return 'CCSS';
+  if (code.startsWith('TEKS.')) return 'TEKS';
+  if (code.startsWith('BEST.')) return 'BEST';
+  if (code.startsWith('BLOOM.')) return 'BLOOM';
+  // GSE codes often start with a grade number like "3.L.V.1"
+  if (/^\d+\./.test(code)) return 'GSE';
+  
+  return null;
+}
+
+/**
+ * Reverse lookup: Find CCSS codes that map to a given non-CCSS standard code
+ * @param {string} standardCode - The non-CCSS standard code to look up (e.g., "TEKS.ELAR.3.11(D)")
+ * @returns {string[]} - Array of CCSS codes that map to this standard
+ */
+export async function getCCSSFromMappedCode(standardCode) {
+  const data = await loadMOACData();
+  
+  // Find all rows where mappedCode matches exactly
+  const matchingRows = data.filter(row => row.mappedCode === standardCode);
+  
+  // Extract unique CCSS codes
+  const ccssCodes = [...new Set(matchingRows.map(row => row.ccssCode))];
+  
+  return ccssCodes;
+}
+
+/**
+ * Get all framework mappings starting from ANY standard code (CCSS or non-CCSS)
+ * If starting from non-CCSS, first finds matching CCSS code(s), then pulls all mappings
+ * @param {string} standardCode - Any standard code (CCSS, TEKS, BEST, BLOOM, or GSE)
+ * @param {number|string} gradeLevel - Optional grade level to filter results
+ * @returns {Object} - Object with arrays for each framework: { CCSS: [...], TEKS: [...], BEST: [...], BLOOM: [...], GSE: [...] }
+ */
+export async function getMappedStandardsFromAny(standardCode, gradeLevel = null) {
+  const framework = detectFramework(standardCode);
+  
+  // Initialize result object
+  const result = {
+    CCSS: [],
+    TEKS: [],
+    BEST: [],
+    BLOOM: [],
+    GSE: []
+  };
+  
+  // If it's already CCSS, use the existing function
+  if (framework === 'CCSS') {
+    return getMappedStandards(standardCode, gradeLevel);
+  }
+  
+  // For non-CCSS codes, first find the CCSS code(s) that map to it
+  const ccssCodes = await getCCSSFromMappedCode(standardCode);
+  
+  if (ccssCodes.length === 0) {
+    // No CCSS mapping found - just return the original code in its framework
+    if (framework && result[framework]) {
+      result[framework].push(standardCode);
+    }
+    return result;
+  }
+  
+  // For each CCSS code, get all mappings and merge (with deduplication)
+  for (const ccssCode of ccssCodes) {
+    const mappings = await getMappedStandards(ccssCode, gradeLevel);
+    
+    // Merge each framework's codes, deduplicating
+    for (const fw of ['CCSS', 'TEKS', 'BEST', 'BLOOM', 'GSE']) {
+      for (const code of mappings[fw]) {
+        if (!result[fw].includes(code)) {
+          result[fw].push(code);
+        }
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Get formatted standards string starting from ANY standard code
+ * @param {string} standardCode - Any standard code (CCSS, TEKS, BEST, BLOOM, or GSE)
+ * @param {number|string} gradeLevel - Optional grade level to filter results
+ * @returns {string} - Formatted standards string in order: CCSS; TEKS; BEST; BLOOM; GSE
+ */
+export async function getFormattedMappedStandardsFromAny(standardCode, gradeLevel = null) {
+  const mapped = await getMappedStandardsFromAny(standardCode, gradeLevel);
+  return formatMappedStandards(mapped);
+}
+
+/**
+ * Get the statement/definition for a standard code
+ * @param {string} standardCode - Any standard code
+ * @returns {string|null} - The statement text or null if not found
+ */
+export async function getStandardStatement(standardCode) {
+  const data = await loadMOACData();
+  const framework = detectFramework(standardCode);
+  
+  if (framework === 'CCSS') {
+    // Look for the CCSS statement directly
+    const row = data.find(r => r.ccssCode === standardCode);
+    return row?.ccssStatement || null;
+  } else {
+    // Look for the mapped code statement
+    const row = data.find(r => r.mappedCode === standardCode);
+    return row?.mappedStatement || null;
+  }
+}
+
+/**
+ * Get mapped standards WITH source standard info (code + statement)
+ * @param {string} standardCode - Any standard code (CCSS, TEKS, BEST, BLOOM, or GSE)
+ * @param {number|string} gradeLevel - Optional grade level to filter results
+ * @returns {Object} - { mappedStandards: string, sourceStandard: { code: string, statement: string } }
+ */
+export async function getMappedStandardsWithSource(standardCode, gradeLevel = null) {
+  const mappedStandards = await getFormattedMappedStandardsFromAny(standardCode, gradeLevel);
+  const statement = await getStandardStatement(standardCode);
+  
+  return {
+    mappedStandards,
+    sourceStandard: {
+      code: standardCode,
+      statement: statement || '(Statement not available)'
+    }
+  };
+}
+
+/**
+ * Filter aligned standards using AI to only include those that actually apply
+ * to the question and reading passage. Ensures at least one standard per framework is kept.
+ * @param {string} questionText - The MCQ question with choices
+ * @param {string} contextText - The reading passage or other context
+ * @param {string[]} candidateStandards - Array of standard codes to filter
+ * @param {Function} callAIFunc - The AI calling function to use
+ * @param {string} model - The AI model to use
+ * @returns {Promise<string[]>} - Filtered array of standard codes
+ */
+export async function filterAlignedStandardsWithAI(questionText, contextText, candidateStandards, callAIFunc, model) {
+  // Load statements for each standard to give AI context
+  const standardsWithStatements = await Promise.all(
+    candidateStandards.map(async (code) => {
+      const statement = await getStandardStatement(code);
+      return {
+        code,
+        statement: statement || '(No description available)',
+        framework: detectFramework(code)
+      };
+    })
+  );
+  
+  // Build the prompt
+  const prompt = `You are an educational standards alignment expert. Analyze the following multiple choice question and reading passage, then determine which of the candidate standards actually align with the question content.
+
+READING PASSAGE/CONTEXT:
+${contextText || '(No reading passage provided)'}
+
+QUESTION:
+${questionText}
+
+CANDIDATE STANDARDS TO EVALUATE:
+${standardsWithStatements.map(s => `- ${s.code}: ${s.statement}`).join('\n')}
+
+INSTRUCTIONS:
+1. For each standard, determine if it genuinely aligns with what the question is testing
+2. A standard aligns if the question directly tests the skill or knowledge described by that standard
+3. Be somewhat selective - only include standards that clearly match the question's focus
+4. IMPORTANT: Ensure you include AT LEAST ONE standard from each framework present (CCSS, TEKS, BEST, BLOOM, GSE)
+5. If multiple standards from a framework could apply, include the most relevant ones
+
+Return ONLY the standard codes that align, separated by semicolons. No explanations.
+Example response: CCSS.RI.3.1; TEKS.ELAR.3.6(B); BEST.ELA.3.R.2.2; BLOOM.2.5; 3.T.RA.2.a`;
+
+  try {
+    const response = await callAIFunc(prompt, model, 500);
+    
+    // Parse the response to extract standard codes
+    const filteredCodes = response
+      .split(/[;\n,]/)
+      .map(code => code.trim())
+      .filter(code => code && candidateStandards.includes(code));
+    
+    // Ensure at least one standard per framework is kept
+    const frameworksPresent = new Set(candidateStandards.map(code => detectFramework(code)));
+    const frameworksCovered = new Set(filteredCodes.map(code => detectFramework(code)));
+    
+    // Add one standard from any framework that's missing
+    for (const fw of frameworksPresent) {
+      if (!frameworksCovered.has(fw)) {
+        const missingFwStandard = candidateStandards.find(code => detectFramework(code) === fw);
+        if (missingFwStandard) {
+          filteredCodes.push(missingFwStandard);
+        }
+      }
+    }
+    
+    // If filtering returned nothing, keep at least one per framework
+    if (filteredCodes.length === 0) {
+      for (const fw of frameworksPresent) {
+        const fwStandard = candidateStandards.find(code => detectFramework(code) === fw);
+        if (fwStandard) {
+          filteredCodes.push(fwStandard);
+        }
+      }
+    }
+    
+    return filteredCodes;
+  } catch (error) {
+    console.error('Error filtering standards with AI:', error);
+    // On error, return original list
+    return candidateStandards;
+  }
+}
