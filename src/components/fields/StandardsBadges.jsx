@@ -395,17 +395,13 @@ export default function StandardsBadges({ htmlContent, onChange, sourceStandard,
                   alignItems: 'center',
                   gap: 4,
                   padding: '4px 8px',
-                  background: '#eff6ff',
-                  border: '1px solid #bfdbfe',
+                  background: isHovered ? '#dbeafe' : '#eff6ff',
+                  border: isHovered ? '1px solid #93c5fd' : '1px solid #bfdbfe',
                   borderRadius: 4,
                   fontSize: 11,
                   fontWeight: 600,
                   color: '#1e40af',
-                  transition: 'all 0.15s',
-                  ...(isHovered && {
-                    background: '#dbeafe',
-                    borderColor: '#93c5fd'
-                  })
+                  transition: 'all 0.15s'
                 }}
               >
                 <span
@@ -578,17 +574,13 @@ export default function StandardsBadges({ htmlContent, onChange, sourceStandard,
                         alignItems: 'center',
                         gap: 4,
                         padding: '4px 8px',
-                        background: '#f5f5f5',
-                        border: '1px solid #d4d4d4',
+                        background: isFilteredHovered ? '#e5e5e5' : '#f5f5f5',
+                        border: isFilteredHovered ? '1px solid #a3a3a3' : '1px solid #d4d4d4',
                         borderRadius: 4,
                         fontSize: 11,
                         fontWeight: 600,
                         color: '#737373',
-                        transition: 'all 0.15s',
-                        ...(isFilteredHovered && {
-                          background: '#e5e5e5',
-                          borderColor: '#a3a3a3'
-                        })
+                        transition: 'all 0.15s'
                       }}
                     >
                       <span
