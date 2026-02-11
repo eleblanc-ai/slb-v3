@@ -104,8 +104,12 @@ export default function StandardsSearch({
     setInputCode(input);
     
     if (input.trim().length > 0) {
+      const searchTerm = input.toLowerCase();
       const filtered = standardsData
-        .filter(s => s.fullCode.toLowerCase().includes(input.toLowerCase()))
+        .filter(s => 
+          s.fullCode.toLowerCase().includes(searchTerm) ||
+          (s.statement && s.statement.toLowerCase().includes(searchTerm))
+        )
         .slice(0, 50);
       
       setSuggestions(filtered);
@@ -291,7 +295,7 @@ export default function StandardsSearch({
                 setShowSuggestions(true);
               }
             }}
-            placeholder="Search standard (optional)..."
+            placeholder="Search by code or description..."
             disabled={isLoading}
             style={{
               flex: 1,

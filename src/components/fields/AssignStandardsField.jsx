@@ -151,7 +151,8 @@ export default function AssignStandardsField({
     setError('');
     
     if (input.trim().length > 0) {
-      // Filter by selected framework and search input
+      const searchTerm = input.toLowerCase();
+      // Filter by selected framework and search input (both code and description)
       let filtered = standardsData;
       
       if (selectedFramework) {
@@ -159,7 +160,10 @@ export default function AssignStandardsField({
       }
       
       filtered = filtered
-        .filter(s => s.fullCode.toLowerCase().includes(input.toLowerCase()))
+        .filter(s => 
+          s.fullCode.toLowerCase().includes(searchTerm) ||
+          (s.statement && s.statement.toLowerCase().includes(searchTerm))
+        )
         .slice(0, 100); // Limit to 100 suggestions
       
       setSuggestions(filtered);
@@ -347,7 +351,7 @@ export default function AssignStandardsField({
               ref={inputRef}
               type="text"
               className="field-input"
-              placeholder={field.placeholder || "Type to search standard codes (e.g., CCSS.CCRA.R.1)"}
+              placeholder={field.placeholder || "Search by code or description..."}
               value={inputCode}
               onChange={handleInputChange}
               onKeyDown={handleKeyPress}
