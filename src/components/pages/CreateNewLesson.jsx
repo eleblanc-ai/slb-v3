@@ -900,14 +900,41 @@ export default function CreateNewLesson() {
           fieldValues: storedFieldValues
         };
 
-        // Build the prompt using the shared function
-        let imagePrompt = buildFullPrompt(aiConfig);
-        
-        // Add the optional user-provided image description if it exists
+        // For images, we want a cleaner prompt focused on visual description
+        // If the user provided a description, use that as the primary prompt
         const currentFieldValue = storedFieldValues[field.id];
+        let imagePrompt = '';
+        
         if (currentFieldValue && currentFieldValue.description && currentFieldValue.description.trim()) {
-          imagePrompt = `${currentFieldValue.description}\n\n${imagePrompt}`;
-          console.log('✏️ Added user-provided image description to prompt');
+          imagePrompt = currentFieldValue.description.trim();
+          console.log('✏️ Using user-provided image description as primary prompt');
+        } else {
+          // Otherwise use the template's AI prompt
+          imagePrompt = fieldAIConfig.ai_prompt || 'A high-quality photographic image.';
+        }
+        
+        // Add context from other fields if specified, but format it for an image generator
+        if (fieldAIConfig.ai_context_field_ids && fieldAIConfig.ai_context_field_ids.length > 0) {
+          let contextDetails = [];
+          fieldAIConfig.ai_context_field_ids.forEach(id => {
+            const contextField = fields.find(f => f.id === id);
+            const val = storedFieldValues[id];
+            if (contextField && val) {
+              const displayVal = typeof val === 'string' ? val : (val.text || val.value || JSON.stringify(val));
+              // Strip HTML for the image generator
+              const cleanVal = displayVal.replace(/<[^>]*>/g, '').substring(0, 500);
+              contextDetails.push(`${contextField.name}: ${cleanVal}`);
+            }
+          });
+          
+          if (contextDetails.length > 0) {
+            imagePrompt += `\n\nSubject matter context:\n${contextDetails.join('\n')}`;
+          }
+        }
+        
+        // Add system instructions if they exist and aren't just the default text one
+        if (fieldAIConfig.ai_system_instructions && !fieldAIConfig.ai_system_instructions.includes('clear, concise')) {
+          imagePrompt = `${fieldAIConfig.ai_system_instructions}\n\n${imagePrompt}`;
         }
         
         console.log('🎨 Image generation prompt:', imagePrompt);

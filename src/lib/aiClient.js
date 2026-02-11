@@ -88,56 +88,72 @@ export async function callAIWithFunction(prompt, model, functionSchema) {
 }
 
 /**
- * Generate an image using Gemini 3 Pro Image (with infinite retries)
+ * Generate an image using Gemini 3 Pro Image (with DALL-E 3 fallback)
  * @param {string} prompt - The image generation prompt
- * @param {string} size - Image size (ignored for Gemini)
+ * @param {string} size - Image size (ignored for Gemini, used for DALL-E fallback)
  * @returns {Promise<{url: string, model: string, altText?: string}>} - The image URL, model used, and optional alt text from Gemini
  */
-export async function generateImage(prompt, size = '1024x1024') {
-  // Truncate prompt if too long
-  const maxPromptLength = 3500; // Leave some buffer
-  let imagePrompt = prompt;
-  if (imagePrompt.length > maxPromptLength) {
-    console.warn(`⚠️ Prompt too long (${imagePrompt.length} chars), truncating to ${maxPromptLength} chars`);
-    imagePrompt = imagePrompt.substring(0, maxPromptLength) + '...';
-  }
+export async function generateImage(prompt, size = '1K') {
+  const maxPromptLength = 3500;
+  let imagePrompt = prompt.length > maxPromptLength 
+    ? prompt.substring(0, maxPromptLength) + '...' 
+    : prompt;
 
-  // Keep retrying with Gemini 3 Pro Image until success
-  console.log('🎨 Attempting image generation with Gemini 3 Pro Image (2200x1400)...');
-  
-  // Retry logic with exponential backoff - will keep retrying indefinitely
-  let response;
-  let delay = 3000;
-  let attemptCount = 0;
-  
-  while (true) {
-    try {
-      attemptCount++;
-      const model = genAI.getGenerativeModel({ model: "gemini-3-pro-image-preview" });
-      response = await model.generateContent(`Create an image at 2200 x 1400 pixels: ${imagePrompt}`);
-      break; // Success!
-    } catch (error) {
-      const isOverloaded = error.message?.includes('503') || error.message?.toLowerCase().includes('overloaded');
-      if (isOverloaded) {
-        console.warn(`⚠️ Gemini overloaded, Retrying in ${delay / 1000}s... (Attempt ${attemptCount})`);
-        await new Promise(r => setTimeout(r, delay));
-        delay = Math.min(delay * 1.5, 30000); // Exponential backoff, cap at 30s
-        continue;
-      }
-      // For non-overload errors, still retry but log it
-      console.error(`⚠️ Gemini error (Attempt ${attemptCount}):`, error.message);
-      console.warn(`Retrying in ${delay / 1000}s...`);
-      await new Promise(r => setTimeout(r, delay));
-      delay = Math.min(delay * 1.5, 30000); // Exponential backoff, cap at 30s
+  // Attempt Gemini first if key exists
+  if (import.meta.env.VITE_GOOGLE_API_KEY) {
+    const geminiResult = await attemptGeminiGeneration(imagePrompt, size);
+    if (geminiResult.success) {
+      return geminiResult.data;
+    }
+    
+    // Log the actual failure reason
+    console.warn('🔄 Gemini failed:', geminiResult.reason, '→ Using DALL-E');
+    if (geminiResult.debugInfo) {
+      console.debug('Debug info:', geminiResult.debugInfo);
     }
   }
 
+  // Fallback to DALL-E
+  return await generateWithDallE(imagePrompt);
+}
+
+/**
+ * Attempt to generate image with Gemini 3 Pro Image
+ * @private
+ */
+async function attemptGeminiGeneration(prompt, size) {
+  console.log('🎨 Attempting image generation with Gemini 3 Pro Image...');
+  
+  let delay = 3000;
+  let attemptCount = 0;
+  const maxAttempts = 3;
+  
+  while (attemptCount < maxAttempts) {
+    try {
+      attemptCount++;
+      
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-3-pro-image-preview"
+      });
+      
+      const result = await model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          responseModalities: ["image", "text"]
+        }
+      });
+      
+      const response = await result.response;
+      
       console.log('📦 Gemini response received');
       
       // Extract image data from response - handle multiple response formats
       let base64Data = null;
       let geminiAltText = '';
-      
+
       // Try to get the actual response from various wrapper levels
       const possibleResponses = [
         response,
@@ -166,11 +182,16 @@ export async function generateImage(prompt, size = '1024x1024') {
                 const mimeType = part.inlineData.mimeType || 'image/png';
                 console.log('✅ Image generated successfully with Gemini 3 Pro Image');
                 console.log('📷 Image format:', mimeType);
-                console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+                if (geminiAltText) {
+                  console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+                }
                 return {
-                  url: `data:${mimeType};base64,${base64Data}`,
-                  model: 'gemini-3-pro-image-preview',
-                  altText: geminiAltText.trim()
+                  success: true,
+                  data: {
+                    url: `data:${mimeType};base64,${base64Data}`,
+                    model: 'gemini-3-pro-image-preview',
+                    altText: geminiAltText.trim()
+                  }
                 };
               }
             }
@@ -190,29 +211,76 @@ export async function generateImage(prompt, size = '1024x1024') {
               const mimeType = part.inlineData.mimeType || 'image/png';
               console.log('✅ Image generated successfully with Gemini 3 Pro Image');
               console.log('📷 Image format:', mimeType);
-              console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+              if (geminiAltText) {
+                console.log('📝 Gemini alt text:', geminiAltText.substring(0, 200));
+              }
               return {
-                url: `data:${mimeType};base64,${base64Data}`,
-                model: 'gemini-3-pro-image-preview',
-                altText: geminiAltText.trim()
+                success: true,
+                data: {
+                  url: `data:${mimeType};base64,${base64Data}`,
+                  model: 'gemini-3-pro-image-preview',
+                  altText: geminiAltText.trim()
+                }
               };
             }
           }
         }
       }
-      
-      // If we got here, no image data was found - this shouldn't happen with Gemini
+
+      // If we got here, no image data was found
       if (geminiAltText) {
-        console.error('❌ Gemini returned text instead of image:');
-        console.error(geminiAltText);
-        console.error('\n🔍 Full response structure:');
-        console.error(JSON.stringify(response, null, 2));
-      } else {
-        console.error('❌ No image data or text found in response');
-        console.error('🔍 Full response structure:');
-        console.error(JSON.stringify(response, null, 2));
+        console.log('⚠️ Gemini returned text instead of image:');
+        console.log(geminiAltText);
       }
-      throw new Error('Gemini did not return image data in expected format');
+      console.log('🔍 Full response structure:', JSON.stringify(response, null, 2));
+      
+      return {
+        success: false,
+        reason: 'No image data in Gemini response'
+      };
+      
+    } catch (error) {
+      const isOverloaded = error.message?.includes('503') || 
+                          error.message?.toLowerCase().includes('overloaded') ||
+                          error.message?.toLowerCase().includes('quota');
+      
+      if (attemptCount < maxAttempts && isOverloaded) {
+        console.warn(`⚠️ Gemini error, retrying in ${delay / 1000}s... (Attempt ${attemptCount}/${maxAttempts})`);
+        await new Promise(r => setTimeout(r, delay));
+        delay = Math.min(delay * 1.5, 10000);
+        continue;
+      }
+      
+      return { 
+        success: false, 
+        reason: `Gemini failed after ${attemptCount} attempts: ${error.message}`,
+        debugInfo: error
+      };
+    }
+  }
+  
+  return { success: false, reason: 'Max attempts reached' };
+}
+
+/**
+ * Generate image with DALL-E 3
+ * @private
+ */
+async function generateWithDallE(prompt) {
+  console.log('🎨 Generating with DALL-E 3...');
+  const response = await openai.images.generate({
+    model: 'dall-e-3',
+    prompt: prompt,
+    n: 1,
+    size: '1024x1024',
+    response_format: 'b64_json'
+  });
+
+  console.log('✅ DALL-E generation successful');
+  return {
+    url: `data:image/png;base64,${response.data[0].b64_json}`,
+    model: 'dall-e-3'
+  };
 }
 
 /**
