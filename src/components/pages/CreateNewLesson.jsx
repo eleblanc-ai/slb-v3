@@ -135,6 +135,7 @@ export default function CreateNewLesson() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewMarkdown, setPreviewMarkdown] = useState('');
   const [previewCoverImage, setPreviewCoverImage] = useState(null);
+  const [missingRequiredFields, setMissingRequiredFields] = useState([]);
   const [preFormCompleted, setPreFormCompleted] = useState(false);
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
   const generateButtonRef = useRef(null);
@@ -184,6 +185,30 @@ export default function CreateNewLesson() {
   const handleCancelNavigation = () => {
     setShowUnsavedChangesModal(false);
     setPendingNavigation(null);
+  };
+
+  // Check for missing required fields (field.required = true)
+  const getMissingRequiredFields = (valuesToCheck) => {
+    const missing = [];
+    const requiredFields = fields.filter(f => f.required === true);
+    
+    for (const field of requiredFields) {
+      const value = valuesToCheck[field.id];
+      const isEmpty = !value || 
+                      (typeof value === 'string' && value.trim() === '') ||
+                      (Array.isArray(value) && value.length === 0) ||
+                      (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
+      
+      if (isEmpty) {
+        missing.push({
+          id: field.id,
+          name: field.name,
+          section: field.fieldFor === 'designer' ? 'Designer' : 'Builder'
+        });
+      }
+    }
+    
+    return missing;
   };
 
   // Handler: export lesson as markdown
@@ -237,6 +262,11 @@ export default function CreateNewLesson() {
     
     const markdown = generateFunction(templateData, fields, freshFieldValues);
     setExportMarkdown(markdown);
+    
+    // Check for missing required fields
+    const missing = getMissingRequiredFields(freshFieldValues);
+    setMissingRequiredFields(missing);
+    
     setShowExportModal(true);
   };
 
@@ -309,6 +339,11 @@ export default function CreateNewLesson() {
     
     setPreviewMarkdown(markdown);
     setPreviewCoverImage(imageUrl);
+    
+    // Check for missing required fields
+    const missing = getMissingRequiredFields(freshFieldValues);
+    setMissingRequiredFields(missing);
+    
     setShowPreviewModal(true);
   };
 
@@ -3170,6 +3205,38 @@ export default function CreateNewLesson() {
               </button>
             </div>
             
+            {/* Missing Required Fields Warning */}
+            {missingRequiredFields.length > 0 && (
+              <div style={{
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '1rem 1.25rem',
+                marginBottom: '1rem'
+              }}>
+                <p style={{
+                  color: '#991b1b',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  margin: '0 0 0.5rem 0'
+                }}>
+                  The following required fields must be filled out before exporting:
+                </p>
+                <ul style={{
+                  margin: 0,
+                  paddingLeft: '1.25rem',
+                  color: '#b91c1c',
+                  fontSize: '0.875rem'
+                }}>
+                  {missingRequiredFields.map((field, idx) => (
+                    <li key={field.id || idx}>
+                      {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
             <div style={{
               flex: 1,
               overflow: 'auto',
@@ -3214,7 +3281,9 @@ export default function CreateNewLesson() {
                 Close
               </button>
               <button
+                disabled={missingRequiredFields.length > 0}
                 onClick={() => {
+                  if (missingRequiredFields.length > 0) return;
                   const blob = new Blob([exportMarkdown], { type: 'text/markdown' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -3233,22 +3302,25 @@ export default function CreateNewLesson() {
                   padding: '0.625rem 1.25rem',
                   fontSize: '0.875rem',
                   fontWeight: 600,
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: missingRequiredFields.length > 0 ? '#9ca3af' : '#fff',
+                  background: missingRequiredFields.length > 0 ? '#e5e7eb' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                   border: 'none',
                   borderRadius: '8px',
-                  cursor: 'pointer',
+                  cursor: missingRequiredFields.length > 0 ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                  boxShadow: missingRequiredFields.length > 0 ? 'none' : '0 2px 4px rgba(16, 185, 129, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.375rem'
+                  gap: '0.375rem',
+                  opacity: missingRequiredFields.length > 0 ? 0.6 : 1
                 }}
                 onMouseEnter={(e) => {
+                  if (missingRequiredFields.length > 0) return;
                   e.currentTarget.style.transform = 'translateY(-1px)';
                   e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
                 }}
                 onMouseLeave={(e) => {
+                  if (missingRequiredFields.length > 0) return;
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
                 }}
@@ -3257,7 +3329,9 @@ export default function CreateNewLesson() {
                 Download
               </button>
               <button
+                disabled={missingRequiredFields.length > 0}
                 onClick={() => {
+                  if (missingRequiredFields.length > 0) return;
                   navigator.clipboard.writeText(exportMarkdown);
                   alert('Markdown copied to clipboard!');
                 }}
@@ -3265,22 +3339,25 @@ export default function CreateNewLesson() {
                   padding: '0.625rem 1.25rem',
                   fontSize: '0.875rem',
                   fontWeight: 600,
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color: missingRequiredFields.length > 0 ? '#9ca3af' : '#fff',
+                  background: missingRequiredFields.length > 0 ? '#e5e7eb' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                   border: 'none',
                   borderRadius: '8px',
-                  cursor: 'pointer',
+                  cursor: missingRequiredFields.length > 0 ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(99, 102, 241, 0.3)',
+                  boxShadow: missingRequiredFields.length > 0 ? 'none' : '0 2px 4px rgba(99, 102, 241, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.375rem'
+                  gap: '0.375rem',
+                  opacity: missingRequiredFields.length > 0 ? 0.6 : 1
                 }}
                 onMouseEnter={(e) => {
+                  if (missingRequiredFields.length > 0) return;
                   e.currentTarget.style.transform = 'translateY(-1px)';
                   e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.4)';
                 }}
                 onMouseLeave={(e) => {
+                  if (missingRequiredFields.length > 0) return;
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.3)';
                 }}
@@ -3369,6 +3446,38 @@ export default function CreateNewLesson() {
               overflow: 'auto',
               padding: '2rem'
             }}>
+              {/* Missing Required Fields Warning */}
+              {missingRequiredFields.length > 0 && (
+                <div style={{
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '1rem 1.25rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <p style={{
+                    color: '#991b1b',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    margin: '0 0 0.5rem 0'
+                  }}>
+                    The following required fields must be filled out before exporting:
+                  </p>
+                  <ul style={{
+                    margin: 0,
+                    paddingLeft: '1.25rem',
+                    color: '#b91c1c',
+                    fontSize: '0.875rem'
+                  }}>
+                    {missingRequiredFields.map((field, idx) => (
+                      <li key={field.id || idx}>
+                        {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
               {/* Cover Image */}
               {previewCoverImage && (
                 <div style={{
