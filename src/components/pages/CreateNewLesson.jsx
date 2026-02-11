@@ -139,6 +139,12 @@ export default function CreateNewLesson() {
   const [preFormCompleted, setPreFormCompleted] = useState(false);
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
   const generateButtonRef = useRef(null);
+  
+  // Lesson lock state
+  const [isLessonLocked, setIsLessonLocked] = useState(false);
+  const [lockOwner, setLockOwner] = useState(null);
+  const [lockOwnerName, setLockOwnerName] = useState('');
+  const lockHeartbeatRef = useRef(null);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -186,6 +192,109 @@ export default function CreateNewLesson() {
     setShowUnsavedChangesModal(false);
     setPendingNavigation(null);
   };
+
+  // Lesson locking functions
+  const acquireLessonLock = async (lessonIdToLock) => {
+    if (!lessonIdToLock || !session?.user?.id) return { success: false };
+    
+    const userName = profile?.display_name || session?.user?.email || 'Unknown User';
+    
+    try {
+      const { data, error } = await supabase.rpc('acquire_lesson_lock', {
+        p_lesson_id: lessonIdToLock,
+        p_user_id: session.user.id,
+        p_user_name: userName
+      });
+      
+      if (error) {
+        console.error('Error acquiring lock:', error);
+        return { success: false };
+      }
+      
+      if (data?.success) {
+        setIsLessonLocked(false);
+        setLockOwner(null);
+        setLockOwnerName('');
+        
+        // Start heartbeat to keep lock alive
+        if (lockHeartbeatRef.current) {
+          clearInterval(lockHeartbeatRef.current);
+        }
+        lockHeartbeatRef.current = setInterval(() => {
+          refreshLessonLock(lessonIdToLock);
+        }, 30000); // Refresh every 30 seconds (lock expires after 5 min of no heartbeat)
+        
+        return { success: true };
+      } else {
+        // Lesson is locked by someone else
+        setIsLessonLocked(true);
+        setLockOwner(data?.locked_by);
+        setLockOwnerName(data?.locked_by_name || 'Another user');
+        return { success: false, lockedBy: data?.locked_by_name };
+      }
+    } catch (err) {
+      console.error('Error in acquireLessonLock:', err);
+      return { success: false };
+    }
+  };
+  
+  const releaseLessonLock = async (lessonIdToRelease) => {
+    if (!lessonIdToRelease || !session?.user?.id) return;
+    
+    // Stop heartbeat
+    if (lockHeartbeatRef.current) {
+      clearInterval(lockHeartbeatRef.current);
+      lockHeartbeatRef.current = null;
+    }
+    
+    try {
+      await supabase.rpc('release_lesson_lock', {
+        p_lesson_id: lessonIdToRelease,
+        p_user_id: session.user.id
+      });
+    } catch (err) {
+      console.error('Error releasing lock:', err);
+    }
+  };
+  
+  const refreshLessonLock = async (lessonIdToRefresh) => {
+    if (!lessonIdToRefresh || !session?.user?.id) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('refresh_lesson_lock', {
+        p_lesson_id: lessonIdToRefresh,
+        p_user_id: session.user.id
+      });
+      console.log('🔄 Lock heartbeat:', new Date().toLocaleTimeString(), data ? '✅' : '❌');
+    } catch (err) {
+      console.error('Error refreshing lock:', err);
+    }
+  };
+  
+  // Release lock when component unmounts or user navigates away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (lessonId) {
+        // Use sendBeacon for reliable cleanup on page unload
+        navigator.sendBeacon && navigator.sendBeacon(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/release_lesson_lock`,
+          JSON.stringify({ p_lesson_id: lessonId, p_user_id: session?.user?.id })
+        );
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (lessonId && session?.user?.id) {
+        releaseLessonLock(lessonId);
+      }
+      if (lockHeartbeatRef.current) {
+        clearInterval(lockHeartbeatRef.current);
+      }
+    };
+  }, [lessonId, session?.user?.id]);
 
   // Check for missing required fields (field.required = true)
   const getMissingRequiredFields = (valuesToCheck) => {
@@ -1578,6 +1687,13 @@ export default function CreateNewLesson() {
       
       // Load existing lesson if lessonId is provided
       if (lessonId) {
+        // Try to acquire lock first
+        const lockResult = await acquireLessonLock(lessonId);
+        if (!lockResult.success) {
+          console.log('🔒 Lesson is locked by:', lockResult.lockedBy);
+          // Lesson is locked - will show preview mode after loading data
+        }
+        
         const { data: lesson, error: lessonError } = await supabase
           .from('lessons')
           .select('*')
@@ -1605,6 +1721,35 @@ export default function CreateNewLesson() {
           });
           console.log('📦 Final loadedValues:', loadedValues);
           setFieldValues(loadedValues);
+          
+          // If lesson is locked, generate preview markdown for display
+          if (!lockResult.success) {
+            const templateNameToFunctionMap = {
+              'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
+              'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
+            };
+            
+            const generateFunction = templateNameToFunctionMap[templateData?.name];
+            if (generateFunction) {
+              let markdown = generateFunction(templateData, mappedFields, loadedValues);
+              
+              // Extract image URL from markdown
+              let imageUrl = lesson.cover_image_url;
+              const photoLinkMatch = markdown.match(/#Photo Link\s*\n\s*([^\s\n]+)/);
+              if (photoLinkMatch && photoLinkMatch[1]) {
+                imageUrl = photoLinkMatch[1];
+                markdown = markdown.replace(/#Photo Link\s*\n\s*[^\n]+\n*/g, '');
+              }
+              
+              // Clean up markdown for preview
+              markdown = markdown.replace(/#Additional Notes\s*\n[\s\S]*?(?=\n#|\n*$)/g, '');
+              markdown = markdown.replace(/^#([^#\s])/gm, '### $1');
+              markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span style="font-weight: 600; color: #3b82f6;">$1</span>');
+              
+              setPreviewMarkdown(markdown);
+              setPreviewCoverImage(imageUrl);
+            }
+          }
         }
       }
     } catch (error) {
@@ -2070,6 +2215,179 @@ export default function CreateNewLesson() {
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       padding: '2rem 1rem 4rem'
     }}>
+      {/* Show Preview Mode when lesson is locked */}
+      {isLessonLocked ? (
+        <div style={{
+          maxWidth: '1000px',
+          margin: '0 auto',
+          background: '#fff',
+          borderRadius: '16px',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
+          overflow: 'hidden'
+        }}>
+          {/* Locked Header */}
+          <div style={{
+            backgroundColor: '#fef3c7',
+            borderBottom: '2px solid #f59e0b',
+            padding: '1rem 2rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🔒</span>
+              <div>
+                <p style={{
+                  margin: 0,
+                  fontWeight: 700,
+                  color: '#92400e',
+                  fontSize: '1rem'
+                }}>
+                  This lesson is currently being edited by {lockOwnerName}
+                </p>
+                <p style={{
+                  margin: '0.25rem 0 0 0',
+                  color: '#a16207',
+                  fontSize: '0.875rem'
+                }}>
+                  Showing read-only preview. Check back later to edit.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate(-1)}
+              style={{
+                padding: '0.625rem 1.25rem',
+                backgroundColor: '#f59e0b',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#d97706';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#f59e0b';
+              }}
+            >
+              ← Go Back
+            </button>
+          </div>
+          
+          {/* Preview Content */}
+          <div style={{ padding: '2rem' }}>
+            {/* Cover Image */}
+            {previewCoverImage && (
+              <div style={{
+                marginBottom: '2rem',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+              }}>
+                <img 
+                  src={previewCoverImage} 
+                  alt="Cover" 
+                  style={{
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block'
+                  }}
+                />
+              </div>
+            )}
+            
+            {/* Rendered Markdown */}
+            <div 
+              className="markdown-preview"
+              style={{
+                fontSize: '1rem',
+                lineHeight: '1.75',
+                color: 'var(--gray-800)'
+              }}
+              dangerouslySetInnerHTML={{
+                __html: marked.parse(previewMarkdown || '', {
+                  breaks: true,
+                  gfm: true
+                })
+              }}
+            />
+            <style>{`
+              .markdown-preview h1 {
+                font-size: 2rem;
+                font-weight: 700;
+                margin: 1.5rem 0 1rem;
+                color: var(--gray-900);
+              }
+              .markdown-preview h2 {
+                font-size: 1.5rem;
+                font-weight: 700;
+                margin: 1.25rem 0 0.75rem;
+                color: var(--gray-900);
+              }
+              .markdown-preview h3 {
+                font-size: 1.25rem;
+                font-weight: 600;
+                margin: 1rem 0 0.5rem;
+                color: #3b82f6;
+              }
+              .markdown-preview h4 {
+                font-size: 1.125rem;
+                font-weight: 600;
+                margin: 0.875rem 0 0.5rem;
+                color: var(--gray-900);
+              }
+              .markdown-preview p {
+                margin: 1rem 0;
+              }
+              .markdown-preview ul, .markdown-preview ol {
+                margin: 0.75rem 0;
+                padding-left: 1.5rem;
+              }
+              .markdown-preview li {
+                margin: 0.25rem 0;
+              }
+              .markdown-preview strong {
+                font-weight: 600;
+              }
+              .markdown-preview code {
+                background-color: #f3f4f6;
+                padding: 0.125rem 0.375rem;
+                border-radius: 0.25rem;
+                font-family: monospace;
+                font-size: 0.875em;
+              }
+              .markdown-preview pre {
+                background-color: #f3f4f6;
+                padding: 1rem;
+                border-radius: 0.5rem;
+                overflow-x: auto;
+                margin: 1rem 0;
+              }
+              .markdown-preview pre code {
+                background: none;
+                padding: 0;
+              }
+              .markdown-preview blockquote {
+                border-left: 4px solid #e5e7eb;
+                padding-left: 1rem;
+                margin: 1rem 0;
+                color: var(--gray-600);
+              }
+            `}</style>
+          </div>
+        </div>
+      ) : (
+      <>
       {!showPreFormModal && (
         <div style={{
           maxWidth: '1600px',
@@ -2260,12 +2578,13 @@ export default function CreateNewLesson() {
                 setPulseGenerateButton(false);
                 handleGenerateLesson();
               }}
-              disabled={isGeneratingLesson}
+              disabled={isGeneratingLesson || isLessonLocked}
+              title={isLessonLocked ? `Lesson is being edited by ${lockOwnerName}` : ''}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: isGeneratingLesson 
+                background: (isGeneratingLesson || isLessonLocked)
                   ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
                   : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: '#fff',
@@ -2274,23 +2593,23 @@ export default function CreateNewLesson() {
                 padding: '0.5rem 0.875rem',
                 fontSize: '0.8125rem',
                 fontWeight: 600,
-                cursor: isGeneratingLesson ? 'not-allowed' : 'pointer',
+                cursor: (isGeneratingLesson || isLessonLocked) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: pulseGenerateButton 
+                boxShadow: pulseGenerateButton && !isLessonLocked
                   ? '0 0 0 4px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.6)' 
                   : '0 2px 4px rgba(245, 158, 11, 0.3)',
-                opacity: isGeneratingLesson ? 0.7 : 1,
-                animation: pulseGenerateButton ? 'pulse 1s ease-in-out infinite' : 'none',
-                transform: pulseGenerateButton ? 'scale(1.05)' : 'scale(1)'
+                opacity: (isGeneratingLesson || isLessonLocked) ? 0.7 : 1,
+                animation: (pulseGenerateButton && !isLessonLocked) ? 'pulse 1s ease-in-out infinite' : 'none',
+                transform: (pulseGenerateButton && !isLessonLocked) ? 'scale(1.05)' : 'scale(1)'
               }}
               onMouseEnter={(e) => {
-                if (!isGeneratingLesson) {
+                if (!isGeneratingLesson && !isLessonLocked) {
                   e.currentTarget.style.transform = 'translateY(-1px)';
                   e.currentTarget.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!isGeneratingLesson) {
+                if (!isGeneratingLesson && !isLessonLocked) {
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
                 }
@@ -2323,26 +2642,31 @@ export default function CreateNewLesson() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
             <button
               onClick={handleSave}
+              disabled={isLessonLocked}
+              title={isLessonLocked ? `Lesson is being edited by ${lockOwnerName}` : ''}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: isLessonLocked ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
                 padding: '0.5rem 0.875rem',
                 fontSize: '0.8125rem',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: isLessonLocked ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                boxShadow: isLessonLocked ? 'none' : '0 2px 4px rgba(16, 185, 129, 0.2)',
+                opacity: isLessonLocked ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
+                if (isLessonLocked) return;
                 e.currentTarget.style.transform = 'translateY(-1px)';
                 e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
               }}
               onMouseLeave={(e) => {
+                if (isLessonLocked) return;
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.2)';
               }}
@@ -3614,6 +3938,8 @@ export default function CreateNewLesson() {
           </div>
         </div>,
         document.body
+      )}
+      </>
       )}
 
       {/* Pre-Form Modal */}
