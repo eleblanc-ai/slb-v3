@@ -16,7 +16,8 @@ export default function AssignStandardsField({
   onGenerateAI,
   onAIConfig,
   isGenerating,
-  hasGenerated
+  hasGenerated,
+  hideRequiredAsterisk
 }) {
   const [standardsData, setStandardsData] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
@@ -286,6 +287,7 @@ export default function AssignStandardsField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         {/* Input section with framework dropdown and autocomplete */}

@@ -13,7 +13,8 @@ export default function RichTextField({
   onGenerateAI,
   onAIConfig,
   isGenerating,
-  hasGenerated
+  hasGenerated,
+  hideRequiredAsterisk
 }) {
   return (
     <BaseField 
@@ -24,6 +25,7 @@ export default function RichTextField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>
         <TipTapEditor

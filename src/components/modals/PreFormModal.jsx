@@ -99,7 +99,8 @@ export default function PreFormModal({
             key: field.id,
             field,
             value: fieldValues[field.id] || '',
-            onChange: (value) => onFieldChange(field.id, value)
+            onChange: (value) => onFieldChange(field.id, value),
+            hideRequiredAsterisk: true
           };
 
           switch (field.type) {

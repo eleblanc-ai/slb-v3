@@ -17,6 +17,7 @@ export default function BaseField({
   isMissing = false,
   customGenerateLabel,
   isUsedAsContext = false,
+  hideRequiredAsterisk = false,
   children 
 }) {
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
@@ -131,7 +132,7 @@ export default function BaseField({
               gap: '0.25rem'
             }}>
               {field.name}
-              {field.required && (
+              {field.required && !hideRequiredAsterisk && (
                 <span style={{ color: '#ef4444' }}>*</span>
               )}
             </h3>
@@ -165,20 +166,6 @@ export default function BaseField({
               }}>
                 <Sparkles size={12} />
                 Required for AI Generation
-              </span>
-            )}
-            
-            {/* Optional Badge (for fields not required for generation and not AI-enabled) */}
-            {!field.requiredForGeneration && !field.aiEnabled && field.type !== 'section_header' && (
-              <span style={{
-                padding: '0.25rem 0.75rem',
-                backgroundColor: '#e0e7ff',
-                color: '#4f46e5',
-                borderRadius: '9999px',
-                fontSize: '0.75rem',
-                fontWeight: 600
-              }}>
-                Optional
               </span>
             )}
             

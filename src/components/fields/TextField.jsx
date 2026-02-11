@@ -12,7 +12,8 @@ export default function TextField({
   onGenerateAI,
   onAIConfig,
   isGenerating,
-  hasGenerated
+  hasGenerated,
+  hideRequiredAsterisk
 }) {
   return (
     <BaseField 
@@ -23,6 +24,7 @@ export default function TextField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>
         <input

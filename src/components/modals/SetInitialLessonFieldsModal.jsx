@@ -118,7 +118,6 @@ export default function SetInitialLessonFieldsModal({ visible, onClose, onSave, 
                     marginBottom: '0.5rem'
                   }}>
                     {field.name}
-                    {field.required && <span style={{ color: '#ef4444' }}> *</span>}
                   </label>
                   {field.helperText && (
                     <p style={{
