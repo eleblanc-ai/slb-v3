@@ -862,12 +862,54 @@ export default function CreateNewLessonType() {
       let generatedContent;
       
       if (field.type === 'mcqs') {
-        console.log('🎯 Using function calling for MCQs field');
+        console.log('🎯 Generating MCQs sequentially using question prompts');
         
-        // Use function calling for structured output
-        const functionSchema = {
-          name: 'generate_mcqs',
-          description: 'Generate 5 multiple choice questions with answer choices, standards, and answer keys',
+        // Generate each question sequentially using individual question prompts
+        const formattedQuestions = [];
+        const sourceStandards = {};
+        const filteredOutStandards = {};
+        
+        // Get question-specific prompts from AI config or defaults
+        const defaultQuestionPrompts = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts || {};
+        
+        // Fetch ai_question_prompts from database
+        const { data: questionPromptsData } = await supabase
+          .from('lesson_template_fields')
+          .select('ai_question_prompts')
+          .eq('id', field.id)
+          .single();
+        const questionPromptsConfig = questionPromptsData?.ai_question_prompts;
+        
+        // Extract grade level from fieldValues
+        const gradeField = fields.find(f => f.type === 'grade_band_selector');
+        const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
+        const gradeLevel = extractGradeFromBand(gradeValue);
+        
+        // Build context text from configured context fields (e.g., reading passage)
+        let contextText = '';
+        if (fieldData.ai_context_field_ids && fieldData.ai_context_field_ids.length > 0) {
+          const contextParts = [];
+          for (const contextFieldId of fieldData.ai_context_field_ids) {
+            const contextField = fields.find(f => f.id === contextFieldId);
+            const contextValue = storedFieldValues[contextFieldId];
+            if (contextField && contextValue) {
+              const displayVal = typeof contextValue === 'string' 
+                ? contextValue 
+                : (contextValue.text || contextValue.value || JSON.stringify(contextValue));
+              // Strip HTML tags for cleaner context
+              const cleanVal = displayVal.replace(/<[^>]*>/g, '').trim();
+              if (cleanVal) {
+                contextParts.push(`${contextField.name}:\n${cleanVal}`);
+              }
+            }
+          }
+          contextText = contextParts.join('\n\n');
+        }
+        
+        // Function schema for single MCQ
+        const functionSchema = aiPromptDefaults.fieldTypePrompts?.mcqs?.functionCallingSingle || {
+          name: 'generate_mcq',
+          description: 'Generate 1 multiple choice question with answer choices, standards, and answer key',
           parameters: {
             type: 'object',
             properties: {
@@ -900,58 +942,72 @@ export default function CreateNewLessonType() {
                   },
                   required: ['question_text', 'choices', 'standards', 'correct_answer']
                 },
-                minItems: 5,
-                maxItems: 5
+                minItems: 1,
+                maxItems: 1
               }
             },
             required: ['questions']
           }
         };
         
-        const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
-        console.log('✅ MCQs generated (structured):', result);
-        
-        // Extract grade level from fieldValues
-        const gradeField = fields.find(f => f.type === 'grade_band_selector');
-        const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
-        const gradeLevel = extractGradeFromBand(gradeValue);
-        
-        // Build context text from configured context fields (e.g., reading passage)
-        let contextText = '';
-        if (fieldData.ai_context_field_ids && fieldData.ai_context_field_ids.length > 0) {
-          const contextParts = [];
-          for (const contextFieldId of fieldData.ai_context_field_ids) {
-            const contextField = fields.find(f => f.id === contextFieldId);
-            const contextValue = storedFieldValues[contextFieldId];
-            if (contextField && contextValue) {
-              const displayVal = typeof contextValue === 'string' 
-                ? contextValue 
-                : (contextValue.text || contextValue.value || JSON.stringify(contextValue));
-              // Strip HTML tags for cleaner context
-              const cleanVal = displayVal.replace(/<[^>]*>/g, '').trim();
-              if (cleanVal) {
-                contextParts.push(`${contextField.name}:\n${cleanVal}`);
-              }
-            }
+        // Generate each question sequentially (q1, q2, q3, q4, q5)
+        for (let i = 0; i < 5; i++) {
+          const questionKey = `q${i + 1}`;
+          console.log(`📝 Generating question ${i + 1} (${questionKey})...`);
+          
+          // Get question-specific prompt
+          let questionPrompt;
+          if (questionPromptsConfig && questionPromptsConfig[questionKey]) {
+            const saved = questionPromptsConfig[questionKey];
+            questionPrompt = typeof saved === 'string' ? saved : saved.prompt;
+          } else if (defaultQuestionPrompts[questionKey]) {
+            const defaultQ = defaultQuestionPrompts[questionKey];
+            questionPrompt = typeof defaultQ === 'string' ? defaultQ : defaultQ.prompt;
+            console.log(`📋 Using default prompt for ${questionKey}`);
+          } else {
+            questionPrompt = 'Generate 1 multiple choice question based on the passage.';
           }
-          contextText = contextParts.join('\n\n');
-        }
-        
-        // Format each question as text and store in questions array
-        // Map standards for each question and track source standards
-        const sourceStandards = {};
-        const questionResults = await Promise.all(result.questions.map(async (q, i) => {
+          
+          // Build prompt for this specific question
+          const questionAIConfig = {
+            systemInstructions: fieldData.ai_system_instructions || '',
+            prompt: questionPrompt,
+            formatRequirements: fieldData.ai_format_requirements || aiPromptDefaults.formatRequirements?.mcqs || '',
+            contextInstructions: fieldData.ai_context_instructions || '',
+            selectedFieldIds: fieldData.ai_context_field_ids || [],
+            allFields: fields,
+            fieldValues: storedFieldValues
+          };
+          
+          const questionFullPrompt = buildFullPrompt(questionAIConfig);
+          console.log(`📝 Question ${i + 1} prompt built`);
+          
+          // Generate the question
+          const result = await callAIWithFunction(questionFullPrompt, selectedModel, functionSchema);
+          console.log(`✅ Question ${i + 1} generated:`, result);
+          
+          if (!result || !result.questions || !result.questions[0]) {
+            throw new Error(`AI returned invalid response for question ${i + 1}`);
+          }
+          
+          const q = result.questions[0];
+          
+          // Validate question has required content
+          if (!q.question_text || !q.choices || !q.choices.A || !q.choices.B || !q.choices.C || !q.choices.D) {
+            console.error(`❌ Invalid MCQ response for question ${i + 1}:`, q);
+            throw new Error(`AI generated incomplete question ${i + 1} - missing question text or choices.`);
+          }
+          
+          // Map standards
           let standardsText = q.standards.join('; ');
           let candidateStandards = [];
           
-          // Map standards to all frameworks (works for any starting framework)
           if (q.standards && q.standards.length > 0) {
             const firstStandard = q.standards[0];
             const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
             standardsText = mappingResult.mappedStandards || standardsText;
             sourceStandards[i] = mappingResult.sourceStandard;
             
-            // Get candidate standards for filtering (excluding source standard)
             candidateStandards = standardsText
               .split(';')
               .map(s => s.trim())
@@ -972,30 +1028,23 @@ export default function CreateNewLessonType() {
             );
             console.log(`✅ Filtered to ${filteredStandards.length} standards for question ${i + 1}`);
             
-            // Track which standards were filtered out
             filteredOutForQuestion = candidateStandards.filter(s => !filteredStandards.includes(s));
             standardsText = filteredStandards.join('; ');
           }
           
-          // Insert source standard in its proper framework position (CCSS; TEKS; BEST; BLOOM; GSE order)
+          // Insert source standard in proper position
           if (sourceStandards[i] && sourceStandards[i].code) {
             standardsText = insertStandardInOrder(standardsText, sourceStandards[i].code);
           }
           
-          return {
-            text: `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`,
-            filteredOut: filteredOutForQuestion
-          };
-        }));
-        
-        // Extract formatted questions and filtered-out standards from results
-        const formattedQuestions = questionResults.map(r => r.text);
-        const filteredOutStandards = {};
-        questionResults.forEach((r, i) => {
-          if (r.filteredOut && r.filteredOut.length > 0) {
-            filteredOutStandards[i] = r.filteredOut;
+          // Format question as plain text (not HTML for template mode)
+          const formattedMCQ = `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`;
+          formattedQuestions.push(formattedMCQ);
+          
+          if (filteredOutForQuestion.length > 0) {
+            filteredOutStandards[i] = filteredOutForQuestion;
           }
-        });
+        }
         
         generatedContent = { questions: formattedQuestions, sourceStandards, filteredOutStandards };
       } else {

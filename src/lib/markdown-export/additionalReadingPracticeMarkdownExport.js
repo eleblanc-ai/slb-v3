@@ -155,13 +155,12 @@ export function generateMarkdown(templateData, fields, fieldValues) {
   
   // Passage
   markdown += `#Passage\n`;
-  markdown += `${getFieldValue('Glossed Passage')}\n\n`;
-  
-  // Read
-  markdown += `#Read\n`;
-  markdown += `${getFieldValue('Read')}\n\n`;
-  
-  // Lexile Level
+  const glossedPassage = getFieldValue('Glossed Passage');
+  // Strip <em> tags but keep asterisks and other content
+  const cleanedPassage = typeof glossedPassage === 'string' 
+    ? glossedPassage.replace(/<\/?em>/gi, '') 
+    : glossedPassage;
+  markdown += `${cleanedPassage}\n\n`;
   markdown += `#Lexile Level\n`;
   markdown += `${getFieldValue('Lexile Level')}\n\n`;
   

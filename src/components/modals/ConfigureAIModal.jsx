@@ -492,6 +492,8 @@ export default function ConfigureAIModal({
                       />
                     </div>
 
+                    {/* Hide Field Prompt for MCQ fields - MCQs use individual question prompts instead */}
+                    {field?.type !== 'mcqs' && (
                     <div style={{
                       marginBottom: '1.5rem',
                       background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
@@ -529,6 +531,7 @@ export default function ConfigureAIModal({
                         }}
                       />
                     </div>
+                    )}
 
                     {field?.type === 'mcqs' && (
                       <div style={{
