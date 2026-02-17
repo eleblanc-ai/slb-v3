@@ -3,6 +3,7 @@ import { X, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
 import { buildFullPrompt } from '../../lib/promptBuilder';
+import { extractGradeFromBand, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade } from '../../lib/standardsMapper';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 
 /**
@@ -17,7 +18,8 @@ export default function ConfigureAIModal({
   allFields = [],
   onSave,
   fieldValues = {},
-  mode = 'template' // 'template' or 'lesson'
+  mode = 'template', // 'template' or 'lesson'
+  defaultStandardFramework = 'CCSS'
 }) {
   const [prompt, setPrompt] = useState('');
   // MCQ question prompts (q1-q5) - each question has its own prompt, label, and tooltip
@@ -38,6 +40,8 @@ export default function ConfigureAIModal({
   const [showPreview, setShowPreview] = useState(false);
   const [showSyncConfirm, setShowSyncConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [vocabStandards, setVocabStandards] = useState([]);
+  const allowSelfContext = field?.type === 'mcqs';
 
   const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
   const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
@@ -56,6 +60,32 @@ export default function ConfigureAIModal({
   }, []);
 
   console.log('🔧 ConfigureAIModal mode:', mode, 'field:', field?.name);
+
+  useEffect(() => {
+    const loadVocabStandards = async () => {
+      if (!field || field.type !== 'mcqs') {
+        setVocabStandards([]);
+        return;
+      }
+
+      const gradeField = allFields.find(f => f.type === 'grade_band_selector');
+      const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+      const gradeValue = gradeField
+        ? (fieldValues?.[gradeField.id] ?? storedFieldValues?.[gradeField.id])
+        : null;
+      const gradeLevel = extractGradeFromBand(gradeValue);
+
+      if (defaultStandardFramework === 'CCSS') {
+        const standards = await getCcssVocabularyStandardsForGrade(gradeLevel);
+        setVocabStandards(standards);
+      } else {
+        const standards = await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+        setVocabStandards(standards);
+      }
+    };
+
+    loadVocabStandards();
+  }, [field, allFields, fieldValues, defaultStandardFramework]);
 
   const loadConfiguration = useCallback(async () => {
     const defaultQuestionPrompts = getDefaultQuestionPrompts();
@@ -353,7 +383,7 @@ export default function ConfigureAIModal({
   const selectAll = () => {
     setSelectedFields(
       allFields
-        .filter(f => f.id !== field?.id)
+        .filter(f => allowSelfContext || f.id !== field?.id)
         .map(f => f.id)
     );
   };
@@ -371,7 +401,13 @@ export default function ConfigureAIModal({
   const promptPreview = useMemo(() => {
     // Read field values from localStorage
     const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
-    
+    const extraContextBlocks = vocabStandards.length > 0 ? [
+      {
+        title: 'Grade-Specific Vocabulary Standards (CCSS)',
+        content: vocabStandards.join('; ')
+      }
+    ] : [];
+
     return buildFullPrompt({
       systemInstructions,
       prompt,
@@ -379,9 +415,10 @@ export default function ConfigureAIModal({
       contextInstructions,
       selectedFieldIds: selectedFields,
       allFields,
-      fieldValues: storedFieldValues
+      fieldValues: storedFieldValues,
+      extraContextBlocks
     });
-  }, [prompt, systemInstructions, contextInstructions, formatRequirements, selectedFields, allFields]);
+  }, [prompt, systemInstructions, contextInstructions, formatRequirements, selectedFields, allFields, vocabStandards]);
 
   if (!visible || !field) return null;
 
@@ -919,6 +956,34 @@ export default function ConfigureAIModal({
                         />
                       </div>
                     )}
+
+                    {field?.type === 'mcqs' && (
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                          color: 'var(--gray-900)',
+                          display: 'block',
+                          marginBottom: '0.5rem'
+                        }}>
+                          Grade-Specific Vocabulary Standards
+                        </label>
+                        <div style={{
+                          padding: '0.75rem',
+                          borderRadius: '8px',
+                          border: '2px solid var(--gray-200)',
+                          background: '#fff',
+                          fontSize: '0.8125rem',
+                          fontFamily: 'system-ui',
+                          color: 'var(--gray-900)',
+                          whiteSpace: 'pre-wrap'
+                        }}>
+                          {vocabStandards.length > 0
+                            ? vocabStandards.join('; ')
+                            : 'No grade-specific vocab standards found. Select a Grade Band to populate.'}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -971,13 +1036,13 @@ export default function ConfigureAIModal({
                         background: '#f0fdf4',
                         padding: '0.75rem'
                       }}>
-                        {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id && selectedFields.includes(f.id)).length === 0 ? (
+                        {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).length === 0 ? (
                           <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
                             No designer fields
                           </p>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id && selectedFields.includes(f.id)).map(contextField => (
+                            {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).map(contextField => (
                               <div key={contextField.id} style={{
                                 padding: '0.625rem',
                                 background: '#d1fae5',
@@ -1008,13 +1073,13 @@ export default function ConfigureAIModal({
                         background: '#faf5ff',
                         padding: '0.75rem'
                       }}>
-                        {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id && selectedFields.includes(f.id)).length === 0 ? (
+                        {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).length === 0 ? (
                           <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
                             No builder fields
                           </p>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id && selectedFields.includes(f.id)).map(contextField => (
+                            {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).map(contextField => (
                               <div key={contextField.id} style={{
                                 padding: '0.625rem',
                                 background: '#ede9fe',
@@ -1073,13 +1138,13 @@ export default function ConfigureAIModal({
                         background: '#f0fdf4',
                         padding: '0.75rem'
                       }}>
-                        {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).length === 0 ? (
+                        {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id)).length === 0 ? (
                           <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
                             No designer fields
                           </p>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'designer' && f.id !== field.id).map(contextField => (
+                            {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id)).map(contextField => (
                               <label key={contextField.id} style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1119,13 +1184,13 @@ export default function ConfigureAIModal({
                         background: '#faf5ff',
                         padding: '0.75rem'
                       }}>
-                        {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).length === 0 ? (
+                        {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id)).length === 0 ? (
                           <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
                             No builder fields
                           </p>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'builder' && f.id !== field.id).map(contextField => (
+                            {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id)).map(contextField => (
                               <label key={contextField.id} style={{
                                 display: 'flex',
                                 alignItems: 'center',

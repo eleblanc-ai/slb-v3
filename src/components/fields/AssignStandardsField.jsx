@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 /**
  * AssignStandardsField - A field that allows designers to assign educational standards
  * Users can input a standard code with autocomplete, which is looked up in the standards-mapping.csv file
- * Up to 10 standards can be added
+ * Max standards can be configured per field (default 10)
  */
 export default function AssignStandardsField({
   field,
@@ -19,6 +19,7 @@ export default function AssignStandardsField({
   hasGenerated,
   hideRequiredAsterisk
 }) {
+  const maxStandards = field?.max_selections > 0 ? field.max_selections : 10;
   const [standardsData, setStandardsData] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
   const [selectedFramework, setSelectedFramework] = useState('');
@@ -202,8 +203,8 @@ export default function AssignStandardsField({
   const addStandard = (standard) => {
     setError('');
     
-    if (value.length >= 10) {
-      setError('Maximum of 10 standards allowed');
+    if (value.length >= maxStandards) {
+      setError(`Maximum of ${maxStandards} standards allowed`);
       return;
     }
     
@@ -227,8 +228,8 @@ export default function AssignStandardsField({
       return;
     }
     
-    if (value.length >= 10) {
-      setError('Maximum of 10 standards allowed');
+    if (value.length >= maxStandards) {
+      setError(`Maximum of ${maxStandards} standards allowed`);
       return;
     }
     
@@ -355,9 +356,9 @@ export default function AssignStandardsField({
               value={inputCode}
               onChange={handleInputChange}
               onKeyDown={handleKeyPress}
-              disabled={isLoading || value.length >= 10}
+              disabled={isLoading || value.length >= maxStandards}
               style={{
-                opacity: value.length >= 10 ? 0.5 : 1,
+                opacity: value.length >= maxStandards ? 0.5 : 1,
                 height: '40px',
                 width: '100%',
                 padding: '8px 12px',
@@ -438,15 +439,15 @@ export default function AssignStandardsField({
           <button
             type="button"
             onClick={handleAddStandard}
-            disabled={isLoading || value.length >= 10}
+            disabled={isLoading || value.length >= maxStandards}
             style={{
               padding: '0 16px',
               height: '40px',
-              background: value.length >= 10 ? '#94a3b8' : '#3b82f6',
+              background: value.length >= maxStandards ? '#94a3b8' : '#3b82f6',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
-              cursor: value.length >= 10 ? 'not-allowed' : 'pointer',
+              cursor: value.length >= maxStandards ? 'not-allowed' : 'pointer',
               fontSize: 14,
               fontWeight: 500,
               whiteSpace: 'nowrap'
@@ -526,7 +527,7 @@ export default function AssignStandardsField({
           color: '#64748b',
           textAlign: 'right'
         }}>
-          {value.length} / 10 standards
+          {value.length} / {maxStandards} standards
         </div>
       </div>
     </BaseField>

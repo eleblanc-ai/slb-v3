@@ -21,8 +21,8 @@ import MCQsField from '../fields/MCQsField';
 import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
-import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
-import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder } from '../../lib/standardsMapper';
+import { callAI, callAIWithFunction, callAIWithBatchedContext, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
+import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
@@ -112,6 +112,8 @@ export default function CreateNewLessonType() {
   const [highlightedMissingFields, setHighlightedMissingFields] = useState(new Set());
   const [showMarkdownExportModal, setShowMarkdownExportModal] = useState(false);
   const [markdownExportData, setMarkdownExportData] = useState(null);
+  const [standardFrameworks, setStandardFrameworks] = useState([]);
+  const [defaultStandardFramework, setDefaultStandardFramework] = useState('CCSS');
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -451,6 +453,37 @@ export default function CreateNewLessonType() {
       if (selectedStandard) {
         aiConfig.prompt += `\n\nUSE THIS SPECIFIC STANDARD:\nStandard Code: ${selectedStandard.fullCode}\nStandard Statement: ${selectedStandard.statement}`;
       }
+
+      // Add default vocab standards context when using CCSS
+      if (defaultStandardFramework === 'CCSS') {
+        const gradeField = fields.find(f => f.type === 'grade_band_selector');
+        const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
+        const gradeLevel = extractGradeFromBand(gradeValue);
+        const vocabStandards = await getCcssVocabularyStandardsForGrade(gradeLevel);
+        if (vocabStandards.length > 0) {
+          aiConfig.extraContextBlocks = [
+            {
+              title: 'Grade-Specific Vocabulary Standards (CCSS)',
+              content: vocabStandards.join('; ')
+            }
+          ];
+          console.log('📚 Vocab standards added to MCQ prompt (individual):', vocabStandards);
+        }
+      } else {
+        const gradeField = fields.find(f => f.type === 'grade_band_selector');
+        const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
+        const gradeLevel = extractGradeFromBand(gradeValue);
+        const vocabStandards = await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+        if (vocabStandards.length > 0) {
+          aiConfig.extraContextBlocks = [
+            {
+              title: `Grade-Specific Vocabulary Standards (${defaultStandardFramework})`,
+              content: vocabStandards.join('; ')
+            }
+          ];
+          console.log('📚 Vocab standards added to MCQ prompt (individual):', vocabStandards);
+        }
+      }
       
       const prompt = buildFullPrompt(aiConfig);
       console.log('📝 Individual MCQ prompt:', prompt);
@@ -595,7 +628,7 @@ export default function CreateNewLessonType() {
       }
       
       const questionNumber = questionIndex + 1;
-      const formattedMCQ = `${questionNumber}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`;
+      const formattedMCQ = `<p>${questionNumber}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
       
       // Update only the specific question in the array with source standard tracking
       setFieldValues(prev => {
@@ -905,6 +938,14 @@ export default function CreateNewLessonType() {
         const gradeField = fields.find(f => f.type === 'grade_band_selector');
         const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
         const gradeLevel = extractGradeFromBand(gradeValue);
+
+        // Resolve default vocab standards when using CCSS
+        const vocabStandards = defaultStandardFramework === 'CCSS'
+          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
+          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+        if (vocabStandards.length > 0) {
+          console.log('📚 Vocab standards added to MCQ prompts (sequential):', vocabStandards);
+        }
         
         // Build context text from configured context fields (e.g., reading passage)
         let contextText = '';
@@ -999,6 +1040,19 @@ export default function CreateNewLessonType() {
             allFields: fields,
             fieldValues: storedFieldValues
           };
+
+          if (vocabStandards.length > 0) {
+            questionAIConfig.extraContextBlocks = [
+              {
+                title: 'Grade-Specific Vocabulary Standards (CCSS)',
+                content: vocabStandards.join('; ')
+              }
+            ];
+          }
+
+          if (vocabStandards.length > 0) {
+            questionAIConfig.prompt += `\n\nALIGN THIS QUESTION TO THESE VOCABULARY STANDARDS:\n${vocabStandards.join('; ')}\n\nEnsure the question aligns to these standards.`;
+          }
           
           const questionFullPrompt = buildFullPrompt(questionAIConfig);
           console.log(`📝 Question ${i + 1} prompt built`);
@@ -1059,7 +1113,7 @@ export default function CreateNewLessonType() {
           }
           
           // Format question as plain text (not HTML for template mode)
-          const formattedMCQ = `${i + 1}. ${q.question_text}\nA. ${q.choices.A}\nB. ${q.choices.B}\nC. ${q.choices.C}\nD. ${q.choices.D}\n[${standardsText}]\nKEY: ${q.correct_answer}`;
+          const formattedMCQ = `<p>${i + 1}. ${q.question_text}<br>A. ${q.choices.A}<br>B. ${q.choices.B}<br>C. ${q.choices.C}<br>D. ${q.choices.D}<br>[${standardsText}]<br>KEY: ${q.correct_answer}</p>`;
           formattedQuestions.push(formattedMCQ);
           
           if (filteredOutForQuestion.length > 0) {
@@ -1070,7 +1124,7 @@ export default function CreateNewLessonType() {
         generatedContent = { questions: formattedQuestions, sourceStandards, filteredOutStandards };
       } else {
         // Regular text generation for other field types
-        generatedContent = await callAI(prompt, selectedModel, 4096);
+        generatedContent = await callAIWithBatchedContext(prompt, selectedModel, 4096);
       }
       
       console.log('Generated content:', generatedContent);
@@ -1113,6 +1167,8 @@ export default function CreateNewLessonType() {
       if (lessonTypeError) throw lessonTypeError;
       
       setLessonTypeData(lessonTypeData);
+      const templateDefaultFramework = lessonTypeData.default_standard_framework || 'CCSS';
+      setDefaultStandardFramework(templateDefaultFramework);
       
       // Fetch fields
       const { data: fieldsData, error: fieldsError } = await supabase
@@ -1149,7 +1205,11 @@ export default function CreateNewLessonType() {
           if (field.field_config.options) mappedField.options = field.field_config.options;
           if (field.field_config.min_selections !== undefined) mappedField.min_selections = field.field_config.min_selections;
           if (field.field_config.max_selections !== undefined) mappedField.max_selections = field.field_config.max_selections;
-          if (field.field_config.framework) mappedField.framework = field.field_config.framework;
+          if (field.field_config.framework) {
+            mappedField.framework = field.field_config.framework;
+          } else if (mappedField.type === 'assign_standards' && templateDefaultFramework) {
+            mappedField.framework = templateDefaultFramework;
+          }
         }
         
         return mappedField;
@@ -1191,6 +1251,112 @@ export default function CreateNewLessonType() {
       setLoading(false);
     }
   };
+
+  const applyDefaultStandardFramework = async (framework) => {
+    if (!lessonTypeData?.id) {
+      alert('Please save the lesson template first.');
+      return;
+    }
+
+    const previousFramework = defaultStandardFramework;
+    setDefaultStandardFramework(framework);
+
+    try {
+      const { error: templateError } = await supabase
+        .from('lesson_templates')
+        .update({
+          default_standard_framework: framework,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', lessonTypeData.id);
+
+      if (templateError) throw templateError;
+
+      const assignStandardsFields = fields.filter(f => f.type === 'assign_standards');
+      const mcqFieldsToUpdate = fields.filter(
+        f => f.type === 'mcqs' && (!f.framework || f.framework === previousFramework)
+      );
+      const frameworkFields = [...assignStandardsFields, ...mcqFieldsToUpdate];
+
+      if (frameworkFields.length > 0) {
+        const updates = frameworkFields.map(field => {
+          const updatedFieldConfig = {
+            options: field.options,
+            min_selections: field.min_selections,
+            max_selections: field.max_selections,
+            framework
+          };
+
+          return supabase
+            .from('lesson_template_fields')
+            .update({ field_config: updatedFieldConfig })
+            .eq('id', field.id);
+        });
+
+        const results = await Promise.all(updates);
+        const updateErrors = results.find(r => r.error);
+        if (updateErrors?.error) throw updateErrors.error;
+      }
+
+      setFields(prev => prev.map(field => {
+        if (field.type === 'assign_standards') {
+          return { ...field, framework };
+        }
+        if (field.type === 'mcqs' && (!field.framework || field.framework === previousFramework)) {
+          return { ...field, framework };
+        }
+        return field;
+      }));
+
+      setShowSaveToast(true);
+      setTimeout(() => setShowSaveToast(false), 3000);
+    } catch (error) {
+      console.error('Error updating default standard framework:', error);
+      alert('Failed to update default standard framework. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    const loadFrameworksFromCsv = async () => {
+      try {
+        const response = await fetch(new URL('../../assets/MOAC SLB – No Letter CCSS.csv', import.meta.url).href);
+        const text = await response.text();
+        const lines = text.split('\n');
+        const frameworksOrder = ['CCSS', 'BEST', 'BLOOM', 'TEKS', 'GSE'];
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          if (!line.trim()) continue;
+
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          for (let char of line) {
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              values.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current.trim());
+
+          const mappedFramework = values[2];
+          if (frameworksOrder.includes(mappedFramework)) {
+            // Just confirm framework presence
+          }
+        }
+        setStandardFrameworks(frameworksOrder);
+      } catch (error) {
+        console.error('Error loading standards frameworks:', error);
+      }
+    };
+
+    loadFrameworksFromCsv();
+  }, []);
+
 
   const handleFieldAdded = async (fieldData, isEdit) => {
     if (!lessonTypeData?.id) return;
@@ -1641,7 +1807,7 @@ export default function CreateNewLessonType() {
           gap: '0.75rem'
         }}>
           {/* Toolbar Content - AI Model, Generate, Save Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             {/* AI Model with Label */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}> 🤖 AI Model</span>
@@ -1724,6 +1890,33 @@ export default function CreateNewLessonType() {
                   document.body
                 )}
               </div>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 0.75rem',
+              background: '#fff',
+              border: '1px solid var(--gray-200)',
+              borderRadius: '8px'
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--gray-600)' }}>📚 Default Standard Framework</span>
+              <select
+                value={defaultStandardFramework}
+                onChange={(e) => applyDefaultStandardFramework(e.target.value)}
+                style={{
+                  padding: '0.35rem 0.5rem',
+                  border: '1px solid var(--gray-300)',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  backgroundColor: '#fff'
+                }}
+              >
+                {standardFrameworks.map(fw => (
+                  <option key={fw} value={fw}>{fw}</option>
+                ))}
+              </select>
             </div>
 
             <button
@@ -2134,6 +2327,7 @@ export default function CreateNewLessonType() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                defaultStandardFramework={defaultStandardFramework}
                               />
                             );
                           } else {
@@ -2431,6 +2625,7 @@ export default function CreateNewLessonType() {
                                 onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
                                 onAIConfig={handleAIConfig}
                                 isMissing={isMissing}
+                                defaultStandardFramework={defaultStandardFramework}
                               />
                             );
                           } else {
@@ -2523,6 +2718,7 @@ export default function CreateNewLessonType() {
         onClose={handleModalClose}
         onFieldAdded={handleFieldAdded}
         field={editingField}
+        defaultFramework={defaultStandardFramework}
       />
 
       <ConfigureAIModal
@@ -2533,6 +2729,7 @@ export default function CreateNewLessonType() {
         allFields={fields}
         onSave={handleAIConfigSave}
         fieldValues={fieldValues}
+        defaultStandardFramework={defaultStandardFramework}
       />
 
       <MissingFieldsModal

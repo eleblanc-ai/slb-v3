@@ -44,6 +44,112 @@ export async function callAI(prompt, model, maxTokens = 4096) {
   }
 }
 
+function chunkTextByParagraphs(text, maxChunkChars) {
+  const paragraphs = text.split(/\n\n+/);
+  const chunks = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    if (current.trim()) chunks.push(current.trim());
+    current = '';
+  };
+
+  for (const para of paragraphs) {
+    const p = para.trim();
+    if (!p) continue;
+
+    if (p.length > maxChunkChars) {
+      // Flush current chunk first
+      pushCurrent();
+
+      // Hard-split oversized paragraph
+      let start = 0;
+      while (start < p.length) {
+        const slice = p.substring(start, start + maxChunkChars);
+        chunks.push(slice);
+        start += maxChunkChars;
+      }
+      continue;
+    }
+
+    if ((current + '\n\n' + p).trim().length > maxChunkChars) {
+      pushCurrent();
+      current = p;
+    } else {
+      current = current ? `${current}\n\n${p}` : p;
+    }
+  }
+
+  pushCurrent();
+  return chunks;
+}
+
+/**
+ * Call AI with prompt batching when context is too large
+ * @param {string} prompt - The full prompt
+ * @param {string} model - The model to use
+ * @param {number} maxTokens - Maximum tokens to generate per batch
+ * @param {Object} options - Batching options
+ * @param {number} options.maxPromptChars - Max prompt length before batching
+ * @param {number} options.maxContextChars - Max context chunk size
+ * @returns {Promise<string>} - The combined generated text
+ */
+export async function callAIWithBatchedContext(
+  prompt,
+  model,
+  maxTokens = 4096,
+  options = {}
+) {
+  const maxPromptChars = options.maxPromptChars || 12000;
+  const maxContextChars = options.maxContextChars || 6000;
+
+  if (!prompt || prompt.length <= maxPromptChars) {
+    return callAI(prompt, model, maxTokens);
+  }
+
+  const contextHeader = '=== CONTEXT ===';
+  const contextIndex = prompt.indexOf(contextHeader);
+
+  if (contextIndex === -1) {
+    // Fallback: split the whole prompt into batches
+    const chunks = chunkTextByParagraphs(prompt, maxPromptChars);
+    const responses = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkPrompt = `PART ${i + 1}/${chunks.length}\n\n${chunks[i]}`;
+      const result = await callAI(chunkPrompt, model, maxTokens);
+      responses.push(result.trim());
+    }
+    return responses.join('\n\n');
+  }
+
+  const header = prompt.slice(0, contextIndex).trimEnd();
+  const afterContext = prompt.slice(contextIndex + contextHeader.length).replace(/^\n/, '');
+
+  let contextInstructions = '';
+  let contextBody = afterContext.trim();
+  const instructionSplit = afterContext.indexOf('\n\n');
+
+  if (instructionSplit !== -1) {
+    contextInstructions = afterContext.slice(0, instructionSplit).trim();
+    contextBody = afterContext.slice(instructionSplit + 2).trim();
+  }
+
+  const contextChunks = chunkTextByParagraphs(contextBody, maxContextChars);
+
+  if (contextChunks.length === 1) {
+    return callAI(prompt, model, maxTokens);
+  }
+
+  const responses = [];
+  for (let i = 0; i < contextChunks.length; i++) {
+    const chunkPrompt = `${header}\n\n${contextHeader}\n${contextInstructions}\n\n=== CONTEXT PART ${i + 1}/${contextChunks.length} ===\n${contextChunks[i]}\n\n=== OUTPUT INSTRUCTIONS ===\nReturn only the portion of the final response that corresponds to this context part. Do not repeat content from other parts.`;
+    const result = await callAI(chunkPrompt, model, maxTokens);
+    responses.push(result.trim());
+  }
+
+  return responses.join('\n\n');
+}
+
 /**
  * Summarize a passage for image guidance using GPT-3.5
  * @param {string} passage - The passage to summarize

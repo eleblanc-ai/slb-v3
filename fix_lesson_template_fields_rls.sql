@@ -37,7 +37,12 @@ CREATE POLICY "Authenticated users can insert lessons"
   ON lessons FOR INSERT TO authenticated WITH CHECK (true);
 
 CREATE POLICY "Authenticated users can update lessons"
-  ON lessons FOR UPDATE TO authenticated USING (true);
+  ON lessons FOR UPDATE TO authenticated
+  USING (
+    locked_by IS NULL
+    OR locked_by = auth.uid()
+    OR locked_at < NOW() - INTERVAL '5 minutes'
+  );
 
 CREATE POLICY "Authenticated users can delete lessons"
   ON lessons FOR DELETE TO authenticated USING (true);

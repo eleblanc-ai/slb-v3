@@ -77,6 +77,7 @@ export default function MCQsField({
   onEdit,
   onDelete,
   isGenerating = false,
+  defaultStandardFramework = 'CCSS',
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [generatingQuestion, setGeneratingQuestion] = useState(null);
@@ -84,6 +85,7 @@ export default function MCQsField({
   const updateTimerRef = useRef(null);
   const isUserEditingRef = useRef(false);
   const hasInitializedRef = useRef(false);
+  const hasNormalizedRef = useRef(false);
   
   // Get question labels from field config or defaults
   const getQuestionConfig = (index) => {
@@ -112,6 +114,33 @@ export default function MCQsField({
   const questions = value?.questions || Array(5).fill('');
   const sourceStandards = value?.sourceStandards || {};
   const filteredOutStandards = value?.filteredOutStandards || {};
+
+  const normalizeQuestionContent = (content) => {
+    if (!content || typeof content !== 'string') return '';
+    const trimmed = content.trim();
+    if (!trimmed) return '';
+    const lower = trimmed.toLowerCase();
+    if (lower.includes('<p') || lower.includes('<br') || lower.includes('<div') || lower.includes('</')) {
+      return trimmed;
+    }
+    const withBreaks = trimmed.replace(/\n+/g, '<br>');
+    return `<p>${withBreaks}</p>`;
+  };
+
+  const normalizedQuestions = questions.map(normalizeQuestionContent);
+
+  useEffect(() => {
+    if (!onChange || hasNormalizedRef.current) return;
+    const hasDiff = normalizedQuestions.some((q, idx) => q !== questions[idx]);
+    if (!hasDiff) return;
+    hasNormalizedRef.current = true;
+    onChange({
+      questions: normalizedQuestions,
+      standards: questionStandards,
+      sourceStandards: sourceStandards,
+      filteredOutStandards: filteredOutStandards
+    });
+  }, [onChange, normalizedQuestions, questions, questionStandards, sourceStandards, filteredOutStandards]);
   
   const handleQuestionChange = (index, content, updatedFilteredOut = null) => {
     const updatedQuestions = [...questions];
@@ -266,7 +295,7 @@ export default function MCQsField({
               style={{ display: activeTab === index ? 'block' : 'none' }}
             >
               <QuestionEditor
-                value={questions[index] || ''}
+                value={normalizedQuestions[index] || ''}
                 onChange={(content) => handleQuestionChange(index, content)}
                 placeholder={`Question ${index + 1} will be generated here...`}
                 isGenerating={generatingQuestion === index}
@@ -274,6 +303,7 @@ export default function MCQsField({
                 selectedStandard={questionStandards[index]}
                 onStandardChange={(standard) => handleStandardChange(index, standard)}
                 field={field}
+                defaultStandardFramework={defaultStandardFramework}
                 sourceStandard={sourceStandards[index]}
                 filteredOutStandards={filteredOutStandards[index]}
                 onRestoreStandard={(code, updatedContent) => handleRestoreStandard(index, code, updatedContent)}
@@ -287,7 +317,7 @@ export default function MCQsField({
 }
 
 // Individual Question Editor Component
-function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange, field, sourceStandard, filteredOutStandards, onRestoreStandard }) {
+function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenerate, selectedStandard, onStandardChange, field, defaultStandardFramework, sourceStandard, filteredOutStandards, onRestoreStandard }) {
   const updateTimerRef = useRef(null);
   const isUserEditingRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -403,7 +433,7 @@ function QuestionEditor({ value, onChange, placeholder, isGenerating, onRegenera
           <StandardsSearch
             selectedStandard={selectedStandard}
             onStandardChange={onStandardChange}
-            defaultFramework={field.framework || 'CCSS'}
+            defaultFramework={defaultStandardFramework || field?.framework || 'CCSS'}
           />
           <button
             type="button"

@@ -8,6 +8,7 @@
  * @param {string[]} config.selectedFieldIds - IDs of context fields
  * @param {Array} config.allFields - Array of all available fields
  * @param {Object} config.fieldValues - Object with field values
+ * @param {Array} config.extraContextBlocks - Additional context blocks to append
  * @returns {string} - The complete prompt to send to AI
  */
 export function buildFullPrompt(config) {
@@ -18,7 +19,8 @@ export function buildFullPrompt(config) {
     contextInstructions = '',
     selectedFieldIds = [],
     allFields = [],
-    fieldValues = {}
+    fieldValues = {},
+    extraContextBlocks = []
   } = config;
 
   let fullPrompt = '';
@@ -39,8 +41,8 @@ export function buildFullPrompt(config) {
   fullPrompt += '=== FORMAT REQUIREMENTS ===\n';
   fullPrompt += (formatRequirements || 'No specific format requirements.') + '\n\n';
 
-  // Add context if any fields are selected
-  if (selectedFieldIds.length > 0) {
+  // Add context if any fields are selected or extra context blocks are provided
+  if (selectedFieldIds.length > 0 || extraContextBlocks.length > 0) {
     fullPrompt += '=== CONTEXT ===\n';
     // ALWAYS add context instructions
     fullPrompt += (contextInstructions || 'Use the following context information to complete the task.') + '\n\n';
@@ -62,6 +64,13 @@ export function buildFullPrompt(config) {
         fullPrompt += `${contextField.name}: ${displayValue}\n`;
       }
     });
+
+    if (extraContextBlocks.length > 0) {
+      extraContextBlocks.forEach(block => {
+        if (!block || !block.title || !block.content) return;
+        fullPrompt += `\n${block.title}:\n${block.content}\n`;
+      });
+    }
   }
 
   console.log('📋 Built prompt:\n', fullPrompt);

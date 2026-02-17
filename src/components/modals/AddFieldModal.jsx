@@ -62,7 +62,7 @@ const fieldTypes = [
   },
 ];
 
-export default function AddEditFieldModal({ visible, onClose, onFieldAdded, field = null }) {
+export default function AddEditFieldModal({ visible, onClose, onFieldAdded, field = null, defaultFramework = 'CCSS' }) {
   console.log('🔵 AddEditFieldModal rendered:', { 
     visible, 
     isEditMode: !!field, 
@@ -86,7 +86,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
   const [dropdownOptions, setDropdownOptions] = useState(field?.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
   const [minSelections, setMinSelections] = useState(field?.min_selections || 0);
   const [maxSelections, setMaxSelections] = useState(field?.max_selections || 0);
-  const [framework, setFramework] = useState(field?.framework || 'CCSS');
+  const [maxStandardsInput, setMaxStandardsInput] = useState(
+    field?.max_selections ? String(field.max_selections) : ''
+  );
+  const [framework, setFramework] = useState(field?.framework || defaultFramework || 'CCSS');
 
   console.log('📊 Initial framework state:', framework);
 
@@ -107,8 +110,9 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setDropdownOptions(field.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
       setMinSelections(field.min_selections || 0);
       setMaxSelections(field.max_selections || 0);
-      setFramework(field.framework || 'CCSS');
-      console.log('✅ Framework state updated to:', field.framework || 'CCSS');
+      setMaxStandardsInput(field.max_selections ? String(field.max_selections) : '');
+      setFramework(field.framework || defaultFramework || 'CCSS');
+      console.log('✅ Framework state updated to:', field.framework || defaultFramework || 'CCSS');
     }
   }, [field]);
 
@@ -129,9 +133,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setDropdownOptions('');
       setMinSelections(0);
       setMaxSelections(0);
-      setFramework('CCSS');
+      setMaxStandardsInput('');
+      setFramework(defaultFramework || 'CCSS');
     }
-  }, [visible, field]);
+  }, [visible, field, defaultFramework]);
 
   if (!visible) return null;
 
@@ -203,6 +208,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     // Add framework for assign_standards field
     if (selectedType === 'assign_standards') {
       fieldData.framework = framework;
+      const parsedMaxStandards = parseInt(maxStandardsInput, 10);
+      if (!Number.isNaN(parsedMaxStandards) && parsedMaxStandards > 0) {
+        fieldData.max_selections = parsedMaxStandards;
+      }
       console.log('✅ Setting assign_standards framework:', framework);
     }
     
@@ -568,7 +577,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   </div>
                 </div>
               )}
-              {/* Framework Selection for Assign Standards */}
+              {/* Assign Standards Settings */}
               {selectedType === 'assign_standards' && (
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{
@@ -609,6 +618,32 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   }}>
                     Select which framework standards to use for this field. Available: CCSS, BLOOM, TEKS, B.E.S.T., GSE.
                   </p>
+
+                  <div style={{ marginTop: '1rem' }}>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.5rem',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-700)'
+                    }}>
+                      Max Standards (leave blank for default 10)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={maxStandardsInput}
+                      onChange={(e) => setMaxStandardsInput(e.target.value)}
+                      placeholder="10"
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem',
+                        border: '1px solid var(--gray-300)',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem'
+                      }}
+                    />
+                  </div>
                 </div>
               )}
               {/* Grade Band Selector Info */}

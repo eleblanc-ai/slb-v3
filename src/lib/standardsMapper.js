@@ -119,6 +119,160 @@ export function extractGradeFromBand(gradeValue) {
 }
 
 /**
+ * Get CCSS vocabulary standards for a grade (L.4 and L.6), with range fallback
+ * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @returns {Promise<string[]>} - Matching CCSS codes
+ */
+export async function getCcssVocabularyStandardsForGrade(gradeLevel) {
+  if (gradeLevel === null || gradeLevel === undefined) return [];
+
+  const numericGrade = parseInt(gradeLevel.toString(), 10);
+  if (Number.isNaN(numericGrade)) return [];
+
+  const data = await loadMOACData();
+  const codeSet = new Set(
+    data.map(row => row.ccssCode).filter(Boolean)
+  );
+
+  const suffixes = ['4', '6'];
+  const exactCodes = [];
+  suffixes.forEach(level => {
+    const rCode = `CCSS.R.${numericGrade}.L.${level}`;
+    const lCode = `CCSS.L.${numericGrade}.${level}`;
+    if (codeSet.has(rCode)) exactCodes.push(rCode);
+    if (codeSet.has(lCode)) exactCodes.push(lCode);
+  });
+
+  if (exactCodes.length > 0) {
+    return exactCodes;
+  }
+
+  const rangeEntries = [];
+  for (const code of codeSet) {
+    let match = code.match(/^CCSS\.R\.(\d+)-(\d+)\.L\.(4|6)$/i);
+    if (match) {
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      if (!Number.isNaN(start) && !Number.isNaN(end)) {
+        rangeEntries.push({ code, start, end, level: match[3] });
+      }
+      continue;
+    }
+
+    match = code.match(/^CCSS\.L\.(\d+)-(\d+)\.(4|6)$/i);
+    if (match) {
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      if (!Number.isNaN(start) && !Number.isNaN(end)) {
+        rangeEntries.push({ code, start, end, level: match[3] });
+      }
+    }
+  }
+
+  if (rangeEntries.length === 0) return [];
+
+  const inclusive = rangeEntries.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+  const candidates = inclusive.length > 0 ? inclusive : rangeEntries;
+
+  // If no inclusive match, choose nearest ranges by distance to grade
+  let filteredCandidates = candidates;
+  if (inclusive.length === 0) {
+    let bestDistance = Infinity;
+    for (const entry of candidates) {
+      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+      }
+    }
+    filteredCandidates = candidates.filter(entry => {
+      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+      return distance === bestDistance;
+    });
+  }
+
+  const order = { '4': 0, '6': 1 };
+  return filteredCandidates
+    .map(entry => entry.code)
+    .sort((a, b) => {
+      const aMatch = a.match(/\.L\.(4|6)$/i);
+      const bMatch = b.match(/\.L\.(4|6)$/i);
+      const aOrder = aMatch ? order[aMatch[1]] : 99;
+      const bOrder = bMatch ? order[bMatch[1]] : 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.localeCompare(b);
+    });
+}
+
+/**
+ * Get framework-specific mapped vocab standards for a grade (mapped from CCSS L.4/L.6)
+ * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {string} framework - Target framework (e.g., 'TEKS', 'BEST', 'BLOOM', 'GSE')
+ * @returns {Promise<string[]>} - Matching mapped codes for the framework
+ */
+export async function getMappedVocabularyStandardsForGrade(gradeLevel, framework) {
+  if (!framework || framework.toUpperCase() === 'CCSS') return [];
+  if (gradeLevel === null || gradeLevel === undefined) return [];
+
+  const numericGrade = parseInt(gradeLevel.toString(), 10);
+  if (Number.isNaN(numericGrade)) return [];
+
+  const data = await loadMOACData();
+  const normalizedFramework = framework.toUpperCase();
+
+  const suffixes = ['4', '6'];
+  const exactCcssCodes = [];
+  suffixes.forEach(level => {
+    exactCcssCodes.push(`CCSS.L.${numericGrade}.${level}`);
+    exactCcssCodes.push(`CCSS.R.${numericGrade}.L.${level}`);
+  });
+
+  let matchingRows = data.filter(row =>
+    exactCcssCodes.includes(row.ccssCode) && row.mappedFramework === normalizedFramework
+  );
+
+  if (matchingRows.length === 0) {
+    const rangeMatches = [];
+    for (const row of data) {
+      if (row.mappedFramework !== normalizedFramework) continue;
+      let match = row.ccssCode?.match(/^CCSS\.L\.(\d+)-(\d+)\.(4|6)$/i);
+      if (!match) {
+        match = row.ccssCode?.match(/^CCSS\.R\.(\d+)-(\d+)\.L\.(4|6)$/i);
+      }
+      if (!match) continue;
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      if (Number.isNaN(start) || Number.isNaN(end)) continue;
+      rangeMatches.push({ row, start, end, level: match[3] });
+    }
+
+    const inclusive = rangeMatches.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+    const candidates = inclusive.length > 0 ? inclusive : rangeMatches;
+
+    if (candidates.length > 0) {
+      let filtered = candidates;
+      if (inclusive.length === 0) {
+        let bestDistance = Infinity;
+        for (const entry of candidates) {
+          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+          if (distance < bestDistance) bestDistance = distance;
+        }
+        filtered = candidates.filter(entry => {
+          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+          return distance === bestDistance;
+        });
+      }
+      matchingRows = filtered.map(entry => entry.row);
+    }
+  }
+
+  const codes = matchingRows
+    .map(row => row.mappedCode)
+    .filter(Boolean);
+
+  return [...new Set(codes)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Get all framework mappings for a CCSS code
  * @param {string} ccssCode - The CCSS code to look up (e.g., "CCSS.L.3.1")
  * @param {number|string} gradeLevel - Optional grade level to filter results (e.g., 11 or 12)
