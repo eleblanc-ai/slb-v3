@@ -45,6 +45,48 @@ export async function callAI(prompt, model, maxTokens = 4096) {
 }
 
 /**
+ * Summarize a passage for image guidance using GPT-3.5
+ * @param {string} passage - The passage to summarize
+ * @param {number} maxChars - Maximum character length for the summary
+ * @returns {Promise<string|null>} - The summary or null if unavailable
+ */
+export async function summarizePassageForImage(passage, maxChars = 700) {
+  if (!passage || !import.meta.env.VITE_OPENAI_API_KEY) return null;
+
+  const trimmed = passage.trim();
+  if (!trimmed) return null;
+
+  const safePassage = trimmed.length > 6000 ? trimmed.substring(0, 6000) : trimmed;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `Summarize passages for guiding cover image creation. Output plain text only. Keep it vivid and concrete. Limit to ${maxChars} characters or fewer.`
+        },
+        {
+          role: 'user',
+          content: `Passage:\n${safePassage}\n\nSummary (<=${maxChars} chars):`
+        }
+      ],
+      max_tokens: 300
+    });
+
+    let summary = response.choices?.[0]?.message?.content?.trim() || '';
+    if (!summary) return null;
+    if (summary.length > maxChars) {
+      summary = summary.substring(0, maxChars).trim();
+    }
+    return summary;
+  } catch (error) {
+    console.warn('⚠️ Passage summary failed:', error?.message || error);
+    return null;
+  }
+}
+
+/**
  * Call AI with function calling / structured output
  * @param {string} prompt - The prompt to send
  * @param {string} model - The model to use

@@ -36,6 +36,12 @@ export default function ConfigureAIModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showSyncConfirm, setShowSyncConfirm] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
+  const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
+  const defaultFormatReqs = 'Return plain text without markdown formatting.';
 
   // Get default prompts for MCQ questions
   const getDefaultQuestionPrompts = useCallback(() => {
@@ -52,9 +58,6 @@ export default function ConfigureAIModal({
   console.log('🔧 ConfigureAIModal mode:', mode, 'field:', field?.name);
 
   const loadConfiguration = useCallback(async () => {
-    const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
-    const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
-    const defaultFormatReqs = 'Return plain text without markdown formatting.';
     const defaultQuestionPrompts = getDefaultQuestionPrompts();
     
     try {
@@ -148,6 +151,120 @@ export default function ConfigureAIModal({
     
     setLoading(false);
   }, [field?.id, field?.name, mode, lessonId, getDefaultQuestionPrompts]);
+
+  const buildCurrentConfigPayload = () => ({
+    ai_prompt: prompt || null,
+    ai_question_prompts: field?.type === 'mcqs' ? questionPrompts : null,
+    ai_context_field_ids: selectedFields.length > 0 ? selectedFields : null,
+    ai_system_instructions: systemInstructions || null,
+    ai_context_instructions: contextInstructions || null,
+    ai_format_requirements: formatRequirements || null
+  });
+
+  const downloadCurrentConfig = () => {
+    if (!field) return;
+    const payload = buildCurrentConfigPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${field.name || 'field'}-ai-config.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSyncFromTemplate = async () => {
+    if (!lessonId || !field) return;
+    setSyncing(true);
+    try {
+      const { data: templateData, error: templateError } = await supabase
+        .from('lesson_template_fields')
+        .select('ai_prompt, ai_question_prompts, ai_context_field_ids, ai_system_instructions, ai_context_instructions, ai_format_requirements')
+        .eq('id', field.id)
+        .single();
+
+      if (templateError || !templateData) throw templateError || new Error('Template config not found');
+
+      const { data: lessonData, error: lessonError } = await supabase
+        .from('lessons')
+        .select('user_ai_config')
+        .eq('id', lessonId)
+        .single();
+
+      if (lessonError) throw lessonError;
+
+      const nextUserConfig = {
+        ...(lessonData?.user_ai_config || {}),
+        [field.id]: templateData
+      };
+
+      const { error: updateError } = await supabase
+        .from('lessons')
+        .update({ user_ai_config: nextUserConfig })
+        .eq('id', lessonId);
+
+      if (updateError) throw updateError;
+
+      const defaultQuestionPrompts = getDefaultQuestionPrompts();
+
+      setPrompt(templateData.ai_prompt || `Generate content for the ${field.name} field.`);
+      if (templateData.ai_question_prompts) {
+        const savedPrompts = templateData.ai_question_prompts;
+        setQuestionPrompts({
+          q1: { 
+            prompt: savedPrompts.q1?.prompt || savedPrompts.q1 || defaultQuestionPrompts.q1.prompt, 
+            label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
+            tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip
+          },
+          q2: { 
+            prompt: savedPrompts.q2?.prompt || savedPrompts.q2 || defaultQuestionPrompts.q2.prompt, 
+            label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
+            tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip
+          },
+          q3: { 
+            prompt: savedPrompts.q3?.prompt || savedPrompts.q3 || defaultQuestionPrompts.q3.prompt, 
+            label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
+            tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip
+          },
+          q4: { 
+            prompt: savedPrompts.q4?.prompt || savedPrompts.q4 || defaultQuestionPrompts.q4.prompt, 
+            label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
+            tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip
+          },
+          q5: { 
+            prompt: savedPrompts.q5?.prompt || savedPrompts.q5 || defaultQuestionPrompts.q5.prompt, 
+            label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
+            tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip
+          }
+        });
+      } else {
+        setQuestionPrompts(defaultQuestionPrompts);
+      }
+      setSystemInstructions(templateData.ai_system_instructions || defaultSystemInstructions);
+      setContextInstructions(templateData.ai_context_instructions || defaultContextInstructions);
+      setFormatRequirements(templateData.ai_format_requirements || defaultFormatReqs);
+      setSelectedFields(templateData.ai_context_field_ids || []);
+
+      if (onSave) {
+        onSave({
+          prompt: templateData.ai_prompt || '',
+          questionPrompts: templateData.ai_question_prompts || null,
+          contextFields: templateData.ai_context_field_ids || [],
+          systemInstructions: templateData.ai_system_instructions || defaultSystemInstructions,
+          contextInstructions: templateData.ai_context_instructions || defaultContextInstructions,
+          formatRequirements: templateData.ai_format_requirements || defaultFormatReqs,
+          selectedFieldIds: templateData.ai_context_field_ids || []
+        }, { keepOpen: true, source: 'sync' });
+      }
+
+      setShowSyncConfirm(false);
+    } catch (err) {
+      console.error('Error syncing AI config:', err);
+      alert('Failed to sync AI configuration from template. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const emptyQuestionPrompts = {
     q1: { prompt: '', label: '', tooltip: '' },
@@ -337,6 +454,30 @@ export default function ConfigureAIModal({
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            {mode === 'lesson' && (
+              <button
+                onClick={() => setShowSyncConfirm(true)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#1d4ed8',
+                  background: '#eff6ff',
+                  border: '2px solid #93c5fd',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dbeafe';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = '#eff6ff';
+                }}
+              >
+                Sync from Template
+              </button>
+            )}
             <button
               onClick={() => setShowPreview(!showPreview)}
               style={{
@@ -1088,6 +1229,141 @@ export default function ConfigureAIModal({
           </div>
         </div>
       </div>
+
+      {showSyncConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: `blur(${APP_CONFIG.modals.backdropBlur})`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            maxWidth: '520px',
+            width: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{
+              padding: '1.5rem',
+              borderBottom: '1px solid var(--gray-200)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h2 style={{
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: 'var(--gray-900)',
+                margin: 0
+              }}>
+                Sync AI Config from Template
+              </h2>
+              <button
+                onClick={() => setShowSyncConfirm(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--gray-500)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.5rem' }}>
+              <p style={{
+                color: 'var(--gray-600)',
+                fontSize: '0.95rem',
+                marginBottom: '1rem',
+                lineHeight: 1.5
+              }}>
+                This will overwrite the current lesson AI settings for <strong>{field?.name}</strong> with the latest
+                template configuration.
+              </p>
+
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid var(--gray-200)',
+                borderRadius: '10px',
+                padding: '0.75rem 1rem',
+                marginBottom: '1.25rem'
+              }}>
+                <div style={{
+                  fontSize: '0.8125rem',
+                  color: 'var(--gray-700)',
+                  marginBottom: '0.5rem',
+                  fontWeight: 600
+                }}>
+                  Want a backup first?
+                </div>
+                <button
+                  onClick={downloadCurrentConfig}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    color: 'var(--gray-800)',
+                    background: '#fff',
+                    border: '1px solid var(--gray-300)',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Download current config
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowSyncConfirm(false)}
+                  style={{
+                    padding: '0.6rem 1rem',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: 'var(--gray-700)',
+                    background: '#fff',
+                    border: '1px solid var(--gray-300)',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                  disabled={syncing}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSyncFromTemplate}
+                  style={{
+                    padding: '0.6rem 1rem',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: '#fff',
+                    background: syncing ? '#93c5fd' : '#2563eb',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: syncing ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={syncing}
+                >
+                  {syncing ? 'Syncing...' : 'Sync now'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

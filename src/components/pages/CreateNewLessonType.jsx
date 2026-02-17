@@ -21,7 +21,7 @@ import MCQsField from '../fields/MCQsField';
 import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
-import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
+import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
 import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
@@ -671,6 +671,19 @@ export default function CreateNewLessonType() {
 
         // Build the prompt using the shared function
         let imagePrompt = buildFullPrompt(aiConfig);
+
+        // Extract passage (if present in context fields) to summarize for image guidance
+        let passageText = '';
+        if (fieldData.ai_context_field_ids && fieldData.ai_context_field_ids.length > 0) {
+          fieldData.ai_context_field_ids.forEach(id => {
+            const contextField = fields.find(f => f.id === id);
+            const val = storedFieldValues[id];
+            if (contextField && val && !passageText && /passage/i.test(contextField.name)) {
+              const displayVal = typeof val === 'string' ? val : (val.text || val.value || JSON.stringify(val));
+              passageText = displayVal.replace(/<[^>]*>/g, '').trim();
+            }
+          });
+        }
         
         // Add the optional user-provided image description if it exists
         const currentFieldValue = storedFieldValues[field.id];
@@ -679,6 +692,14 @@ export default function CreateNewLessonType() {
           console.log('✏️ Added user-provided image description to prompt');
         }
         
+        if (passageText) {
+          console.log('📝 Summarizing passage for image guidance...');
+          const passageSummary = await summarizePassageForImage(passageText, 700);
+          if (passageSummary) {
+            imagePrompt = `Passage summary for cover image (<=700 chars):\n${passageSummary}\n\n${imagePrompt}`;
+          }
+        }
+
         console.log('🎨 Image generation prompt:', imagePrompt);
         
         // Generate the image

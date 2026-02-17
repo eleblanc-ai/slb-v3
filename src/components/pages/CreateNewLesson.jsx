@@ -24,7 +24,7 @@ import MCQsField from '../fields/MCQsField';
 import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
-import { callAI, callAIWithFunction, generateImage, generateAltText } from '../../lib/aiClient';
+import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
 import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
@@ -458,7 +458,7 @@ export default function CreateNewLesson() {
   };
 
   // Handler: save AI config - implements snapshot system for lesson-specific configs
-  const handleAIConfigSave = async (config) => {
+  const handleAIConfigSave = async (config, options = {}) => {
     if (!lessonId || !aiConfigField) return;
     
     try {
@@ -516,7 +516,9 @@ export default function CreateNewLesson() {
       if (updateError) throw updateError;
       
       console.log('✅ Successfully saved lesson AI config');
-      setAIConfigField(null);
+      if (!options.keepOpen) {
+        setAIConfigField(null);
+      }
     } catch (error) {
       console.error('Error saving lesson AI config:', error);
       alert('Failed to save AI configuration. Please try again.');
@@ -1174,6 +1176,7 @@ export default function CreateNewLesson() {
         }
         
         // Add context from other fields if specified, but format it for an image generator
+        let passageText = '';
         if (fieldAIConfig.ai_context_field_ids && fieldAIConfig.ai_context_field_ids.length > 0) {
           let contextDetails = [];
           fieldAIConfig.ai_context_field_ids.forEach(id => {
@@ -1182,13 +1185,26 @@ export default function CreateNewLesson() {
             if (contextField && val) {
               const displayVal = typeof val === 'string' ? val : (val.text || val.value || JSON.stringify(val));
               // Strip HTML for the image generator
-              const cleanVal = displayVal.replace(/<[^>]*>/g, '').substring(0, 500);
+              const cleanValFull = displayVal.replace(/<[^>]*>/g, '').trim();
+              const cleanVal = cleanValFull.length > 500 ? `${cleanValFull.substring(0, 500)}...` : cleanValFull;
               contextDetails.push(`${contextField.name}: ${cleanVal}`);
+
+              if (!passageText && /passage/i.test(contextField.name)) {
+                passageText = cleanValFull;
+              }
             }
           });
           
           if (contextDetails.length > 0) {
             imagePrompt += `\n\nSubject matter context:\n${contextDetails.join('\n')}`;
+          }
+        }
+
+        if (passageText) {
+          console.log('📝 Summarizing passage for image guidance...');
+          const passageSummary = await summarizePassageForImage(passageText, 700);
+          if (passageSummary) {
+            imagePrompt = `Passage summary for cover image (<=700 chars):\n${passageSummary}\n\n${imagePrompt}`;
           }
         }
         
