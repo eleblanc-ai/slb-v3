@@ -202,6 +202,15 @@ export default function BrowseLessons() {
   };
 
   const renderLessonCard = (lesson) => {
+    const formatName = (name) => {
+      if (!name) return 'Unknown User';
+      const parts = name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 1) return parts[0];
+      const first = parts[0];
+      const lastInitial = parts[parts.length - 1]?.[0];
+      return lastInitial ? `${first} ${lastInitial}.` : first;
+    };
+
     const allResponses = { ...(lesson.designer_responses || {}), ...(lesson.builder_responses || {}) };
     const thumbnailUrl = Object.values(allResponses).find(
       val => val && typeof val === 'object' && val.url && !val.url.startsWith('data:')
@@ -333,74 +342,85 @@ export default function BrowseLessons() {
 
           {/* Creator and timestamps */}
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.75rem',
-            color: 'var(--gray-600)',
-            marginBottom: '0.5rem'
-          }}>
-            <User size={12} />
-            <span>Created by {lesson.creator?.display_name || 'Unknown User'}</span>
-          </div>
-
-          {lesson.updater?.display_name && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '0.75rem',
-              color: 'var(--gray-600)',
-              marginBottom: '0.5rem'
-            }}>
-              <User size={12} />
-              <span>Last updated by {lesson.updater.display_name}</span>
-            </div>
-          )}
-
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.75rem',
-            color: 'var(--gray-600)',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '0.75rem',
             marginBottom: '0.75rem'
           }}>
-            <Calendar size={12} />
-            <span>
-              Created {new Date(lesson.created_at).toLocaleString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-              })}
-            </span>
-          </div>
-
-          {lesson.updated_at && (
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '0.75rem',
-              color: 'var(--gray-600)',
-              marginBottom: '0.75rem'
+              padding: '0.5rem 0.75rem',
+              border: '1px solid var(--gray-200)',
+              borderRadius: '0.5rem'
             }}>
-              <Calendar size={12} />
-              <span>
-                Updated {new Date(lesson.updated_at).toLocaleString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
+              <div style={{
+                fontSize: '0.6875rem',
+                color: 'var(--gray-500)',
+                marginBottom: '0.25rem'
+              }}>
+                Created by
+              </div>
+              <div style={{
+                fontSize: '0.8125rem',
+                color: 'var(--gray-800)',
+                fontWeight: 600,
+                marginBottom: '0.25rem'
+              }}>
+                {formatName(lesson.creator?.display_name)}
+              </div>
+              <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--gray-600)'
+              }}>
+                {new Date(lesson.created_at).toLocaleString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
                   year: 'numeric',
                   hour: 'numeric',
                   minute: '2-digit',
                   hour12: true
                 })}
-              </span>
+              </div>
             </div>
-          )}
+
+            <div style={{
+              padding: '0.5rem 0.75rem',
+              border: '1px solid var(--gray-200)',
+              borderRadius: '0.5rem'
+            }}>
+              <div style={{
+                fontSize: '0.6875rem',
+                color: 'var(--gray-500)',
+                marginBottom: '0.25rem'
+              }}>
+                Last updated
+              </div>
+              <div style={{
+                fontSize: '0.8125rem',
+                color: 'var(--gray-800)',
+                fontWeight: 600,
+                marginBottom: '0.25rem'
+              }}>
+                {lesson.updater?.display_name
+                  ? formatName(lesson.updater.display_name)
+                  : '—'}
+              </div>
+              <div style={{
+                fontSize: '0.75rem',
+                color: 'var(--gray-600)'
+              }}>
+                {lesson.updated_at
+                  ? new Date(lesson.updated_at).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                  : '—'}
+              </div>
+            </div>
+          </div>
 
           {/* Response counts */}
           <div style={{
