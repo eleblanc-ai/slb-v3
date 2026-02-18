@@ -1,5 +1,6 @@
 export const APP_CONFIG = {
   title: 'Smart Lesson Builder',
+  owner: 'ThinkCERCA',
   version: 'v3',
   hero: {
     title: 'Build Beautiful Lessons in Minutes',
