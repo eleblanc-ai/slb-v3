@@ -638,7 +638,6 @@
 /* Footer */
 .footer {
   background: white;
-  border-top: 1px solid var(--gray-200);
   padding: 0.75rem 2rem;
 }
 

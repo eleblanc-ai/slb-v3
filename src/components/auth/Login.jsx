@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
+import favicon from '../../assets/favicon.ico';
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -82,7 +83,7 @@ export default function Login({ onLogin }) {
     <div style={{
       minHeight: '100vh',
       width: '100%',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
       paddingTop: APP_CONFIG.auth.paddingTop,
       display: 'flex',
       alignItems: 'flex-start',
@@ -96,6 +97,24 @@ export default function Login({ onLogin }) {
       }}>
         {/* Logo/Title Section */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '0.75rem',
+              borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.95)',
+              padding: '12px',
+              boxShadow: '0 0 16px rgba(255, 255, 255, 0.9), 0 0 28px rgba(59, 130, 246, 0.35)'
+            }}
+          >
+            <img
+              src={favicon}
+              alt=""
+              style={{ width: '64px', height: '64px', display: 'block' }}
+            />
+          </span>
           <h1 style={{
             fontSize: '2.25rem',
             fontWeight: '600',
