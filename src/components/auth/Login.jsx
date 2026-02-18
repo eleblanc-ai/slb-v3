@@ -46,18 +46,10 @@ export default function Login({ onLogin }) {
         } else {
           setSuccess('Check your email to confirm your account before signing in.');
         }
-      } else if (mode === 'magic') {
-        const { error } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        setSuccess('Check your email for a magic link to sign in.');
       } else if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: window.location.origin,
+        });
 
         if (error) {
           throw error;
@@ -125,11 +117,9 @@ export default function Login({ onLogin }) {
           <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '1rem' }}>
             {mode === 'signup'
               ? 'Create your account to continue'
-              : mode === 'magic'
-                ? 'Send a magic link to sign in'
-                : mode === 'reset'
-                  ? 'Send a password reset link'
-                  : 'Please log in to continue'}
+              : mode === 'reset'
+                ? 'Send a password reset link'
+                : 'Please log in to continue'}
           </p>
         </div>
 
@@ -275,18 +265,14 @@ export default function Login({ onLogin }) {
               {loading
                 ? (mode === 'signup'
                   ? 'Signing up...'
-                  : mode === 'magic'
-                    ? 'Sending link...'
-                    : mode === 'reset'
-                      ? 'Sending reset...'
-                      : 'Signing in...')
+                  : mode === 'reset'
+                    ? 'Sending reset...'
+                    : 'Signing in...')
                 : (mode === 'signup'
                   ? 'Sign Up'
-                  : mode === 'magic'
-                    ? 'Send Magic Link'
-                    : mode === 'reset'
-                      ? 'Send Reset Link'
-                      : 'Sign In')}
+                  : mode === 'reset'
+                    ? 'Send Reset Link'
+                    : 'Sign In')}
             </button>
 
             <div style={{
@@ -349,24 +335,6 @@ export default function Login({ onLogin }) {
               <button
                 type="button"
                 onClick={() => {
-                  setMode('magic');
-                  setError('');
-                  setSuccess('');
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#2563eb',
-                  cursor: 'pointer',
-                  fontWeight: 500
-                }}
-              >
-                Send magic link
-              </button>
-              <span style={{ margin: '0 0.5rem', color: '#9ca3af' }}>|</span>
-              <button
-                type="button"
-                onClick={() => {
                   setMode('reset');
                   setError('');
                   setSuccess('');
@@ -381,7 +349,7 @@ export default function Login({ onLogin }) {
               >
                 Reset password
               </button>
-              {(mode === 'magic' || mode === 'reset') && (
+              {mode === 'reset' && (
                 <>
                   <span style={{ margin: '0 0.5rem', color: '#9ca3af' }}>|</span>
                   <button

@@ -21,7 +21,33 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileChecked, setProfileChecked] = useState(false);
   const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [postLoginRedirect, setPostLoginRedirect] = useState(false);
+
+  const detectPasswordRecovery = () => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const searchParams = new URLSearchParams(window.location.search);
+    const typeParam = searchParams.get('type') || hashParams.get('type');
+    return typeParam === 'recovery';
+  };
+
+  const clearRecoveryParams = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.delete('type');
+    url.searchParams.delete('code');
+    window.history.replaceState({}, document.title, url.toString());
+  };
 
   const fetchProfile = async (userId, forceLoading = true) => {
     // Only set loading state if we're forcing it (initial load)
@@ -52,20 +78,29 @@ function App() {
       if (forceLoading) {
         setProfileLoading(false);
       }
+      setProfileChecked(true);
     }
   };
 
   useEffect(() => {
     // Check active session
+    const hasRecoveryInUrl = detectPasswordRecovery();
+    if (hasRecoveryInUrl) {
+      setPasswordRecovery(true);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Session:', session);
       setSession(session);
       
       if (session?.user) {
+        setProfileChecked(false);
         fetchProfile(session.user.id).finally(() => {
           setLoading(false);
         });
       } else {
+        setProfileChecked(false);
+        setPostLoginRedirect(true);
         setLoading(false);
       }
     });
@@ -75,6 +110,11 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('Auth state changed:', _event, session);
+
+      if (_event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true);
+      }
+
       // Only update state if the session actually changed
       setSession((prevSession) => {
         // If the session hasn't actually changed, don't update
@@ -85,9 +125,12 @@ function App() {
         
         // Session changed - fetch profile but don't show loading screen
         if (session?.user) {
+          setProfileChecked(false);
           fetchProfile(session.user.id, false);
         } else {
           setProfile(null);
+          setProfileChecked(false);
+          setPostLoginRedirect(true);
         }
         
         return session;
@@ -120,6 +163,8 @@ function App() {
       setSession(newSession);
     }
     setNeedsPassword(false);
+    setPasswordRecovery(false);
+    clearRecoveryParams();
   };
 
   // Check if user needs to set a password (invited users via magic link)
@@ -142,7 +187,15 @@ function App() {
     checkPasswordStatus();
   }, [session, profile]);
 
-  if (loading || profileLoading) {
+  useEffect(() => {
+    if (session && postLoginRedirect) {
+      const targetUrl = new URL(window.location.origin);
+      window.history.replaceState({}, document.title, targetUrl.toString());
+      setPostLoginRedirect(false);
+    }
+  }, [session, postLoginRedirect]);
+
+  if (loading || profileLoading || (session && !profileChecked)) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -208,14 +261,19 @@ function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  // If user is logged in but doesn't have a display name, show the display name form
-  if (session && (!profile || !profile.display_name)) {
-    return <SetDisplayName userId={session.user.id} onComplete={handleDisplayNameComplete} />;
+  // If user is in password recovery flow, show password form
+  if (session && passwordRecovery) {
+    return <SetPassword onComplete={handlePasswordComplete} />;
   }
 
   // If user needs to set a password (invited user), show password form
   if (session && needsPassword) {
     return <SetPassword onComplete={handlePasswordComplete} />;
+  }
+
+  // If user is logged in but doesn't have a display name, show the display name form
+  if (session && profileChecked && (!profile || !profile.display_name)) {
+    return <SetDisplayName userId={session.user.id} onComplete={handleDisplayNameComplete} />;
   }
 
   return (
