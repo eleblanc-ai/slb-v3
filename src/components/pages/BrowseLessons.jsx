@@ -93,14 +93,17 @@ export default function BrowseLessons() {
       // Add creator and template info to lessons
       const lessonsWithCreator = lessonsData?.map(lesson => {
         // Use created_by for the creator display
-        const userId = lesson.created_by;
-        const displayName = profileMap[userId] || 'Unknown User';
+        const creatorId = lesson.created_by;
+        const creatorName = profileMap[creatorId] || 'Unknown User';
+        const updaterId = lesson.updated_by;
+        const updaterName = profileMap[updaterId] || (updaterId ? 'Unknown User' : null);
         
         console.log(`Lesson ${lesson.id.slice(0, 8)}: userId=${userId?.slice(0, 8)}, displayName=${displayName}`);
         
         return {
           ...lesson,
-          creator: { display_name: displayName },
+          creator: { display_name: creatorName },
+          updater: { display_name: updaterName },
           template: templateMap[lesson.lesson_template_id] || {},
           templateFields: templateFieldsMap[lesson.lesson_template_id] || []
         };
@@ -322,7 +325,7 @@ export default function BrowseLessons() {
             {lesson.template?.state ? US_STATES.find(s => s.value === lesson.template.state)?.label || lesson.template.state : 'Core ELA'}
           </div>
 
-          {/* Creator and timestamp */}
+          {/* Creator and timestamps */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -332,8 +335,22 @@ export default function BrowseLessons() {
             marginBottom: '0.5rem'
           }}>
             <User size={12} />
-            <span>{lesson.creator?.display_name || 'Unknown User'}</span>
+            <span>Created by {lesson.creator?.display_name || 'Unknown User'}</span>
           </div>
+
+          {lesson.updater?.display_name && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.75rem',
+              color: 'var(--gray-600)',
+              marginBottom: '0.5rem'
+            }}>
+              <User size={12} />
+              <span>Last updated by {lesson.updater.display_name}</span>
+            </div>
+          )}
 
           <div style={{
             display: 'flex',
@@ -345,7 +362,7 @@ export default function BrowseLessons() {
           }}>
             <Calendar size={12} />
             <span>
-              {new Date(lesson.created_at).toLocaleString('en-US', { 
+              Created {new Date(lesson.created_at).toLocaleString('en-US', { 
                 month: 'short', 
                 day: 'numeric', 
                 year: 'numeric',
@@ -355,6 +372,29 @@ export default function BrowseLessons() {
               })}
             </span>
           </div>
+
+          {lesson.updated_at && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.75rem',
+              color: 'var(--gray-600)',
+              marginBottom: '0.75rem'
+            }}>
+              <Calendar size={12} />
+              <span>
+                Updated {new Date(lesson.updated_at).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}
+              </span>
+            </div>
+          )}
 
           {/* Response counts */}
           <div style={{
