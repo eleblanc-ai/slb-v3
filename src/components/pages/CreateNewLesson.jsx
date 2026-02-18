@@ -2992,7 +2992,7 @@ export default function CreateNewLesson() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -3001,15 +3001,15 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(239, 68, 68, 0.25)'
+                boxShadow: '0 2px 4px rgba(217, 119, 6, 0.25)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(217, 119, 6, 0.35)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.25)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(217, 119, 6, 0.25)';
               }}
             >
               <Upload size={16} />

@@ -42,8 +42,7 @@ export default function Header({ session, profile, onLogout }) {
               justifyContent: 'center',
               borderRadius: '50%',
               background: 'rgba(255, 255, 255, 0.95)',
-              padding: '8px',
-              boxShadow: '0 0 12px rgba(255, 255, 255, 0.85), 0 0 24px rgba(59, 130, 246, 0.35)'
+              padding: '8px'
             }}
           >
             <img
