@@ -940,31 +940,33 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 paddingTop: '1rem',
                 borderTop: '1px solid var(--gray-200)'
               }}>
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    border: '2px solid var(--gray-300)',
-                    borderRadius: '8px',
-                    backgroundColor: '#fff',
-                    color: 'var(--gray-700)',
-                    fontWeight: 600,
-                    fontSize: '1rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--gray-50)';
-                    e.currentTarget.style.borderColor = 'var(--gray-400)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#fff';
-                    e.currentTarget.style.borderColor = 'var(--gray-300)';
-                  }}
-                >
-                  Back
-                </button>
+                {!isEditMode && (
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      border: '2px solid var(--gray-300)',
+                      borderRadius: '8px',
+                      backgroundColor: '#fff',
+                      color: 'var(--gray-700)',
+                      fontWeight: 600,
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--gray-50)';
+                      e.currentTarget.style.borderColor = 'var(--gray-400)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.backgroundColor = '#fff';
+                      e.currentTarget.style.borderColor = 'var(--gray-300)';
+                    }}
+                  >
+                    Back
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleClose}

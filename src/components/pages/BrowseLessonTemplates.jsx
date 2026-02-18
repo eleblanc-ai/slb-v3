@@ -321,7 +321,7 @@ export default function BrowseLessonTemplates() {
           marginBottom: '2.5rem'
         }}>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             style={{
               position: 'absolute',
               left: 0,

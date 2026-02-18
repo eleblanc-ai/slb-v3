@@ -20,11 +20,20 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Scroll to top**
   - Action: Navigate between pages.
   - Expect: Scroll position resets at top.
+- **Landing page CTA styling**
+  - Action: View the home page CTA buttons.
+  - Expect: Primary CTA text is dark blue, secondary CTA text is white.
+- **Header logo/favicon**
+  - Action: View the header logo in the main app.
+  - Expect: Logo uses local favicon with a white circular background and no glow.
 
 ## 3) Browse Lesson Templates
 - **Load list**
   - Action: Open “Browse Lesson Templates”.
   - Expect: Templates list loads with cards.
+- **Background gradient**
+  - Action: Open “Browse Lesson Templates”.
+  - Expect: Background matches the landing page blue-to-white gradient.
 - **Edit template**
   - Action: Choose a template in edit mode.
   - Expect: Navigates to template builder/editor with fields loaded.
@@ -50,6 +59,9 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Required fields**
   - Action: Mark fields required.
   - Expect: Required indicator and missing field validation works.
+- **Background gradient**
+  - Action: Open Create/Edit Lesson Template.
+  - Expect: Background matches the landing page blue-to-white gradient.
 
 ## 5) AI Config (Template Mode)
 - **Open AI config**
@@ -82,6 +94,12 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Unsaved changes protection**
   - Action: Navigate away with unsaved changes.
   - Expect: Unsaved changes modal appears.
+- **Generate lesson button color**
+  - Action: View the Generate Lesson button.
+  - Expect: Button uses the purple gradient.
+- **Manage cover image button color**
+  - Action: View the Manage Cover Image button.
+  - Expect: Button is yellow with adequate contrast for white text.
 
 ## 7) AI Config (Lesson Mode)
 - **Open AI config**
@@ -152,9 +170,15 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **List lessons**
   - Action: Open Browse Lessons.
   - Expect: Cards show content ID, template name, author, and thumbnail if available.
+- **Copy link**
+  - Action: Click the link icon on a lesson card.
+  - Expect: Lesson URL is copied and a “Link copied” toast appears.
 - **Delete lesson**
   - Action: Delete a lesson.
-  - Expect: Confirmation modal appears and lesson is removed from list on success.
+  - Expect: Confirmation modal uses the lesson content ID (not the lesson ID) and lesson is removed from list on success.
+- **Back navigation**
+  - Action: Click Back on Browse Lessons.
+  - Expect: Returns to the landing page.
 
 ## 14) Lesson Locking
 - **Lock acquisition**
