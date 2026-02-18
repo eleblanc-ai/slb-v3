@@ -1,4 +1,59 @@
--- Fix RLS policies for profiles table to allow viewing display names
+-- Fix profiles table constraints, trigger, and RLS policies
+
+-- Remove orphaned profiles that don't map to auth.users
+DELETE FROM public.profiles p
+WHERE NOT EXISTS (
+  SELECT 1 FROM auth.users u WHERE u.id = p.id
+);
+
+-- Ensure profiles.id FK points to auth.users(id)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'profiles'
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conname = 'profiles_id_fkey'
+    ) THEN
+      ALTER TABLE public.profiles DROP CONSTRAINT profiles_id_fkey;
+    END IF;
+
+    ALTER TABLE public.profiles
+      ADD CONSTRAINT profiles_id_fkey
+      FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
+-- Backfill missing profiles for existing users
+INSERT INTO public.profiles (id, display_name, role)
+SELECT u.id, NULL, NULL
+FROM auth.users u
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.profiles p WHERE p.id = u.id
+);
+
+-- Function to auto-create profile on signup (if missing)
+CREATE OR REPLACE FUNCTION public.handle_new_user_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, display_name, role)
+  VALUES (NEW.id, NULL, NULL)
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to create profile when user signs up
+DROP TRIGGER IF EXISTS on_auth_user_created_profile ON auth.users;
+CREATE TRIGGER on_auth_user_created_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user_profile();
 
 -- Drop existing policies that might be too restrictive
 DROP POLICY IF EXISTS "Users can view own profile" ON profiles;

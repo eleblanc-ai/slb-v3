@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
 
-export default function SetDisplayName({ userId, onComplete }) {
-  const [displayName, setDisplayName] = useState('');
+export default function SetDisplayName({ userId, defaultDisplayName = '', onComplete, onSignOut }) {
+  const [displayName, setDisplayName] = useState(defaultDisplayName);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(defaultDisplayName);
+  }, [defaultDisplayName]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -155,6 +159,29 @@ export default function SetDisplayName({ userId, onComplete }) {
             >
               {loading ? 'Saving...' : 'Continue'}
             </button>
+
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                style={{
+                  width: '100%',
+                  marginTop: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  color: '#2563eb',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.95rem',
+                  fontWeight: '500',
+                  border: '1px solid #bfdbfe',
+                  cursor: 'pointer'
+                }}
+              >
+                Sign out
+              </button>
+            )}
+
+     
           </form>
         </div>
       </div>

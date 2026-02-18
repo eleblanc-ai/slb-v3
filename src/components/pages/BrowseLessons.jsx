@@ -98,7 +98,9 @@ export default function BrowseLessons() {
         const updaterId = lesson.updated_by;
         const updaterName = profileMap[updaterId] || (updaterId ? 'Unknown User' : null);
         
-        console.log(`Lesson ${lesson.id.slice(0, 8)}: userId=${userId?.slice(0, 8)}, displayName=${displayName}`);
+        console.log(
+          `Lesson ${lesson.id.slice(0, 8)}: creatorId=${creatorId?.slice(0, 8)}, creatorName=${creatorName}`
+        );
         
         return {
           ...lesson,
@@ -117,7 +119,11 @@ export default function BrowseLessons() {
       setLessons(filteredLessons || []);
     } catch (error) {
       console.error('Error loading lessons:', error);
-      alert('Failed to load lessons. Please try again.');
+      if (error?.status === 401 || error?.status === 403) {
+        await supabase.auth.signOut();
+        return;
+      }
+      alert(`Failed to load lessons. ${error?.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }

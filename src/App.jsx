@@ -198,7 +198,17 @@ function App() {
 
   // If user is logged in but doesn't have a display name, show the display name form
   if (session && profileChecked && (!profile || !profile.display_name)) {
-    return <SetDisplayName userId={session.user.id} onComplete={handleDisplayNameComplete} />;
+    const defaultDisplayName = session.user.email
+      ? session.user.email.split('@')[0]
+      : '';
+    return (
+      <SetDisplayName
+        userId={session.user.id}
+        defaultDisplayName={defaultDisplayName}
+        onComplete={handleDisplayNameComplete}
+        onSignOut={handleLogout}
+      />
+    );
   }
 
   return (
