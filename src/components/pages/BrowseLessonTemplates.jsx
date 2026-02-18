@@ -498,36 +498,40 @@ export default function BrowseLessonTemplates() {
                               </>
                             )}
 
-                            {/* Delete Button */}
-                            <button
-                              onClick={(e) => handleDeleteClick(e, lessonType)}
-                              title="Delete Template"
-                              style={{
-                                background: 'rgba(156, 163, 175, 0.1)',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '0.375rem',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#6b7280',
-                                transition: 'all 0.2s',
-                                opacity: 0.7
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                                e.currentTarget.style.color = '#dc2626';
-                                e.currentTarget.style.opacity = '1';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
-                                e.currentTarget.style.color = '#6b7280';
-                                e.currentTarget.style.opacity = '0.7';
-                              }}
-                            >
-                              <X size={14} />
-                            </button>
+                            {mode !== 'create' && (
+                              <>
+                                {/* Delete Button */}
+                                <button
+                                  onClick={(e) => handleDeleteClick(e, lessonType)}
+                                  title="Delete Template"
+                                  style={{
+                                    background: 'rgba(156, 163, 175, 0.1)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '0.375rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#6b7280',
+                                    transition: 'all 0.2s',
+                                    opacity: 0.7
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                    e.currentTarget.style.color = '#dc2626';
+                                    e.currentTarget.style.opacity = '1';
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
+                                    e.currentTarget.style.color = '#6b7280';
+                                    e.currentTarget.style.opacity = '0.7';
+                                  }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            )}
                           </div>
                           
                           {/* Main content area - clickable */}
@@ -733,36 +737,40 @@ export default function BrowseLessonTemplates() {
                       </>
                     )}
 
-                    {/* Delete Button */}
-                    <button
-                      onClick={(e) => handleDeleteClick(e, lessonType)}
-                      title="Delete Template"
-                      style={{
-                        background: 'rgba(156, 163, 175, 0.1)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '0.375rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#6b7280',
-                        transition: 'all 0.2s',
-                        opacity: 0.7
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                        e.currentTarget.style.color = '#dc2626';
-                        e.currentTarget.style.opacity = '1';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
-                        e.currentTarget.style.color = '#6b7280';
-                        e.currentTarget.style.opacity = '0.7';
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
+                    {mode !== 'create' && (
+                      <>
+                        {/* Delete Button */}
+                        <button
+                          onClick={(e) => handleDeleteClick(e, lessonType)}
+                          title="Delete Template"
+                          style={{
+                            background: 'rgba(156, 163, 175, 0.1)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '0.375rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#6b7280',
+                            transition: 'all 0.2s',
+                            opacity: 0.7
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                            e.currentTarget.style.color = '#dc2626';
+                            e.currentTarget.style.opacity = '1';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
+                            e.currentTarget.style.color = '#6b7280';
+                            e.currentTarget.style.opacity = '0.7';
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                   
                   {/* Main content area - clickable */}

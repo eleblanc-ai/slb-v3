@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
@@ -42,10 +42,22 @@ export default function ConfigureAIModal({
   const [syncing, setSyncing] = useState(false);
   const [vocabStandards, setVocabStandards] = useState([]);
   const allowSelfContext = field?.type === 'mcqs';
+  const systemInstructionsRef = useRef(null);
+  const promptRef = useRef(null);
+  const formatRequirementsRef = useRef(null);
+  const contextInstructionsRef = useRef(null);
+  const questionPromptRefs = useRef({});
+  const questionKeys = useMemo(() => ['q1', 'q2', 'q3', 'q4', 'q5'], []);
 
   const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
   const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
   const defaultFormatReqs = 'Return plain text without markdown formatting.';
+
+  const autoSizeTextarea = useCallback((el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
 
   // Get default prompts for MCQ questions
   const getDefaultQuestionPrompts = useCallback(() => {
@@ -86,6 +98,45 @@ export default function ConfigureAIModal({
 
     loadVocabStandards();
   }, [field, allFields, fieldValues, defaultStandardFramework]);
+
+  useEffect(() => {
+    autoSizeTextarea(systemInstructionsRef.current);
+  }, [systemInstructions, autoSizeTextarea]);
+
+  useEffect(() => {
+    autoSizeTextarea(promptRef.current);
+  }, [prompt, autoSizeTextarea]);
+
+  useEffect(() => {
+    autoSizeTextarea(formatRequirementsRef.current);
+  }, [formatRequirements, autoSizeTextarea]);
+
+  useEffect(() => {
+    autoSizeTextarea(contextInstructionsRef.current);
+  }, [contextInstructions, autoSizeTextarea]);
+
+  useEffect(() => {
+    Object.values(questionPromptRefs.current).forEach(autoSizeTextarea);
+  }, [questionPrompts, autoSizeTextarea]);
+
+  useEffect(() => {
+    if (loading) return;
+    requestAnimationFrame(() => {
+      autoSizeTextarea(systemInstructionsRef.current);
+      autoSizeTextarea(promptRef.current);
+      autoSizeTextarea(formatRequirementsRef.current);
+      autoSizeTextarea(contextInstructionsRef.current);
+      Object.values(questionPromptRefs.current).forEach(autoSizeTextarea);
+    });
+  }, [loading, autoSizeTextarea]);
+
+  useEffect(() => {
+    const qKey = questionKeys[activeQuestionTab];
+    const el = questionPromptRefs.current[qKey];
+    if (el) {
+      requestAnimationFrame(() => autoSizeTextarea(el));
+    }
+  }, [activeQuestionTab, questionKeys, autoSizeTextarea]);
 
   const loadConfiguration = useCallback(async () => {
     const defaultQuestionPrompts = getDefaultQuestionPrompts();
@@ -649,8 +700,10 @@ export default function ConfigureAIModal({
                         System Instructions
                       </label>
                       <textarea
+                        ref={systemInstructionsRef}
                         value={systemInstructions}
                         onChange={(e) => setSystemInstructions(e.target.value)}
+                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
                         placeholder="e.g., You are an AI assistant..."
                         rows={4}
                         style={{
@@ -664,7 +717,8 @@ export default function ConfigureAIModal({
                           backgroundColor: '#fff',
                           outline: 'none',
                           transition: 'border-color 0.2s',
-                          resize: 'vertical',
+                          resize: 'none',
+                          overflow: 'hidden',
                           boxSizing: 'border-box'
                         }}
                       />
@@ -689,8 +743,10 @@ export default function ConfigureAIModal({
                         Field Prompt
                       </label>
                       <textarea
+                        ref={promptRef}
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
+                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
                         placeholder="Example: Generate..."
                         rows={5}
                         style={{
@@ -704,7 +760,8 @@ export default function ConfigureAIModal({
                           backgroundColor: '#fff',
                           outline: 'none',
                           transition: 'border-color 0.2s',
-                          resize: 'vertical',
+                          resize: 'none',
+                          overflow: 'hidden',
                           boxSizing: 'border-box'
                         }}
                       />
@@ -745,15 +802,9 @@ export default function ConfigureAIModal({
                           background: '#f0fdf4',
                           borderRadius: '8px 8px 0 0'
                         }}>
-                          {[
-                            { key: 'q1', label: 'Q1' },
-                            { key: 'q2', label: 'Q2' },
-                            { key: 'q3', label: 'Q3' },
-                            { key: 'q4', label: 'Q4' },
-                            { key: 'q5', label: 'Q5' }
-                          ].map((tab, index) => (
+                          {questionKeys.map((key, index) => (
                             <button
-                              key={tab.key}
+                              key={key}
                               type="button"
                               onClick={() => setActiveQuestionTab(index)}
                               style={{
@@ -774,14 +825,14 @@ export default function ConfigureAIModal({
                                 gap: '2px'
                               }}
                             >
-                              <span>{tab.label}</span>
-                              <span style={{ fontSize: 10, opacity: 0.8 }}>{questionPrompts[tab.key]?.label || ''}</span>
+                              <span>{`Q${index + 1}`}</span>
+                              <span style={{ fontSize: 10, opacity: 0.8 }}>{questionPrompts[key]?.label || ''}</span>
                             </button>
                           ))}
                         </div>
                         
                         {/* Question Prompt Content */}
-                        {['q1', 'q2', 'q3', 'q4', 'q5'].map((qKey, index) => (
+                        {questionKeys.map((qKey, index) => (
                           <div
                             key={qKey}
                             style={{ display: activeQuestionTab === index ? 'block' : 'none' }}
@@ -864,11 +915,15 @@ export default function ConfigureAIModal({
                               Question {index + 1} Prompt
                             </label>
                             <textarea
+                              ref={(el) => {
+                                questionPromptRefs.current[qKey] = el;
+                              }}
                               value={questionPrompts[qKey]?.prompt || ''}
                               onChange={(e) => setQuestionPrompts(prev => ({
                                 ...prev,
                                 [qKey]: { ...prev[qKey], prompt: e.target.value }
                               }))}
+                              onInput={(e) => autoSizeTextarea(e.currentTarget)}
                               placeholder={`Enter the prompt for Question ${index + 1}...`}
                               rows={8}
                               style={{
@@ -882,7 +937,8 @@ export default function ConfigureAIModal({
                                 backgroundColor: '#fff',
                                 outline: 'none',
                                 transition: 'border-color 0.2s',
-                                resize: 'vertical',
+                                resize: 'none',
+                                overflow: 'hidden',
                                 boxSizing: 'border-box'
                               }}
                             />
@@ -902,8 +958,10 @@ export default function ConfigureAIModal({
                         Format Requirements
                       </label>
                       <textarea
+                        ref={formatRequirementsRef}
                         value={formatRequirements}
                         onChange={(e) => setFormatRequirements(e.target.value)}
+                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
                         placeholder="e.g., Return only plain text..."
                         rows={3}
                         style={{
@@ -917,7 +975,8 @@ export default function ConfigureAIModal({
                           backgroundColor: '#fff',
                           outline: 'none',
                           transition: 'border-color 0.2s',
-                          resize: 'vertical',
+                          resize: 'none',
+                          overflow: 'hidden',
                           boxSizing: 'border-box'
                         }}
                       />
@@ -935,8 +994,10 @@ export default function ConfigureAIModal({
                           Context Instructions
                         </label>
                         <textarea
+                          ref={contextInstructionsRef}
                           value={contextInstructions}
                           onChange={(e) => setContextInstructions(e.target.value)}
+                          onInput={(e) => autoSizeTextarea(e.currentTarget)}
                           placeholder="e.g., Use the following context..."
                           rows={2}
                           style={{
@@ -950,7 +1011,8 @@ export default function ConfigureAIModal({
                             backgroundColor: '#fff',
                             outline: 'none',
                             transition: 'border-color 0.2s',
-                            resize: 'vertical',
+                            resize: 'none',
+                            overflow: 'hidden',
                             boxSizing: 'border-box'
                           }}
                         />

@@ -9,6 +9,7 @@ import AddEditFieldModal from '../modals/AddFieldModal';
 import NameLessonTypeModal from '../modals/NameLessonTypeModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
+import SuccessModal from '../modals/SuccessModal';
 import BaseField from '../fields/BaseField';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
@@ -110,6 +111,7 @@ export default function CreateNewLessonType() {
   const [missingFields, setMissingFields] = useState([]);
   const [showMissingFieldsModal, setShowMissingFieldsModal] = useState(false);
   const [highlightedMissingFields, setHighlightedMissingFields] = useState(new Set());
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showMarkdownExportModal, setShowMarkdownExportModal] = useState(false);
   const [markdownExportData, setMarkdownExportData] = useState(null);
   const [standardFrameworks, setStandardFrameworks] = useState([]);
@@ -129,6 +131,18 @@ export default function CreateNewLessonType() {
   const handleAIConfigSave = (config) => {
     console.log('AI config saved for field:', aiConfigField?.name, config);
     // Config is already saved to database by the modal
+    setFields(prevFields => prevFields.map(f => {
+      if (f.id !== aiConfigField?.id) return f;
+      return {
+        ...f,
+        ai_prompt: config.prompt,
+        ai_question_prompts: config.questionPrompts,
+        ai_context_field_ids: config.selectedFieldIds,
+        ai_system_instructions: config.systemInstructions,
+        ai_context_instructions: config.contextInstructions,
+        ai_format_requirements: config.formatRequirements
+      };
+    }));
     setAIConfigField(null);
   };
 
@@ -207,20 +221,6 @@ export default function CreateNewLessonType() {
     
     setTotalGenerationFields(allAIFields.length);
     
-    // Validate required fields before starting
-    const missing = validateRequiredFields(allAIFields);
-    if (missing.length > 0) {
-      setMissingFields(missing);
-      setShowMissingFieldsModal(true);
-      setGenerationPaused(true);
-      
-      // Highlight missing fields
-      const missingIds = new Set(missing.map(m => m.id));
-      setHighlightedMissingFields(missingIds);
-      setIsGeneratingLesson(false);
-      return;
-    }
-    
     // Generate all fields
     await continueGeneration();
   };
@@ -234,23 +234,13 @@ export default function CreateNewLessonType() {
       const field = allAIFields[i];
       setCurrentGenerationIndex(i);
       
-      // Validate context fields before generating this field
-      const missing = validateContextFieldsForField(field, allAIFields);
-      if (missing.length > 0) {
-        setMissingFields(missing);
-        setShowMissingFieldsModal(true);
-        setGenerationPaused(true);
-        
-        // Highlight missing fields
-        const missingIds = new Set(missing.map(m => m.id));
-        setHighlightedMissingFields(missingIds);
-        setIsGeneratingLesson(false);
-        return;
-      }
-      
       // Generate the field
       try {
-        await handleGenerateAI(field);
+        const generatedValue = await handleGenerateAI(field, fieldValues);
+        if (generatedValue?.blocked) {
+          setIsGeneratingLesson(false);
+          return;
+        }
         
         // Auto-save after generation
         await autoSaveLesson();
@@ -267,13 +257,27 @@ export default function CreateNewLessonType() {
     setIsGeneratingLesson(false);
     setGenerationPaused(false);
     setCurrentGenerationIndex(0);
-    alert('✅ Lesson generation complete!');
+    setShowSuccessModal(true);
+  };
+
+  const isEmptyValue = (value) => {
+    if (!value) return true;
+    if (typeof value === 'string') {
+      const textOnly = value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+      return textOnly === '';
+    }
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') {
+      if (value.questions) return value.questions.every(q => isEmptyValue(q));
+      return Object.keys(value).length === 0;
+    }
+    return false;
   };
 
   // Validate required context fields for a specific field
-  const validateContextFieldsForField = (field, allFields) => {
+  const validateContextFieldsForField = (field, allFields, valuesToCheck = null) => {
     const missing = [];
-    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+    const currentValues = valuesToCheck || fieldValues || {};
     
     // Get AI config for this field
     let contextFieldIds = field.ai_context_field_ids || [];
@@ -282,12 +286,9 @@ export default function CreateNewLessonType() {
     for (const contextFieldId of contextFieldIds) {
       const contextField = allFields.find(f => f.id === contextFieldId);
       if (!contextField) continue;
-      
+
       const value = currentValues[contextFieldId];
-      const isEmpty = !value || 
-                      (typeof value === 'string' && value.trim() === '') ||
-                      (Array.isArray(value) && value.length === 0) ||
-                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
+      const isEmpty = isEmptyValue(value);
       
       if (isEmpty) {
         missing.push({
@@ -302,40 +303,24 @@ export default function CreateNewLessonType() {
   };
 
   // Validate all required fields before starting generation
-  const validateRequiredFields = (aiFields) => {
+  const validateRequiredFields = () => {
     const missing = [];
-    const currentValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
-    
-    // Get all unique context field IDs from all AI fields
-    const allContextFieldIds = new Set();
-    aiFields.forEach(field => {
-      const contextIds = field.ai_context_field_ids || [];
-      contextIds.forEach(id => allContextFieldIds.add(id));
-    });
-    
-    // Check each required context field
-    for (const contextFieldId of allContextFieldIds) {
-      const contextField = fields.find(f => f.id === contextFieldId);
-      if (!contextField) continue;
-      
-      // Only validate if field is marked as requiredForGeneration
-      if (!contextField.requiredForGeneration) continue;
-      
-      const value = currentValues[contextFieldId];
-      const isEmpty = !value || 
-                      (typeof value === 'string' && value.trim() === '') ||
-                      (Array.isArray(value) && value.length === 0) ||
-                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
-      
+    const currentValues = fieldValues || {};
+
+    const requiredFields = fields.filter(f => f.requiredForGeneration);
+    for (const reqField of requiredFields) {
+      const value = currentValues[reqField.id];
+      const isEmpty = isEmptyValue(value);
+
       if (isEmpty) {
         missing.push({
-          id: contextField.id,
-          name: contextField.name,
-          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
+          id: reqField.id,
+          name: reqField.name,
+          section: reqField.fieldFor === 'designer' ? 'Designer' : 'Builder'
         });
       }
     }
-    
+
     return missing;
   };
 
@@ -665,9 +650,19 @@ export default function CreateNewLessonType() {
   };
 
   // Handler: trigger AI generation
-  const handleGenerateAI = async (field) => {
+  const handleGenerateAI = async (field, valuesOverride = null) => {
     try {
       setGeneratingFieldId(field.id);
+
+      const missingContext = validateContextFieldsForField(field, fields, valuesOverride || fieldValues);
+      if (missingContext.length > 0) {
+        setMissingFields(missingContext);
+        setShowMissingFieldsModal(true);
+        setGenerationPaused(true);
+        setHighlightedMissingFields(new Set(missingContext.map(m => m.id)));
+        setGeneratingFieldId(null);
+        return { blocked: true };
+      }
       
       // Handle image fields specially
       if (field.type === 'image') {
@@ -1192,6 +1187,7 @@ export default function CreateNewLessonType() {
           requiredForGeneration: field.required_for_generation,
           fieldFor: field.field_for || 'designer',
           ai_prompt: field.ai_prompt,
+          ai_question_prompts: field.ai_question_prompts,
           ai_context_field_ids: field.ai_context_field_ids
         };
         
@@ -2737,6 +2733,14 @@ export default function CreateNewLessonType() {
         onClose={() => setShowMissingFieldsModal(false)}
         missingFields={missingFields}
       />
+
+      {showSuccessModal && (
+        <SuccessModal
+          title="Lesson Generation Complete!"
+          message="All AI-enabled fields have been successfully generated."
+          onClose={() => setShowSuccessModal(false)}
+        />
+      )}
 
       {/* Markdown Export Instructions Modal */}
       {showMarkdownExportModal && markdownExportData && createPortal(

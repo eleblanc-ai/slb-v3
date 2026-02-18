@@ -129,7 +129,17 @@ export default function CreateNewLesson() {
   const hasInitializedRef = useRef(false);
   const previousFieldValuesRef = useRef(null);
   const autoSaveTimeoutRef = useRef(null);
+  const autoCreateLessonPromiseRef = useRef(null);
   const [showExportModal, setShowExportModal] = useState(false);
+
+  const handlePreFormClose = async () => {
+    setShowPreFormModal(false);
+    setPreFormCompleted(true);
+    // Trigger generate button animation
+    setPulseGenerateButton(true);
+
+    await autoSaveLesson(fieldValues);
+  };
   const [exportMarkdown, setExportMarkdown] = useState('');
   const [showUploadCoverImageModal, setShowUploadCoverImageModal] = useState(false);
   const [showPreFormModal, setShowPreFormModal] = useState(false);
@@ -516,6 +526,18 @@ export default function CreateNewLesson() {
       if (updateError) throw updateError;
       
       console.log('✅ Successfully saved lesson AI config');
+      setFields(prevFields => prevFields.map(f => {
+        if (f.id !== aiConfigField.id) return f;
+        return {
+          ...f,
+          ai_prompt: config.prompt,
+          ai_question_prompts: config.questionPrompts,
+          ai_context_field_ids: config.selectedFieldIds,
+          ai_system_instructions: config.systemInstructions,
+          ai_context_instructions: config.contextInstructions,
+          ai_format_requirements: config.formatRequirements
+        };
+      }));
       if (!options.keepOpen) {
         setAIConfigField(null);
       }
@@ -906,20 +928,6 @@ export default function CreateNewLesson() {
     
     setTotalGenerationFields(allAIFields.length);
     
-    // Validate required fields before starting
-    const missing = validateRequiredFields(allAIFields);
-    if (missing.length > 0) {
-      setMissingFields(missing);
-      setShowMissingFieldsModal(true);
-      setGenerationPaused(true);
-      
-      // Highlight missing fields
-      const missingIds = new Set(missing.map(m => m.id));
-      setHighlightedMissingFields(missingIds);
-      setIsGeneratingLesson(false);
-      return;
-    }
-    
     // Generate all fields
     await continueGeneration();
   };
@@ -936,26 +944,19 @@ export default function CreateNewLesson() {
       const field = allAIFields[i];
       setCurrentGenerationIndex(i);
       
-      // Validate context fields before generating this field, using current values
-      const missing = validateContextFieldsForField(field, allAIFields, currentFieldValues);
-      if (missing.length > 0) {
-        setMissingFields(missing);
-        setShowMissingFieldsModal(true);
-        setGenerationPaused(true);
-        
-        // Highlight missing fields
-        const missingIds = new Set(missing.map(m => m.id));
-        setHighlightedMissingFields(missingIds);
-        setIsGeneratingLesson(false);
-        return;
-      }
-      
       // Generate the field
       try {
-        const generatedValue = await handleGenerateAI(field);
+        const generatedValue = await handleGenerateAI(field, currentFieldValues);
+        if (generatedValue?.blocked) {
+          setIsGeneratingLesson(false);
+          return;
+        }
         
         // Update our tracking with the newly generated value
         currentFieldValues = { ...currentFieldValues, [field.id]: generatedValue };
+
+        // Ensure Supabase save completes before moving to next field
+        await autoSaveLesson(currentFieldValues);
       } catch (error) {
         console.error(`Error generating field ${field.name}:`, error);
         alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
@@ -970,6 +971,20 @@ export default function CreateNewLesson() {
     setGenerationPaused(false);
     setCurrentGenerationIndex(0);
     setShowSuccessModal(true);
+  };
+
+  const isEmptyValue = (value) => {
+    if (!value) return true;
+    if (typeof value === 'string') {
+      const textOnly = value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+      return textOnly === '';
+    }
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') {
+      if (value.questions) return value.questions.every(q => isEmptyValue(q));
+      return Object.keys(value).length === 0;
+    }
+    return false;
   };
 
   // Validate required context fields for a specific field
@@ -991,12 +1006,9 @@ export default function CreateNewLesson() {
     for (const contextFieldId of contextFieldIds) {
       const contextField = allFields.find(f => f.id === contextFieldId);
       if (!contextField) continue;
-      
+
       const value = currentValues[contextFieldId];
-      const isEmpty = !value || 
-                      (typeof value === 'string' && value.trim() === '') ||
-                      (Array.isArray(value) && value.length === 0) ||
-                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
+      const isEmpty = isEmptyValue(value);
       
       if (isEmpty) {
         missing.push({
@@ -1032,10 +1044,7 @@ export default function CreateNewLesson() {
       if (!contextField.requiredForGeneration) continue;
       
       const value = currentValues[contextFieldId];
-      const isEmpty = !value || 
-                      (typeof value === 'string' && value.trim() === '') ||
-                      (Array.isArray(value) && value.length === 0) ||
-                      (typeof value === 'object' && value.questions && value.questions.every(q => !q || q.trim() === ''));
+      const isEmpty = isEmptyValue(value);
       
       if (isEmpty) {
         missing.push({
@@ -1051,7 +1060,7 @@ export default function CreateNewLesson() {
 
   // Auto-save lesson after field generation
   const autoSaveLesson = async (updatedFieldValues = null) => {
-    if (!lessonId || !templateData?.id) return;
+    if (!templateData?.id) return;
     
     // Use provided values or fall back to state
     const valuesToSave = updatedFieldValues || fieldValues;
@@ -1113,6 +1122,49 @@ export default function CreateNewLesson() {
       console.log('💾 Auto-save: Final designer responses:', designerResponses);
       console.log('💾 Auto-save: Final builder responses:', builderResponses);
 
+      let effectiveLessonId = lessonId;
+
+      if (!effectiveLessonId) {
+        if (!autoCreateLessonPromiseRef.current) {
+          console.log('💾 Auto-save: No lesson ID, creating new lesson...');
+          autoCreateLessonPromiseRef.current = (async () => {
+            const { data: newLesson, error: insertError } = await supabase
+              .from('lessons')
+              .insert({
+                lesson_template_id: templateData.id,
+                template_name: templateData.name,
+                created_by: session?.user?.id,
+                designer_responses: designerResponses,
+                builder_responses: builderResponses,
+                status: 'draft',
+                is_test: false,
+                created_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (insertError) {
+              console.error('❌ Auto-save insert error:', insertError);
+              throw insertError;
+            }
+
+            console.log('✅ Auto-save created new lesson:', newLesson.id);
+            setCurrentLessonId(newLesson.id);
+
+            const newUrl = `${window.location.pathname}?templateId=${templateData.id}&lessonId=${newLesson.id}`;
+            window.history.replaceState({}, '', newUrl);
+
+            return newLesson.id;
+          })();
+        }
+
+        try {
+          effectiveLessonId = await autoCreateLessonPromiseRef.current;
+        } finally {
+          autoCreateLessonPromiseRef.current = null;
+        }
+      }
+
       const { error } = await supabase
         .from('lessons')
         .update({
@@ -1120,7 +1172,7 @@ export default function CreateNewLesson() {
           builder_responses: builderResponses,
           template_name: templateData.name
         })
-        .eq('id', lessonId);
+        .eq('id', effectiveLessonId);
       
       if (error) {
         console.error('❌ Auto-save error:', error);
@@ -1137,9 +1189,19 @@ export default function CreateNewLesson() {
   };
 
   // Handler: trigger AI generation
-  const handleGenerateAI = async (field) => {
+  const handleGenerateAI = async (field, valuesOverride = null) => {
     try {
       setGeneratingFieldId(field.id);
+
+      const missingContext = validateContextFieldsForField(field, fields, valuesOverride || fieldValues);
+      if (missingContext.length > 0) {
+        setMissingFields(missingContext);
+        setShowMissingFieldsModal(true);
+        setGenerationPaused(true);
+        setHighlightedMissingFields(new Set(missingContext.map(m => m.id)));
+        setGeneratingFieldId(null);
+        return { blocked: true };
+      }
       
       // Handle image fields with AI config
       if (field.type === 'image') {
@@ -1787,6 +1849,7 @@ export default function CreateNewLesson() {
           requiredForGeneration: field.required_for_generation,
           fieldFor: field.field_for || 'designer',
           ai_prompt: field.ai_prompt,
+          ai_question_prompts: field.ai_question_prompts,
           ai_context_field_ids: field.ai_context_field_ids,
           ai_system_instructions: field.ai_system_instructions,
           ai_context_instructions: field.ai_context_instructions,
@@ -1879,10 +1942,26 @@ export default function CreateNewLesson() {
           console.log('📦 Designer responses:', lesson.designer_responses);
           console.log('📦 Builder responses:', lesson.builder_responses);
           
+          const userAIConfig = lesson.user_ai_config || {};
+          const mergedFields = mappedFields.map(field => {
+            const override = userAIConfig?.[field.id];
+            if (!override) return field;
+            return {
+              ...field,
+              ai_prompt: override.ai_prompt ?? field.ai_prompt,
+              ai_question_prompts: override.ai_question_prompts ?? field.ai_question_prompts,
+              ai_context_field_ids: override.ai_context_field_ids ?? field.ai_context_field_ids,
+              ai_system_instructions: override.ai_system_instructions ?? field.ai_system_instructions,
+              ai_context_instructions: override.ai_context_instructions ?? field.ai_context_instructions,
+              ai_format_requirements: override.ai_format_requirements ?? field.ai_format_requirements
+            };
+          });
+          setFields(mergedFields);
+          
           // Load existing field values from designer_responses and builder_responses
           // Now using field IDs as keys (matching how we save)
           const loadedValues = {};
-          mappedFields.forEach(field => {
+          mergedFields.forEach(field => {
             if (field.fieldFor === 'designer' && lesson.designer_responses?.[field.id]) {
               loadedValues[field.id] = lesson.designer_responses[field.id];
               console.log(`✅ Loaded designer field: ${field.name} (${field.id})`, lesson.designer_responses[field.id]);
@@ -1903,7 +1982,7 @@ export default function CreateNewLesson() {
             
             const generateFunction = templateNameToFunctionMap[templateData?.name];
             if (generateFunction) {
-              let markdown = generateFunction(templateData, mappedFields, loadedValues);
+              let markdown = generateFunction(templateData, mergedFields, loadedValues);
               
               // Extract image URL from markdown
               let imageUrl = lesson.cover_image_url;
@@ -4147,12 +4226,7 @@ export default function CreateNewLesson() {
       {/* Pre-Form Modal */}
       <PreFormModal
         visible={showPreFormModal}
-        onClose={() => {
-          setShowPreFormModal(false);
-          setPreFormCompleted(true);
-          // Trigger generate button animation
-          setPulseGenerateButton(true);
-        }}
+        onClose={handlePreFormClose}
         fields={fields}
         fieldValues={fieldValues}
         onFieldChange={(fieldId, value) => {
