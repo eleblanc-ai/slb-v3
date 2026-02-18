@@ -174,7 +174,7 @@ export default function CreateNewLesson() {
       setShowUnsavedChangesModal(true);
       setPendingNavigation('back');
     } else {
-      navigate(-1);
+      navigate('/browse-lessons');
     }
   };
 
@@ -183,7 +183,7 @@ export default function CreateNewLesson() {
     setShowUnsavedChangesModal(false);
     setHasUnsavedChanges(false);
     if (pendingNavigation === 'back') {
-      navigate(-1);
+      navigate('/browse-lessons');
     }
     setPendingNavigation(null);
   };
@@ -193,7 +193,7 @@ export default function CreateNewLesson() {
     setShowUnsavedChangesModal(false);
     await handleSave();
     if (pendingNavigation === 'back') {
-      navigate(-1);
+      navigate('/browse-lessons');
     }
     setPendingNavigation(null);
   };

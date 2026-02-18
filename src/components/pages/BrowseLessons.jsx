@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { FileText, Beaker, Calendar, User, ArrowLeft, Trash2 } from 'lucide-react';
+import { FileText, Beaker, Calendar, User, ArrowLeft, Trash2, Link as LinkIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import ConfirmModal from '../modals/ConfirmModal';
@@ -12,6 +12,8 @@ export default function BrowseLessons() {
   const [loading, setLoading] = useState(true);
   const [lessonToDelete, setLessonToDelete] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCopyToast, setShowCopyToast] = useState(false);
+  const [copyToastText, setCopyToastText] = useState('Link copied');
 
   useEffect(() => {
     loadLessons();
@@ -134,6 +136,41 @@ export default function BrowseLessons() {
     return lesson.created_by === session?.user?.id;
   };
 
+  const getLessonLink = (lesson) => {
+    const baseUrl = window.location.origin;
+    if (lesson.is_test) {
+      return `${baseUrl}/create-new-lesson-type?id=${lesson.lesson_template_id}&testLessonId=${lesson.id}`;
+    }
+    return `${baseUrl}/create-new-lesson?templateId=${lesson.lesson_template_id}&lessonId=${lesson.id}`;
+  };
+
+  const handleCopyLessonLink = async (event, lesson) => {
+    event.stopPropagation();
+    const lessonLink = getLessonLink(lesson);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(lessonLink);
+      } else {
+        window.prompt('Copy lesson link:', lessonLink);
+      }
+      setCopyToastText('Link copied');
+      setShowCopyToast(true);
+      window.clearTimeout(window.__copyToastTimeout);
+      window.__copyToastTimeout = window.setTimeout(() => {
+        setShowCopyToast(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy lesson link:', error);
+      window.prompt('Copy lesson link:', lessonLink);
+      setCopyToastText('Copy link manually');
+      setShowCopyToast(true);
+      window.clearTimeout(window.__copyToastTimeout);
+      window.__copyToastTimeout = window.setTimeout(() => {
+        setShowCopyToast(false);
+      }, 2500);
+    }
+  };
+
   const handleLessonClick = (lesson) => {
     if (lesson.is_test) {
       // Open test lesson in template creator
@@ -201,6 +238,21 @@ export default function BrowseLessons() {
     }
   };
 
+  const getLessonContentId = (lesson) => {
+    if (!lesson) return 'Untitled lesson';
+    const contentIdField = lesson.templateFields?.find(
+      field => field.name === 'Content ID' ||
+               field.name.toLowerCase() === 'content id' ||
+               field.name.toLowerCase().includes('content') && field.name.toLowerCase().includes('id')
+    );
+
+    const contentId = contentIdField && lesson.designer_responses?.[contentIdField.id]
+      ? lesson.designer_responses[contentIdField.id]
+      : null;
+
+    return contentId || 'Untitled lesson';
+  };
+
   const renderLessonCard = (lesson) => {
     const formatName = (name) => {
       if (!name) return 'Unknown User';
@@ -216,17 +268,7 @@ export default function BrowseLessons() {
       val => val && typeof val === 'object' && val.url && !val.url.startsWith('data:')
     )?.url;
 
-    // Find Content ID field from template fields
-    const contentIdField = lesson.templateFields?.find(
-      field => field.name === 'Content ID' || 
-               field.name.toLowerCase() === 'content id' ||
-               field.name.toLowerCase().includes('content') && field.name.toLowerCase().includes('id')
-    );
-    
-    // Get the actual Content ID value using the field ID
-    const contentId = contentIdField && lesson.designer_responses?.[contentIdField.id]
-      ? lesson.designer_responses[contentIdField.id]
-      : `Lesson ${lesson.id.slice(0, 8)}`;
+    const contentId = getLessonContentId(lesson);
 
     return (
       <div
@@ -284,6 +326,38 @@ export default function BrowseLessons() {
             <Trash2 size={16} />
           </button>
         )}
+
+        {/* Copy Link Button */}
+        <button
+          onClick={(e) => handleCopyLessonLink(e, lesson)}
+          style={{
+            position: 'absolute',
+            top: '0.75rem',
+            right: canDeleteLesson(lesson) ? '3.25rem' : '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '32px',
+            height: '32px',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            color: '#4f46e5',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            zIndex: 2,
+            backdropFilter: 'blur(4px)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#e0e7ff';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+          }}
+          title="Copy lesson link"
+        >
+          <LinkIcon size={16} />
+        </button>
 
         {/* Thumbnail */}
         <div style={{
@@ -464,6 +538,29 @@ export default function BrowseLessons() {
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       padding: '2rem 1rem 4rem'
     }}>
+      {showCopyToast && (
+        <div style={{
+          position: 'fixed',
+          top: '5rem',
+          right: '2rem',
+          background: 'linear-gradient(135deg, #ecfeff 0%, #eef2ff 100%)',
+          color: '#1e293b',
+          border: '1px solid #c7d2fe',
+          padding: '0.75rem 1rem',
+          borderRadius: '8px',
+          boxShadow: '0 12px 30px rgba(30, 41, 59, 0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.9rem',
+          fontWeight: 600,
+          zIndex: 9999,
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          <LinkIcon size={16} />
+          {copyToastText}
+        </div>
+      )}
       <div style={{
         maxWidth: '1200px',
         margin: '0 auto'
@@ -634,7 +731,7 @@ export default function BrowseLessons() {
       {showDeleteModal && (
         <ConfirmModal
           title="Delete Lesson"
-          message={`Are you sure you want to delete "${lessonToDelete?.designer_responses?.["Content ID"] || lessonToDelete?.id.slice(0, 8)}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete lesson "${getLessonContentId(lessonToDelete)}"? This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           onConfirm={handleConfirmDelete}

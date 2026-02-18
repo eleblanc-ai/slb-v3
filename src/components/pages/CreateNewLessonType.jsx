@@ -1713,7 +1713,7 @@ export default function CreateNewLessonType() {
           marginBottom: '2.5rem'
         }}>
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(testLessonId ? '/browse-lessons' : '/browse-lesson-templates')}
             style={{
               position: 'absolute',
               left: 0,
