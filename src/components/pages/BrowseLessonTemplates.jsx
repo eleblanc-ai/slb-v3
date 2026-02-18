@@ -463,36 +463,40 @@ export default function BrowseLessonTemplates() {
                             gap: '0.5rem',
                             zIndex: 10
                           }}>
-                            {/* Clone Button */}
-                            <button
-                              onClick={(e) => handleCloneClick(e, lessonType)}
-                              title="Clone Template"
-                              style={{
-                                background: 'rgba(156, 163, 175, 0.1)',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '0.375rem',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#6b7280',
-                                transition: 'all 0.2s',
-                                opacity: 0.7
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                                e.currentTarget.style.color = '#3b82f6';
-                                e.currentTarget.style.opacity = '1';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
-                                e.currentTarget.style.color = '#6b7280';
-                                e.currentTarget.style.opacity = '0.7';
-                              }}
-                            >
-                              <Copy size={14} />
-                            </button>
+                            {mode !== 'create' && (
+                              <>
+                                {/* Clone Button */}
+                                <button
+                                  onClick={(e) => handleCloneClick(e, lessonType)}
+                                  title="Clone Template"
+                                  style={{
+                                    background: 'rgba(156, 163, 175, 0.1)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '0.375rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#6b7280',
+                                    transition: 'all 0.2s',
+                                    opacity: 0.7
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                                    e.currentTarget.style.color = '#3b82f6';
+                                    e.currentTarget.style.opacity = '1';
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
+                                    e.currentTarget.style.color = '#6b7280';
+                                    e.currentTarget.style.opacity = '0.7';
+                                  }}
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              </>
+                            )}
 
                             {/* Delete Button */}
                             <button
@@ -694,36 +698,40 @@ export default function BrowseLessonTemplates() {
                     gap: '0.5rem',
                     zIndex: 10
                   }}>
-                    {/* Clone Button */}
-                    <button
-                      onClick={(e) => handleCloneClick(e, lessonType)}
-                      title="Clone Template"
-                      style={{
-                        background: 'rgba(156, 163, 175, 0.1)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '0.375rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#6b7280',
-                        transition: 'all 0.2s',
-                        opacity: 0.7
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
-                        e.currentTarget.style.color = '#3b82f6';
-                        e.currentTarget.style.opacity = '1';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
-                        e.currentTarget.style.color = '#6b7280';
-                        e.currentTarget.style.opacity = '0.7';
-                      }}
-                    >
-                      <Copy size={14} />
-                    </button>
+                    {mode !== 'create' && (
+                      <>
+                        {/* Clone Button */}
+                        <button
+                          onClick={(e) => handleCloneClick(e, lessonType)}
+                          title="Clone Template"
+                          style={{
+                            background: 'rgba(156, 163, 175, 0.1)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '0.375rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#6b7280',
+                            transition: 'all 0.2s',
+                            opacity: 0.7
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+                            e.currentTarget.style.color = '#3b82f6';
+                            e.currentTarget.style.opacity = '1';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(156, 163, 175, 0.1)';
+                            e.currentTarget.style.color = '#6b7280';
+                            e.currentTarget.style.opacity = '0.7';
+                          }}
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </>
+                    )}
 
                     {/* Delete Button */}
                     <button

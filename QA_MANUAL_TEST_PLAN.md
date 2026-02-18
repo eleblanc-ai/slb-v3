@@ -173,6 +173,11 @@ This document outlines expected behaviors to verify by interacting with the app 
   - Action: Stop activity and wait >5 minutes, then try to open/edit from another user.
   - Expect: New user can acquire lock and edit.
 
+## 15) User Deletion Safety (Supabase)
+- **Delete user with content**
+  - Action: Delete a user that has authored lessons/templates.
+  - Expect: Lessons/templates remain; `created_by`/`updated_by`/`locked_by` are set to null as applicable.
+
 
 ## Notes
 - If any step fails, capture the field name, template, lesson ID, and exact error text.
