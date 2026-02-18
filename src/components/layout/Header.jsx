@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, LogOut, User, ChevronDown, Shield } from 'lucide-react';
+import { LogOut, User, ChevronDown, Shield } from 'lucide-react';
 import { APP_CONFIG } from '../../config';
+import favicon from '../../assets/favicon.ico';
 import { filterLinksByRole } from '../../lib/roleUtils';
 
 export default function Header({ session, profile, onLogout }) {
@@ -34,9 +35,8 @@ export default function Header({ session, profile, onLogout }) {
     <header className="header">
       <div className="header-content">
         <Link to="/" className="logo">
-          <Sparkles className="logo-icon" />
+          <img src={favicon} alt="" className="logo-icon" />
           <span className="logo-text">{APP_CONFIG.title}</span>
-          <span className="version-badge">{APP_CONFIG.version}</span>
         </Link>
         
         <nav className="nav desktop-nav">

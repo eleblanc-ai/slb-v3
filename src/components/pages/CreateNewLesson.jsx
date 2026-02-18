@@ -2463,7 +2463,7 @@ export default function CreateNewLesson() {
       </style>
       <div style={{
         minHeight: 'calc(100vh - 60px)',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
       padding: '2rem 1rem 4rem'
     }}>
       {/* Show Preview Mode when lesson is locked */}
@@ -2837,7 +2837,7 @@ export default function CreateNewLesson() {
                 gap: '0.375rem',
                 background: (isGeneratingLesson || isLessonLocked)
                   ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
-                  : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2847,8 +2847,8 @@ export default function CreateNewLesson() {
                 cursor: (isGeneratingLesson || isLessonLocked) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
                 boxShadow: pulseGenerateButton && !isLessonLocked
-                  ? '0 0 0 4px rgba(245, 158, 11, 0.4), 0 0 20px rgba(245, 158, 11, 0.6)' 
-                  : '0 2px 4px rgba(245, 158, 11, 0.3)',
+                  ? '0 0 0 4px rgba(139, 92, 246, 0.35), 0 0 20px rgba(124, 58, 237, 0.55)' 
+                  : '0 2px 4px rgba(139, 92, 246, 0.3)',
                 opacity: (isGeneratingLesson || isLessonLocked) ? 0.7 : 1,
                 animation: (pulseGenerateButton && !isLessonLocked) ? 'pulse 1s ease-in-out infinite' : 'none',
                 transform: (pulseGenerateButton && !isLessonLocked) ? 'scale(1.05)' : 'scale(1)'
@@ -2899,7 +2899,7 @@ export default function CreateNewLesson() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: isLessonLocked ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: isLessonLocked ? '#9ca3af' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2908,18 +2908,18 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: isLessonLocked ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: isLessonLocked ? 'none' : '0 2px 4px rgba(16, 185, 129, 0.2)',
+                boxShadow: isLessonLocked ? 'none' : '0 2px 4px rgba(34, 197, 94, 0.25)',
                 opacity: isLessonLocked ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
                 if (isLessonLocked) return;
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(34, 197, 94, 0.35)';
               }}
               onMouseLeave={(e) => {
                 if (isLessonLocked) return;
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.25)';
               }}
             >
               <Save size={16} />
@@ -2932,7 +2932,7 @@ export default function CreateNewLesson() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2941,15 +2941,15 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.2)'
+                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.25)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.35)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.2)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.25)';
               }}
             >
               <Eye size={16} />
@@ -2962,7 +2962,7 @@ export default function CreateNewLesson() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2971,15 +2971,15 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)'
+                boxShadow: '0 2px 4px rgba(249, 115, 22, 0.25)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(249, 115, 22, 0.35)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.2)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(249, 115, 22, 0.25)';
               }}
             >
               <Download size={16} />
@@ -2992,7 +2992,7 @@ export default function CreateNewLesson() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #108fb9 0%, #051396 100%)',
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -3001,15 +3001,15 @@ export default function CreateNewLesson() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                boxShadow: '0 2px 4px rgba(239, 68, 68, 0.25)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.25)';
               }}
             >
               <Upload size={16} />

@@ -1700,7 +1700,7 @@ export default function CreateNewLessonType() {
   return (
     <div style={{
       minHeight: 'calc(100vh - 60px)',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
       padding: '2rem 1rem 4rem'
     }}>
       <div style={{
@@ -1924,7 +1924,7 @@ export default function CreateNewLessonType() {
                 gap: '0.375rem',
                 background: isGeneratingLesson 
                   ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
-                  : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -1933,19 +1933,19 @@ export default function CreateNewLessonType() {
                 fontWeight: 600,
                 cursor: isGeneratingLesson ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)',
                 opacity: isGeneratingLesson ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
                 if (!isGeneratingLesson) {
                   e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isGeneratingLesson) {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
                 }
               }}
             >
@@ -1965,7 +1965,7 @@ export default function CreateNewLessonType() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -1974,15 +1974,15 @@ export default function CreateNewLessonType() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)'
+                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
               }}
             >
               <Beaker size={16} />
@@ -1995,7 +1995,7 @@ export default function CreateNewLessonType() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.375rem',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
@@ -2004,15 +2004,15 @@ export default function CreateNewLessonType() {
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                boxShadow: '0 2px 4px rgba(34, 197, 94, 0.25)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.3)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(34, 197, 94, 0.35)';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.2)';
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.25)';
               }}
             >
               <Save size={16} />

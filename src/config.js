@@ -27,9 +27,7 @@ export const APP_CONFIG = {
   },
   footer: {
     links: [
-      { label: 'About', url: '/about', roles: ['builder', 'designer', 'admin'] }, // null means visible to everyone
-      { label: 'Documentation', url: '/docs', roles: ['builder', 'designer', 'admin'] },
-      { label: 'Support', url: '/support', roles: [] },
+      { label: 'ThinkCERCA @2026', url: 'https://www.thinkcerca.com/', roles: ['builder','admin'] },
       { label: 'Privacy', url: '/privacy', roles: [] },
     ],
   },

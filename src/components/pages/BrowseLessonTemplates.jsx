@@ -308,7 +308,7 @@ export default function BrowseLessonTemplates() {
   return (
     <div style={{
       minHeight: 'calc(100vh - 60px)',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
       padding: '2rem 1rem 4rem'
     }}>
       <div style={{
