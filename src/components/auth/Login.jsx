@@ -46,16 +46,6 @@ export default function Login({ onLogin }) {
         } else {
           setSuccess('Check your email to confirm your account before signing in.');
         }
-      } else if (mode === 'reset') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        setSuccess('Check your email for a password reset link.');
       } else {
         console.log('=== LOGIN ATTEMPT ===');
         console.log('Email:', email);
@@ -117,9 +107,7 @@ export default function Login({ onLogin }) {
           <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '1rem' }}>
             {mode === 'signup'
               ? 'Create your account to continue'
-              : mode === 'reset'
-                ? 'Send a password reset link'
-                : 'Please log in to continue'}
+              : 'Please log in to continue'}
           </p>
         </div>
 
@@ -265,14 +253,10 @@ export default function Login({ onLogin }) {
               {loading
                 ? (mode === 'signup'
                   ? 'Signing up...'
-                  : mode === 'reset'
-                    ? 'Sending reset...'
-                    : 'Signing in...')
+                  : 'Signing in...')
                 : (mode === 'signup'
                   ? 'Sign Up'
-                  : mode === 'reset'
-                    ? 'Send Reset Link'
-                    : 'Sign In')}
+                  : 'Sign In')}
             </button>
 
             <div style={{
@@ -326,52 +310,6 @@ export default function Login({ onLogin }) {
               )}
             </div>
 
-            <div style={{
-              marginTop: '0.75rem',
-              textAlign: 'center',
-              fontSize: '0.875rem',
-              color: '#4b5563'
-            }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('reset');
-                  setError('');
-                  setSuccess('');
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#2563eb',
-                  cursor: 'pointer',
-                  fontWeight: 500
-                }}
-              >
-                Reset password
-              </button>
-              {mode === 'reset' && (
-                <>
-                  <span style={{ margin: '0 0.5rem', color: '#9ca3af' }}>|</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('login');
-                      setError('');
-                      setSuccess('');
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#2563eb',
-                      cursor: 'pointer',
-                      fontWeight: 500
-                    }}
-                  >
-                    Back to sign in
-                  </button>
-                </>
-              )}
-            </div>
           </form>
         </div>
       </div>

@@ -121,8 +121,6 @@ export default function BrowseLessons() {
   };
 
   const canDeleteLesson = (lesson) => {
-    // Admin can delete any lesson
-    if (profile?.role === 'admin') return true;
     // User can only delete their own lessons
     return lesson.created_by === session?.user?.id;
   };

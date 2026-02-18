@@ -7,7 +7,6 @@ import HomePage from './components/pages/HomePage';
 import PlaceholderPage from './components/pages/PlaceholderPage';
 import Login from './components/auth/Login';
 import SetDisplayName from './components/auth/SetDisplayName';
-import SetPassword from './components/auth/SetPassword';
 import CreateNewLessonType from './components/pages/CreateNewLessonType';
 import CreateNewLesson from './components/pages/CreateNewLesson';
 import BrowseLessonTemplates from './components/pages/BrowseLessonTemplates';
@@ -22,32 +21,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
-  const [needsPassword, setNeedsPassword] = useState(false);
-  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [postLoginRedirect, setPostLoginRedirect] = useState(false);
-
-  const detectPasswordRecovery = () => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const searchParams = new URLSearchParams(window.location.search);
-    const typeParam = searchParams.get('type') || hashParams.get('type');
-    return typeParam === 'recovery';
-  };
-
-  const clearRecoveryParams = () => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const url = new URL(window.location.href);
-    url.hash = '';
-    url.searchParams.delete('type');
-    url.searchParams.delete('code');
-    window.history.replaceState({}, document.title, url.toString());
-  };
 
   const fetchProfile = async (userId, forceLoading = true) => {
     // Only set loading state if we're forcing it (initial load)
@@ -84,11 +58,6 @@ function App() {
 
   useEffect(() => {
     // Check active session
-    const hasRecoveryInUrl = detectPasswordRecovery();
-    if (hasRecoveryInUrl) {
-      setPasswordRecovery(true);
-    }
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('Session:', session);
       setSession(session);
@@ -110,10 +79,6 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('Auth state changed:', _event, session);
-
-      if (_event === 'PASSWORD_RECOVERY') {
-        setPasswordRecovery(true);
-      }
 
       // Only update state if the session actually changed
       setSession((prevSession) => {
@@ -156,36 +121,6 @@ function App() {
     }
   };
 
-  const handlePasswordComplete = async () => {
-    // Force refresh the session to get updated user metadata
-    const { data: { session: newSession } } = await supabase.auth.getSession();
-    if (newSession) {
-      setSession(newSession);
-    }
-    setNeedsPassword(false);
-    setPasswordRecovery(false);
-    clearRecoveryParams();
-  };
-
-  // Check if user needs to set a password (invited users via magic link)
-  useEffect(() => {
-    const checkPasswordStatus = async () => {
-      if (!session?.user) {
-        setNeedsPassword(false);
-        return;
-      }
-
-      const user = session.user;
-      
-      // If user doesn't have password_set flag, they need to set a password
-      // This will be true for all invited users who haven't set a password yet
-      const hasPasswordSet = user.user_metadata?.password_set === true;
-      
-      setNeedsPassword(!hasPasswordSet);
-    };
-
-    checkPasswordStatus();
-  }, [session, profile]);
 
   useEffect(() => {
     if (session && postLoginRedirect) {
@@ -259,16 +194,6 @@ function App() {
 
   if (!session) {
     return <Login onLogin={handleLogin} />;
-  }
-
-  // If user is in password recovery flow, show password form
-  if (session && passwordRecovery) {
-    return <SetPassword onComplete={handlePasswordComplete} />;
-  }
-
-  // If user needs to set a password (invited user), show password form
-  if (session && needsPassword) {
-    return <SetPassword onComplete={handlePasswordComplete} />;
   }
 
   // If user is logged in but doesn't have a display name, show the display name form
