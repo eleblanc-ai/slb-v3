@@ -232,9 +232,19 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Copy link**
   - Action: Click the link icon on a lesson card.
   - Expect: Lesson URL is copied and a “Link copied” toast appears.
+- **Archive lesson (creator/admin only)**
+  - Action: As the lesson creator or admin, click the archive icon.
+  - Expect: Confirmation modal appears; on confirm, lesson is archived and removed from list.
+  - Action: As a non-creator, non-admin user, view a lesson card.
+  - Expect: Archive icon is not visible.
+- **Archived lessons filtered**
+  - Action: Archive a lesson and reload Browse Lessons.
+  - Expect: Archived lesson does not appear in the list.
 - **Delete lesson**
   - Action: Delete a lesson.
   - Expect: Confirmation modal uses the lesson content ID (not the lesson ID) and lesson is removed from list on success.
+  - Action: As a non-creator, non-admin user, view a lesson card.
+  - Expect: Delete icon is not visible.
 - **Back navigation**
   - Action: Click Back on Browse Lessons.
   - Expect: Returns to the landing page.

@@ -26,6 +26,18 @@ export default function BrowseLessonTemplates() {
   const [clonedTemplateState, setClonedTemplateState] = useState(null);
 
   useEffect(() => {
+    if (!showCloneSuccessModal) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
+  }, [showCloneSuccessModal]);
+
+  useEffect(() => {
     if (session?.user?.id) {
       fetchLessonTypes();
     }
@@ -1168,6 +1180,10 @@ export default function BrowseLessonTemplates() {
           maxWidth: '600px',
           width: '100%',
           padding: '0',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
         }}>
           <div style={{
@@ -1188,7 +1204,10 @@ export default function BrowseLessonTemplates() {
           </div>
           
           <div style={{
-            padding: '1.5rem'
+            padding: '1.5rem',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto'
           }}>
             <p style={{
               color: 'var(--gray-700)',

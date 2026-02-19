@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { FileText, Beaker, Calendar, User, ArrowLeft, Trash2, Link as LinkIcon } from 'lucide-react';
+import { FileText, Beaker, Calendar, User, ArrowLeft, Trash2, Link as LinkIcon, Archive } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import ConfirmModal from '../modals/ConfirmModal';
@@ -12,6 +12,8 @@ export default function BrowseLessons() {
   const [loading, setLoading] = useState(true);
   const [lessonToDelete, setLessonToDelete] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [lessonToArchive, setLessonToArchive] = useState(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [copyToastText, setCopyToastText] = useState('Link copied');
 
@@ -27,6 +29,7 @@ export default function BrowseLessons() {
       const { data: lessonsData, error: lessonsError } = await supabase
         .from('lessons')
         .select('*')
+        .neq('status', 'archived')
         .order('updated_at', { ascending: false });
 
       if (lessonsError) throw lessonsError;
@@ -132,8 +135,11 @@ export default function BrowseLessons() {
   };
 
   const canDeleteLesson = (lesson) => {
-    // User can only delete their own lessons
-    return lesson.created_by === session?.user?.id;
+    return lesson.created_by === session?.user?.id || profile?.role === 'admin';
+  };
+
+  const canArchiveLesson = (lesson) => {
+    return lesson.created_by === session?.user?.id || profile?.role === 'admin';
   };
 
   const getLessonLink = (lesson) => {
@@ -187,6 +193,12 @@ export default function BrowseLessons() {
     setShowDeleteModal(true);
   };
 
+  const handleArchiveClick = (e, lesson) => {
+    e.stopPropagation(); // Prevent card click
+    setLessonToArchive(lesson);
+    setShowArchiveModal(true);
+  };
+
   const handleConfirmDelete = async () => {
     if (!lessonToDelete) return;
 
@@ -235,6 +247,37 @@ export default function BrowseLessons() {
     } catch (error) {
       console.error('Error deleting lesson:', error);
       alert('Failed to delete lesson. Please try again.');
+    }
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!lessonToArchive) return;
+
+    if (!canArchiveLesson(lessonToArchive)) {
+      alert('You do not have permission to archive this lesson.');
+      setShowArchiveModal(false);
+      setLessonToArchive(null);
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('lessons')
+        .update({
+          status: 'archived',
+          updated_by: session?.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', lessonToArchive.id);
+
+      if (error) throw error;
+
+      setLessons(lessons.filter(l => l.id !== lessonToArchive.id));
+      setShowArchiveModal(false);
+      setLessonToArchive(null);
+    } catch (error) {
+      console.error('Error archiving lesson:', error);
+      alert('Failed to archive lesson. Please try again.');
     }
   };
 
@@ -289,71 +332,7 @@ export default function BrowseLessons() {
           e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
         }}
       >
-        {/* Delete Button */}
-        {canDeleteLesson(lesson) && (
-          <button
-            onClick={(e) => handleDeleteClick(e, lesson)}
-            style={{
-              position: 'absolute',
-              top: '0.75rem',
-              right: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '32px',
-              height: '32px',
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              color: '#dc2626',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              zIndex: 2,
-              backdropFilter: 'blur(4px)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#fee2e2';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
-            }}
-            title="Delete lesson"
-          >
-            <Trash2 size={16} />
-          </button>
-        )}
-
-        {/* Copy Link Button */}
-        <button
-          onClick={(e) => handleCopyLessonLink(e, lesson)}
-          style={{
-            position: 'absolute',
-            top: '0.75rem',
-            right: canDeleteLesson(lesson) ? '3.25rem' : '0.75rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '32px',
-            height: '32px',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            color: '#4f46e5',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            zIndex: 2,
-            backdropFilter: 'blur(4px)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#e0e7ff';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
-          }}
-          title="Copy lesson link"
-        >
-          <LinkIcon size={16} />
-        </button>
+        {null}
 
         {/* Thumbnail */}
         <div style={{
@@ -450,22 +429,90 @@ export default function BrowseLessons() {
             </div>
           </div>
 
-          {/* Response counts */}
+          {/* Response counts + Actions */}
           <div style={{
             display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '1rem',
             fontSize: '0.75rem',
             color: 'var(--gray-600)'
           }}>
-            <div>
-              <span style={{ fontWeight: 600 }}>
-                {Object.keys(lesson.designer_responses || {}).length}
-              </span> designer
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <div>
+                <span style={{ fontWeight: 600 }}>
+                  {Object.keys(lesson.designer_responses || {}).length}
+                </span> designer
+              </div>
+              <div>
+                <span style={{ fontWeight: 600 }}>
+                  {Object.keys(lesson.builder_responses || {}).length}
+                </span> builder
+              </div>
             </div>
-            <div>
-              <span style={{ fontWeight: 600 }}>
-                {Object.keys(lesson.builder_responses || {}).length}
-              </span> builder
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {[
+                {
+                  key: 'link',
+                  onClick: (e) => handleCopyLessonLink(e, lesson),
+                  icon: <LinkIcon size={16} />,
+                  color: '#4f46e5',
+                  hoverBg: '#e0e7ff',
+                  title: 'Copy lesson link'
+                },
+                ...(canArchiveLesson(lesson)
+                  ? [
+                      {
+                        key: 'archive',
+                        onClick: (e) => handleArchiveClick(e, lesson),
+                        icon: <Archive size={16} />,
+                        color: '#d97706',
+                        hoverBg: '#fef3c7',
+                        title: 'Archive lesson'
+                      }
+                    ]
+                  : []),
+                ...(canDeleteLesson(lesson)
+                  ? [
+                      {
+                        key: 'delete',
+                        onClick: (e) => handleDeleteClick(e, lesson),
+                        icon: <Trash2 size={16} />,
+                        color: '#dc2626',
+                        hoverBg: '#fee2e2',
+                        title: 'Delete lesson'
+                      }
+                    ]
+                  : [])
+              ].map((button) => (
+                <button
+                  key={button.key}
+                  onClick={button.onClick}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    color: button.color,
+                    border: '1px solid var(--gray-200)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = button.hoverBg;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                  }}
+                  title={button.title}
+                >
+                  {button.icon}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -694,6 +741,20 @@ export default function BrowseLessons() {
             setLessonToDelete(null);
           }}
           dangerous
+        />
+      )}
+
+      {showArchiveModal && (
+        <ConfirmModal
+          title="Archive Lesson"
+          message={`Are you sure you want to archive lesson "${getLessonContentId(lessonToArchive)}"? You can unarchive it later from the database if needed.`}
+          confirmText="Archive"
+          cancelText="Cancel"
+          onConfirm={handleConfirmArchive}
+          onCancel={() => {
+            setShowArchiveModal(false);
+            setLessonToArchive(null);
+          }}
         />
       )}
     </div>

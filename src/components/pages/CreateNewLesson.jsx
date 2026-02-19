@@ -29,7 +29,7 @@ import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extra
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
-import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalReadingPracticeMarkdownExport';
+import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalreadingpracticeMarkdownExport';
 import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../lib/markdown-export/additionalreadingpracticefloridaMarkdownExport';
 // Sortable Field Wrapper Component
 function SortableField({ id, children }) {
@@ -130,6 +130,7 @@ export default function CreateNewLesson() {
   const previousFieldValuesRef = useRef(null);
   const autoSaveTimeoutRef = useRef(null);
   const autoCreateLessonPromiseRef = useRef(null);
+  const generationCancelledRef = useRef(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
   const handlePreFormClose = async () => {
@@ -912,6 +913,7 @@ export default function CreateNewLesson() {
 
   // Handler: Generate entire lesson (all AI-enabled fields)
   const handleGenerateLesson = async () => {
+    generationCancelledRef.current = false;
     // If paused, continue from where we left off
     if (generationPaused) {
       setGenerationPaused(false);
@@ -940,7 +942,16 @@ export default function CreateNewLesson() {
     await continueGeneration();
   };
 
+  const handleStopGeneration = () => {
+    generationCancelledRef.current = true;
+    setIsGeneratingLesson(false);
+    setGenerationPaused(true);
+    setShowMissingFieldsModal(false);
+    setHighlightedMissingFields(new Set());
+  };
+
   const continueGeneration = async () => {
+    generationCancelledRef.current = false;
     const aiEnabledDesignerFields = fields.filter(f => f.fieldFor === 'designer' && f.aiEnabled);
     const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
     const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
@@ -949,6 +960,11 @@ export default function CreateNewLesson() {
     let currentFieldValues = { ...fieldValues };
     
     for (let i = currentGenerationIndex; i < allAIFields.length; i++) {
+      if (generationCancelledRef.current) {
+        setIsGeneratingLesson(false);
+        setGenerationPaused(true);
+        return;
+      }
       const field = allAIFields[i];
       setCurrentGenerationIndex(i);
       
@@ -2881,6 +2897,38 @@ export default function CreateNewLesson() {
                   ? 'Continue Generating Lesson'
                   : 'Generate Lesson'}
             </button>
+
+            {isGeneratingLesson && (
+              <button
+                type="button"
+                onClick={handleStopGeneration}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.5rem 0.875rem',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.3)';
+                }}
+              >
+                Stop Generation
+              </button>
+            )}
 
             {/* Animated Arrow Indicator */}
             {pulseGenerateButton && !isGeneratingLesson && (

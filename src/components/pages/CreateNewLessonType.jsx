@@ -116,6 +116,19 @@ export default function CreateNewLessonType() {
   const [markdownExportData, setMarkdownExportData] = useState(null);
   const [standardFrameworks, setStandardFrameworks] = useState([]);
   const [defaultStandardFramework, setDefaultStandardFramework] = useState('CCSS');
+  const generationCancelledRef = useRef(false);
+
+  useEffect(() => {
+    if (!showMarkdownExportModal) return;
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
+  }, [showMarkdownExportModal]);
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -197,6 +210,7 @@ export default function CreateNewLessonType() {
 
   // Handler: Generate entire lesson (all AI-enabled fields)
   const handleGenerateLesson = async () => {
+    generationCancelledRef.current = false;
     // If paused, continue from where we left off
     if (generationPaused) {
       setGenerationPaused(false);
@@ -225,12 +239,26 @@ export default function CreateNewLessonType() {
     await continueGeneration();
   };
 
+  const handleStopGeneration = () => {
+    generationCancelledRef.current = true;
+    setIsGeneratingLesson(false);
+    setGenerationPaused(true);
+    setShowMissingFieldsModal(false);
+    setHighlightedMissingFields(new Set());
+  };
+
   const continueGeneration = async () => {
+    generationCancelledRef.current = false;
     const aiEnabledDesignerFields = fields.filter(f => f.fieldFor === 'designer' && f.aiEnabled);
     const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
     const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
     
     for (let i = currentGenerationIndex; i < allAIFields.length; i++) {
+      if (generationCancelledRef.current) {
+        setIsGeneratingLesson(false);
+        setGenerationPaused(true);
+        return;
+      }
       const field = allAIFields[i];
       setCurrentGenerationIndex(i);
       
@@ -1965,6 +1993,38 @@ export default function CreateNewLessonType() {
                   : 'Generate Lesson'}
             </button>
 
+            {isGeneratingLesson && (
+              <button
+                type="button"
+                onClick={handleStopGeneration}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0.5rem 0.875rem',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.3)';
+                }}
+              >
+                Stop Generation
+              </button>
+            )}
+
             <div style={{ width: '1px', height: '24px', backgroundColor: 'var(--gray-300)' }} />
 
             <button
@@ -2800,6 +2860,7 @@ export default function CreateNewLessonType() {
             {/* Content */}
             <div style={{
               flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
               padding: '2rem'
             }}>
