@@ -256,11 +256,7 @@ export default function BrowseLessons() {
   const renderLessonCard = (lesson) => {
     const formatName = (name) => {
       if (!name) return 'Unknown User';
-      const parts = name.trim().split(/\s+/).filter(Boolean);
-      if (parts.length === 1) return parts[0];
-      const first = parts[0];
-      const lastInitial = parts[parts.length - 1]?.[0];
-      return lastInitial ? `${first} ${lastInitial}.` : first;
+      return name;
     };
 
     const allResponses = { ...(lesson.designer_responses || {}), ...(lesson.builder_responses || {}) };
@@ -416,9 +412,6 @@ export default function BrowseLessons() {
 
           {/* Creator and timestamps */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '0.75rem',
             marginBottom: '0.75rem'
           }}>
             <div style={{
@@ -453,45 +446,6 @@ export default function BrowseLessons() {
                   minute: '2-digit',
                   hour12: true
                 })}
-              </div>
-            </div>
-
-            <div style={{
-              padding: '0.5rem 0.75rem',
-              border: '1px solid var(--gray-200)',
-              borderRadius: '0.5rem'
-            }}>
-              <div style={{
-                fontSize: '0.6875rem',
-                color: 'var(--gray-500)',
-                marginBottom: '0.25rem'
-              }}>
-                Last updated
-              </div>
-              <div style={{
-                fontSize: '0.8125rem',
-                color: 'var(--gray-800)',
-                fontWeight: 600,
-                marginBottom: '0.25rem'
-              }}>
-                {lesson.updater?.display_name
-                  ? formatName(lesson.updater.display_name)
-                  : '—'}
-              </div>
-              <div style={{
-                fontSize: '0.75rem',
-                color: 'var(--gray-600)'
-              }}>
-                {lesson.updated_at
-                  ? new Date(lesson.updated_at).toLocaleString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                  : '—'}
               </div>
             </div>
           </div>

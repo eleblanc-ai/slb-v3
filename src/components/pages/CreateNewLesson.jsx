@@ -25,7 +25,7 @@ import { APP_CONFIG } from '../../config';
 import { supabase } from '../../lib/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, callAIWithBatchedContext, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
-import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade } from '../../lib/standardsMapper';
+import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
@@ -682,36 +682,49 @@ export default function CreateNewLesson() {
         console.warn('⚠️ No context fields configured for MCQ generation - AI may not have passage content');
       }
 
-      // Add default vocab standards context when using CCSS
+      // Check if this question should include vocab and/or main idea standards
+      const questionConfig = fieldAIConfig.ai_question_prompts?.[questionKey];
+      const includeVocabStandards = questionConfig?.includeVocabStandards || false;
+      const includeMainIdeaStandards = questionConfig?.includeMainIdeaStandards || false;
+
+      // Add grade-specific standards context based on checkboxes
       const defaultFramework = templateData?.default_standard_framework || 'CCSS';
-      if (defaultFramework === 'CCSS') {
-        const gradeField = fields.find(f => f.type === 'grade_band_selector');
-        const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-        const gradeLevel = extractGradeFromBand(gradeValue);
-        const vocabStandards = await getCcssVocabularyStandardsForGrade(gradeLevel);
+      const gradeField = fields.find(f => f.type === 'grade_band_selector');
+      const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
+      const gradeLevel = extractGradeFromBand(gradeValue);
+      
+      const extraContextBlocks = [];
+      
+      if (includeVocabStandards) {
+        const vocabStandards = defaultFramework === 'CCSS'
+          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
+          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultFramework);
+        
         if (vocabStandards.length > 0) {
-          aiConfig.extraContextBlocks = [
-            {
-              title: 'Grade-Specific Vocabulary Standards (CCSS)',
-              content: vocabStandards.join('; ')
-            }
-          ];
+          extraContextBlocks.push({
+            title: `Grade-Specific Vocabulary Standards (${defaultFramework})`,
+            content: vocabStandards.join('; ')
+          });
           console.log('📚 Vocab standards added to MCQ prompt (individual):', vocabStandards);
         }
-      } else {
-        const gradeField = fields.find(f => f.type === 'grade_band_selector');
-        const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-        const gradeLevel = extractGradeFromBand(gradeValue);
-        const vocabStandards = await getMappedVocabularyStandardsForGrade(gradeLevel, defaultFramework);
-        if (vocabStandards.length > 0) {
-          aiConfig.extraContextBlocks = [
-            {
-              title: `Grade-Specific Vocabulary Standards (${defaultFramework})`,
-              content: vocabStandards.join('; ')
-            }
-          ];
-          console.log('📚 Vocab standards added to MCQ prompt (individual):', vocabStandards);
+      }
+      
+      if (includeMainIdeaStandards) {
+        const mainIdeaStandards = defaultFramework === 'CCSS'
+          ? await getCcssMainIdeaStandardsForGrade(gradeLevel)
+          : await getMappedMainIdeaStandardsForGrade(gradeLevel, defaultFramework);
+        
+        if (mainIdeaStandards.length > 0) {
+          extraContextBlocks.push({
+            title: `Grade-Specific Main Idea Standards (${defaultFramework})`,
+            content: mainIdeaStandards.join('; ')
+          });
+          console.log('📚 Main Idea standards added to MCQ prompt (individual):', mainIdeaStandards);
         }
+      }
+      
+      if (extraContextBlocks.length > 0) {
+        aiConfig.extraContextBlocks = extraContextBlocks;
       }
       
       // Add selected standard to context if provided
@@ -782,11 +795,6 @@ export default function CreateNewLesson() {
         console.error('❌ Invalid MCQ response:', q);
         throw new Error('AI generated incomplete question - missing question text or choices. Check that context fields (passage) are configured in AI Config.');
       }
-      
-      // Extract grade level from fieldValues
-      const gradeField = fields.find(f => f.type === 'grade_band_selector');
-      const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-      const gradeLevel = extractGradeFromBand(gradeValue);
       
       // Build context text from configured context fields (e.g., reading passage)
       let contextText = '';

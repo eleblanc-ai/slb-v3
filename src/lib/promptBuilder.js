@@ -1,3 +1,28 @@
+import TurndownService from 'turndown';
+
+const turndownService = new TurndownService({
+  headingStyle: 'atx',
+  bulletListMarker: '-',
+  codeBlockStyle: 'fenced'
+});
+
+const htmlTagPattern = /<\/?[a-z][\s\S]*>/i;
+
+function normalizeToMarkdown(value) {
+  if (!value || typeof value !== 'string') return value || '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (!htmlTagPattern.test(trimmed)) {
+    return trimmed;
+  }
+  try {
+    return turndownService.turndown(trimmed);
+  } catch (error) {
+    console.warn('⚠️ Failed to convert HTML to Markdown:', error);
+    return trimmed;
+  }
+}
+
 /**
  * Build a complete prompt that matches the ConfigureAIModal preview format
  * @param {Object} config - Configuration object
@@ -24,28 +49,32 @@ export function buildFullPrompt(config) {
   } = config;
 
   let fullPrompt = '';
+  const normalizedSystemInstructions = normalizeToMarkdown(systemInstructions);
+  const normalizedPrompt = normalizeToMarkdown(prompt);
+  const normalizedFormatRequirements = normalizeToMarkdown(formatRequirements);
+  const normalizedContextInstructions = normalizeToMarkdown(contextInstructions);
 
   // Add system instructions
-  if (systemInstructions) {
+  if (normalizedSystemInstructions) {
     fullPrompt += '=== SYSTEM INSTRUCTIONS ===\n';
-    fullPrompt += systemInstructions + '\n\n';
+    fullPrompt += normalizedSystemInstructions + '\n\n';
   }
 
   // Add task/prompt
-  if (prompt) {
+  if (normalizedPrompt) {
     fullPrompt += '=== TASK ===\n';
-    fullPrompt += prompt + '\n\n';
+    fullPrompt += normalizedPrompt + '\n\n';
   }
 
   // ALWAYS add format requirements
   fullPrompt += '=== FORMAT REQUIREMENTS ===\n';
-  fullPrompt += (formatRequirements || 'No specific format requirements.') + '\n\n';
+  fullPrompt += (normalizedFormatRequirements || 'No specific format requirements.') + '\n\n';
 
   // Add context if any fields are selected or extra context blocks are provided
   if (selectedFieldIds.length > 0 || extraContextBlocks.length > 0) {
     fullPrompt += '=== CONTEXT ===\n';
     // ALWAYS add context instructions
-    fullPrompt += (contextInstructions || 'Use the following context information to complete the task.') + '\n\n';
+    fullPrompt += (normalizedContextInstructions || 'Use the following context information to complete the task.') + '\n\n';
 
     selectedFieldIds.forEach(fieldId => {
       const contextField = allFields.find(f => f.id === fieldId);
@@ -57,7 +86,14 @@ export function buildFullPrompt(config) {
           if (typeof fieldValue === 'string') {
             displayValue = fieldValue;
           } else if (typeof fieldValue === 'object') {
-            displayValue = JSON.stringify(fieldValue, null, 2);
+            // For MCQ fields, remove metadata (sourceStandards, filteredOutStandards, standards)
+            // These are internal tracking data not needed for AI context
+            if (fieldValue.questions && Array.isArray(fieldValue.questions)) {
+              const cleanedValue = { questions: fieldValue.questions };
+              displayValue = JSON.stringify(cleanedValue, null, 2);
+            } else {
+              displayValue = JSON.stringify(fieldValue, null, 2);
+            }
           }
         }
 

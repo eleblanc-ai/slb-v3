@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, Eye } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { APP_CONFIG } from '../../config';
 import { buildFullPrompt } from '../../lib/promptBuilder';
-import { extractGradeFromBand, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade } from '../../lib/standardsMapper';
+import { extractGradeFromBand, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
+import TipTapEditor from '../core/TipTapEditor';
 
 /**
  * ConfigureAIModal - Modal for configuring AI generation settings for a field
@@ -24,11 +25,11 @@ export default function ConfigureAIModal({
   const [prompt, setPrompt] = useState('');
   // MCQ question prompts (q1-q5) - each question has its own prompt, label, and tooltip
   const [questionPrompts, setQuestionPrompts] = useState({
-    q1: { prompt: '', label: '', tooltip: '' },
-    q2: { prompt: '', label: '', tooltip: '' },
-    q3: { prompt: '', label: '', tooltip: '' },
-    q4: { prompt: '', label: '', tooltip: '' },
-    q5: { prompt: '', label: '', tooltip: '' }
+    q1: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false },
+    q2: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false },
+    q3: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false },
+    q4: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false },
+    q5: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false }
   });
   const [activeQuestionTab, setActiveQuestionTab] = useState(0);
   const [systemInstructions, setSystemInstructions] = useState('');
@@ -41,33 +42,53 @@ export default function ConfigureAIModal({
   const [showSyncConfirm, setShowSyncConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [vocabStandards, setVocabStandards] = useState([]);
+  const [mainIdeaStandards, setMainIdeaStandards] = useState([]);
   const allowSelfContext = field?.type === 'mcqs';
-  const systemInstructionsRef = useRef(null);
-  const promptRef = useRef(null);
-  const formatRequirementsRef = useRef(null);
-  const contextInstructionsRef = useRef(null);
-  const questionPromptRefs = useRef({});
   const questionKeys = useMemo(() => ['q1', 'q2', 'q3', 'q4', 'q5'], []);
 
   const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
   const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
   const defaultFormatReqs = 'Return plain text without markdown formatting.';
 
-  const autoSizeTextarea = useCallback((el) => {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, []);
-
   // Get default prompts for MCQ questions
   const getDefaultQuestionPrompts = useCallback(() => {
     const defaults = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts || {};
     return {
-      q1: { prompt: defaults.q1?.prompt || '', label: defaults.q1?.label || 'Central Idea', tooltip: defaults.q1?.tooltip || '' },
-      q2: { prompt: defaults.q2?.prompt || '', label: defaults.q2?.label || 'Vocabulary', tooltip: defaults.q2?.tooltip || '' },
-      q3: { prompt: defaults.q3?.prompt || '', label: defaults.q3?.label || 'Evidence', tooltip: defaults.q3?.tooltip || '' },
-      q4: { prompt: defaults.q4?.prompt || '', label: defaults.q4?.label || 'Inference', tooltip: defaults.q4?.tooltip || '' },
-      q5: { prompt: defaults.q5?.prompt || '', label: defaults.q5?.label || 'Structure', tooltip: defaults.q5?.tooltip || '' }
+      q1: { 
+        prompt: defaults.q1?.prompt || '', 
+        label: defaults.q1?.label || 'Central Idea', 
+        tooltip: defaults.q1?.tooltip || '',
+        includeVocabStandards: defaults.q1?.includeVocabStandards || false,
+        includeMainIdeaStandards: defaults.q1?.includeMainIdeaStandards || false
+      },
+      q2: { 
+        prompt: defaults.q2?.prompt || '', 
+        label: defaults.q2?.label || 'Vocabulary', 
+        tooltip: defaults.q2?.tooltip || '',
+        includeVocabStandards: defaults.q2?.includeVocabStandards || false,
+        includeMainIdeaStandards: defaults.q2?.includeMainIdeaStandards || false
+      },
+      q3: { 
+        prompt: defaults.q3?.prompt || '', 
+        label: defaults.q3?.label || 'Evidence', 
+        tooltip: defaults.q3?.tooltip || '',
+        includeVocabStandards: defaults.q3?.includeVocabStandards || false,
+        includeMainIdeaStandards: defaults.q3?.includeMainIdeaStandards || false
+      },
+      q4: { 
+        prompt: defaults.q4?.prompt || '', 
+        label: defaults.q4?.label || 'Inference', 
+        tooltip: defaults.q4?.tooltip || '',
+        includeVocabStandards: defaults.q4?.includeVocabStandards || false,
+        includeMainIdeaStandards: defaults.q4?.includeMainIdeaStandards || false
+      },
+      q5: { 
+        prompt: defaults.q5?.prompt || '', 
+        label: defaults.q5?.label || 'Structure', 
+        tooltip: defaults.q5?.tooltip || '',
+        includeVocabStandards: defaults.q5?.includeVocabStandards || false,
+        includeMainIdeaStandards: defaults.q5?.includeMainIdeaStandards || false
+      }
     };
   }, []);
 
@@ -100,43 +121,32 @@ export default function ConfigureAIModal({
   }, [field, allFields, fieldValues, defaultStandardFramework]);
 
   useEffect(() => {
-    autoSizeTextarea(systemInstructionsRef.current);
-  }, [systemInstructions, autoSizeTextarea]);
+    const loadMainIdeaStandards = async () => {
+      if (!field || field.type !== 'mcqs') {
+        setMainIdeaStandards([]);
+        return;
+      }
 
-  useEffect(() => {
-    autoSizeTextarea(promptRef.current);
-  }, [prompt, autoSizeTextarea]);
+      const gradeField = allFields.find(f => f.type === 'grade_band_selector');
+      const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+      const gradeValue = gradeField
+        ? (fieldValues?.[gradeField.id] ?? storedFieldValues?.[gradeField.id])
+        : null;
+      const gradeLevel = extractGradeFromBand(gradeValue);
 
-  useEffect(() => {
-    autoSizeTextarea(formatRequirementsRef.current);
-  }, [formatRequirements, autoSizeTextarea]);
+      if (defaultStandardFramework === 'CCSS') {
+        const standards = await getCcssMainIdeaStandardsForGrade(gradeLevel);
+        setMainIdeaStandards(standards);
+      } else {
+        const standards = await getMappedMainIdeaStandardsForGrade(gradeLevel, defaultStandardFramework);
+        setMainIdeaStandards(standards);
+      }
+    };
 
-  useEffect(() => {
-    autoSizeTextarea(contextInstructionsRef.current);
-  }, [contextInstructions, autoSizeTextarea]);
+    loadMainIdeaStandards();
+  }, [field, allFields, fieldValues, defaultStandardFramework]);
 
-  useEffect(() => {
-    Object.values(questionPromptRefs.current).forEach(autoSizeTextarea);
-  }, [questionPrompts, autoSizeTextarea]);
-
-  useEffect(() => {
-    if (loading) return;
-    requestAnimationFrame(() => {
-      autoSizeTextarea(systemInstructionsRef.current);
-      autoSizeTextarea(promptRef.current);
-      autoSizeTextarea(formatRequirementsRef.current);
-      autoSizeTextarea(contextInstructionsRef.current);
-      Object.values(questionPromptRefs.current).forEach(autoSizeTextarea);
-    });
-  }, [loading, autoSizeTextarea]);
-
-  useEffect(() => {
-    const qKey = questionKeys[activeQuestionTab];
-    const el = questionPromptRefs.current[qKey];
-    if (el) {
-      requestAnimationFrame(() => autoSizeTextarea(el));
-    }
-  }, [activeQuestionTab, questionKeys, autoSizeTextarea]);
+  
 
   const loadConfiguration = useCallback(async () => {
     const defaultQuestionPrompts = getDefaultQuestionPrompts();
@@ -182,27 +192,37 @@ export default function ConfigureAIModal({
             q1: { 
               prompt: savedPrompts.q1?.prompt || savedPrompts.q1 || defaultQuestionPrompts.q1.prompt, 
               label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
-              tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip
+              tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip,
+              includeVocabStandards: savedPrompts.q1?.includeVocabStandards || false,
+              includeMainIdeaStandards: savedPrompts.q1?.includeMainIdeaStandards || false
             },
             q2: { 
               prompt: savedPrompts.q2?.prompt || savedPrompts.q2 || defaultQuestionPrompts.q2.prompt, 
               label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
-              tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip
+              tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip,
+              includeVocabStandards: savedPrompts.q2?.includeVocabStandards || false,
+              includeMainIdeaStandards: savedPrompts.q2?.includeMainIdeaStandards || false
             },
             q3: { 
               prompt: savedPrompts.q3?.prompt || savedPrompts.q3 || defaultQuestionPrompts.q3.prompt, 
               label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
-              tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip
+              tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip,
+              includeVocabStandards: savedPrompts.q3?.includeVocabStandards || false,
+              includeMainIdeaStandards: savedPrompts.q3?.includeMainIdeaStandards || false
             },
             q4: { 
               prompt: savedPrompts.q4?.prompt || savedPrompts.q4 || defaultQuestionPrompts.q4.prompt, 
               label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
-              tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip
+              tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip,
+              includeVocabStandards: savedPrompts.q4?.includeVocabStandards || false,
+              includeMainIdeaStandards: savedPrompts.q4?.includeMainIdeaStandards || false
             },
             q5: { 
               prompt: savedPrompts.q5?.prompt || savedPrompts.q5 || defaultQuestionPrompts.q5.prompt, 
               label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
-              tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip
+              tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip,
+              includeVocabStandards: savedPrompts.q5?.includeVocabStandards || false,
+              includeMainIdeaStandards: savedPrompts.q5?.includeMainIdeaStandards || false
             }
           });
         } else {
@@ -452,12 +472,26 @@ export default function ConfigureAIModal({
   const promptPreview = useMemo(() => {
     // Read field values from localStorage
     const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
-    const extraContextBlocks = vocabStandards.length > 0 ? [
-      {
-        title: 'Grade-Specific Vocabulary Standards (CCSS)',
-        content: vocabStandards.join('; ')
+    const extraContextBlocks = [];
+    
+    // For MCQ fields, only show standards if checkboxes are checked for the active question
+    if (field?.type === 'mcqs') {
+      const activeQuestionKey = questionKeys[activeQuestionTab];
+      const activeQuestionConfig = questionPrompts[activeQuestionKey];
+      
+      if (activeQuestionConfig?.includeVocabStandards && vocabStandards.length > 0) {
+        extraContextBlocks.push({
+          title: 'Grade-Specific Vocabulary Standards',
+          content: vocabStandards.join('; ')
+        });
       }
-    ] : [];
+      if (activeQuestionConfig?.includeMainIdeaStandards && mainIdeaStandards.length > 0) {
+        extraContextBlocks.push({
+          title: 'Grade-Specific Main Idea Standards',
+          content: mainIdeaStandards.join('; ')
+        });
+      }
+    }
 
     return buildFullPrompt({
       systemInstructions,
@@ -469,7 +503,7 @@ export default function ConfigureAIModal({
       fieldValues: storedFieldValues,
       extraContextBlocks
     });
-  }, [prompt, systemInstructions, contextInstructions, formatRequirements, selectedFields, allFields, vocabStandards]);
+  }, [prompt, systemInstructions, contextInstructions, formatRequirements, selectedFields, allFields, vocabStandards, mainIdeaStandards, activeQuestionTab, questionPrompts, questionKeys, field]);
 
   if (!visible || !field) return null;
 
@@ -699,28 +733,12 @@ export default function ConfigureAIModal({
                       }}>
                         System Instructions
                       </label>
-                      <textarea
-                        ref={systemInstructionsRef}
-                        value={systemInstructions}
-                        onChange={(e) => setSystemInstructions(e.target.value)}
-                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
+                      <TipTapEditor
+                        content={systemInstructions}
+                        onChange={(value) => setSystemInstructions(value)}
                         placeholder="e.g., You are an AI assistant..."
-                        rows={4}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '2px solid var(--gray-200)',
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontFamily: 'system-ui',
-                          color: 'var(--gray-900)',
-                          backgroundColor: '#fff',
-                          outline: 'none',
-                          transition: 'border-color 0.2s',
-                          resize: 'none',
-                          overflow: 'hidden',
-                          boxSizing: 'border-box'
-                        }}
+                        minHeight="110px"
+                        fontSize="0.8125rem"
                       />
                     </div>
 
@@ -742,28 +760,12 @@ export default function ConfigureAIModal({
                       }}>
                         Field Prompt
                       </label>
-                      <textarea
-                        ref={promptRef}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
+                      <TipTapEditor
+                        content={prompt}
+                        onChange={(value) => setPrompt(value)}
                         placeholder="Example: Generate..."
-                        rows={5}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '2px solid #93c5fd',
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontFamily: 'system-ui',
-                          color: 'var(--gray-900)',
-                          backgroundColor: '#fff',
-                          outline: 'none',
-                          transition: 'border-color 0.2s',
-                          resize: 'none',
-                          overflow: 'hidden',
-                          boxSizing: 'border-box'
-                        }}
+                        minHeight="140px"
+                        fontSize="0.8125rem"
                       />
                     </div>
                     )}
@@ -903,6 +905,72 @@ export default function ConfigureAIModal({
                                   />
                                 </div>
                               </div>
+                            )}  
+                            
+                            {/* Standards Inclusion Checkboxes - Show in template mode always, in lesson mode only if selected */}
+                            {(mode === 'template' || (mode === 'lesson' && (questionPrompts[qKey]?.includeVocabStandards || questionPrompts[qKey]?.includeMainIdeaStandards))) && (
+                              <div style={{
+                                marginBottom: '0.75rem',
+                                padding: '0.75rem',
+                                background: mode === 'lesson' ? '#f8f9fa' : '#f0fdf4',
+                                borderRadius: '8px',
+                                border: mode === 'lesson' ? '1px solid #dee2e6' : '1px solid #86efac'
+                              }}>
+                                <div style={{
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  color: mode === 'lesson' ? '#495057' : '#166534',
+                                  marginBottom: '0.5rem'
+                                }}>
+                                  Include Grade-Specific Standards {mode === 'lesson' && '(Set by Template)'}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                  {(mode === 'template' || questionPrompts[qKey]?.includeVocabStandards) && (
+                                    <label style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      cursor: mode === 'lesson' ? 'not-allowed' : 'pointer',
+                                      fontSize: '0.8125rem',
+                                      color: mode === 'lesson' ? '#495057' : '#15803d'
+                                    }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={questionPrompts[qKey]?.includeVocabStandards || false}
+                                        onChange={(e) => setQuestionPrompts(prev => ({
+                                          ...prev,
+                                          [qKey]: { ...prev[qKey], includeVocabStandards: e.target.checked }
+                                        }))}
+                                        disabled={mode === 'lesson'}
+                                        style={{ cursor: mode === 'lesson' ? 'not-allowed' : 'pointer' }}
+                                      />
+                                      <span>Include Vocabulary Standards ({vocabStandards.length > 0 ? vocabStandards.join('; ') : 'None'})</span>
+                                    </label>
+                                  )}
+                                  {(mode === 'template' || questionPrompts[qKey]?.includeMainIdeaStandards) && (
+                                    <label style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.5rem',
+                                      cursor: mode === 'lesson' ? 'not-allowed' : 'pointer',
+                                      fontSize: '0.8125rem',
+                                      color: mode === 'lesson' ? '#495057' : '#15803d'
+                                    }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={questionPrompts[qKey]?.includeMainIdeaStandards || false}
+                                        onChange={(e) => setQuestionPrompts(prev => ({
+                                          ...prev,
+                                          [qKey]: { ...prev[qKey], includeMainIdeaStandards: e.target.checked }
+                                        }))}
+                                        disabled={mode === 'lesson'}
+                                        style={{ cursor: mode === 'lesson' ? 'not-allowed' : 'pointer' }}
+                                      />
+                                      <span>Include Main Idea Standards ({mainIdeaStandards.length > 0 ? mainIdeaStandards.join('; ') : 'None'})</span>
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
                             )}
                             
                             <label style={{
@@ -914,33 +982,15 @@ export default function ConfigureAIModal({
                             }}>
                               Question {index + 1} Prompt
                             </label>
-                            <textarea
-                              ref={(el) => {
-                                questionPromptRefs.current[qKey] = el;
-                              }}
-                              value={questionPrompts[qKey]?.prompt || ''}
-                              onChange={(e) => setQuestionPrompts(prev => ({
+                            <TipTapEditor
+                              content={questionPrompts[qKey]?.prompt || ''}
+                              onChange={(value) => setQuestionPrompts(prev => ({
                                 ...prev,
-                                [qKey]: { ...prev[qKey], prompt: e.target.value }
+                                [qKey]: { ...prev[qKey], prompt: value }
                               }))}
-                              onInput={(e) => autoSizeTextarea(e.currentTarget)}
                               placeholder={`Enter the prompt for Question ${index + 1}...`}
-                              rows={8}
-                              style={{
-                                width: '100%',
-                                padding: '0.75rem',
-                                border: '2px solid #86efac',
-                                borderRadius: '8px',
-                                fontSize: '0.8125rem',
-                                fontFamily: 'system-ui',
-                                color: 'var(--gray-900)',
-                                backgroundColor: '#fff',
-                                outline: 'none',
-                                transition: 'border-color 0.2s',
-                                resize: 'none',
-                                overflow: 'hidden',
-                                boxSizing: 'border-box'
-                              }}
+                              minHeight="180px"
+                              fontSize="0.8125rem"
                             />
                           </div>
                         ))}
@@ -957,28 +1007,12 @@ export default function ConfigureAIModal({
                       }}>
                         Format Requirements
                       </label>
-                      <textarea
-                        ref={formatRequirementsRef}
-                        value={formatRequirements}
-                        onChange={(e) => setFormatRequirements(e.target.value)}
-                        onInput={(e) => autoSizeTextarea(e.currentTarget)}
+                      <TipTapEditor
+                        content={formatRequirements}
+                        onChange={(value) => setFormatRequirements(value)}
                         placeholder="e.g., Return only plain text..."
-                        rows={3}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '2px solid var(--gray-200)',
-                          borderRadius: '8px',
-                          fontSize: '0.8125rem',
-                          fontFamily: 'system-ui',
-                          color: 'var(--gray-900)',
-                          backgroundColor: '#fff',
-                          outline: 'none',
-                          transition: 'border-color 0.2s',
-                          resize: 'none',
-                          overflow: 'hidden',
-                          boxSizing: 'border-box'
-                        }}
+                        minHeight="100px"
+                        fontSize="0.8125rem"
                       />
                     </div>
 
@@ -993,57 +1027,13 @@ export default function ConfigureAIModal({
                         }}>
                           Context Instructions
                         </label>
-                        <textarea
-                          ref={contextInstructionsRef}
-                          value={contextInstructions}
-                          onChange={(e) => setContextInstructions(e.target.value)}
-                          onInput={(e) => autoSizeTextarea(e.currentTarget)}
+                        <TipTapEditor
+                          content={contextInstructions}
+                          onChange={(value) => setContextInstructions(value)}
                           placeholder="e.g., Use the following context..."
-                          rows={2}
-                          style={{
-                            width: '100%',
-                            padding: '0.75rem',
-                            border: '2px solid var(--gray-200)',
-                            borderRadius: '8px',
-                            fontSize: '0.8125rem',
-                            fontFamily: 'system-ui',
-                            color: 'var(--gray-900)',
-                            backgroundColor: '#fff',
-                            outline: 'none',
-                            transition: 'border-color 0.2s',
-                            resize: 'none',
-                            overflow: 'hidden',
-                            boxSizing: 'border-box'
-                          }}
+                          minHeight="90px"
+                          fontSize="0.8125rem"
                         />
-                      </div>
-                    )}
-
-                    {field?.type === 'mcqs' && (
-                      <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{
-                          fontSize: '0.875rem',
-                          fontWeight: 600,
-                          color: 'var(--gray-900)',
-                          display: 'block',
-                          marginBottom: '0.5rem'
-                        }}>
-                          Grade-Specific Vocabulary Standards
-                        </label>
-                        <div style={{
-                          padding: '0.75rem',
-                          borderRadius: '8px',
-                          border: '2px solid var(--gray-200)',
-                          background: '#fff',
-                          fontSize: '0.8125rem',
-                          fontFamily: 'system-ui',
-                          color: 'var(--gray-900)',
-                          whiteSpace: 'pre-wrap'
-                        }}>
-                          {vocabStandards.length > 0
-                            ? vocabStandards.join('; ')
-                            : 'No grade-specific vocab standards found. Select a Grade Band to populate.'}
-                        </div>
                       </div>
                     )}
                   </>

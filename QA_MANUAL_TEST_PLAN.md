@@ -6,6 +6,12 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Login**
   - Action: Visit the app and log in.
   - Expect: Redirect to the app shell after successful auth.
+- **Auth view gradient**
+  - Action: Visit Sign In and Sign Up views.
+  - Expect: Background matches the landing page blue-to-white gradient.
+- **Auth favicon display**
+  - Action: View the Sign In/Sign Up header logo.
+  - Expect: Favicon appears above the title inside a white circular background with a soft glow and no clipping of the colored dots.
 - **Set Display Name**
   - Action: If prompted, set display name.
   - Expect: Name persists across reloads.
@@ -26,6 +32,9 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Header logo/favicon**
   - Action: View the header logo in the main app.
   - Expect: Logo uses local favicon with a white circular background and no glow.
+- **Tab title**
+  - Action: Inspect the browser tab title.
+  - Expect: Title is built from `APP_CONFIG.title` and `APP_CONFIG.owner`.
 
 ## 3) Browse Lesson Templates
 - **Load list**
@@ -34,6 +43,9 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Background gradient**
   - Action: Open “Browse Lesson Templates”.
   - Expect: Background matches the landing page blue-to-white gradient.
+- **Back navigation**
+  - Action: Click Back on Browse Lesson Templates.
+  - Expect: Returns to the landing page.
 - **Edit template**
   - Action: Choose a template in edit mode.
   - Expect: Navigates to template builder/editor with fields loaded.
@@ -62,6 +74,14 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Background gradient**
   - Action: Open Create/Edit Lesson Template.
   - Expect: Background matches the landing page blue-to-white gradient.
+- **Generate lesson button color**
+  - Action: View the Generate Lesson button in template mode.
+  - Expect: Button uses the purple gradient.
+- **Edit MCQ modal back button**
+  - Action: Edit an existing MCQs field and open the modal.
+  - Expect: Back button is hidden in edit mode.
+  - Action: Add a new MCQs field.
+  - Expect: Back button is available in add-new flow.
 
 ## 5) AI Config (Template Mode)
 - **Open AI config**
@@ -71,9 +91,32 @@ This document outlines expected behaviors to verify by interacting with the app 
   - Action: Set a grade band and open AI config for an MCQ field.
   - Expect: A “Grade-Specific Vocabulary Standards” section appears in the modal.
   - Expect: Prompt preview includes a CONTEXT block listing those standards.
+- **Main idea standards context block**
+  - Action: Set a grade band and open AI config for an MCQ field.
+  - Expect: A "Grade-Specific Main Idea Standards" section appears in the modal.
+  - Expect: Standards include RI.x.2 for the grade level.
 - **Mapped vocab standards (non‑CCSS default)**
   - Action: Set Default Standard Framework to non‑CCSS (e.g., BEST) and open MCQ AI config.
   - Expect: Vocab standards in the modal/preview are mapped to the selected framework.
+- **Mapped main idea standards (non‑CCSS default)**
+  - Action: Set Default Standard Framework to non‑CCSS (e.g., BEST) and open MCQ AI config.
+  - Expect: Main idea standards in the modal/preview are mapped to the selected framework.
+- **Grade-specific standards filtering (single grade)**
+  - Action: Set grade level to 9 and open MCQ AI config.
+  - Expect: Only grade 9 standards appear (e.g., BEST.ELA.9.V.1), not grade 10.
+- **Grade-specific standards filtering (grade band)**
+  - Action: Set grade band to 9-10 and open MCQ AI config.
+  - Expect: Both grade 9 and grade 10 standards appear (e.g., BEST.ELA.9.V.1 and BEST.ELA.10.V.1.1).
+- **Per-question standards inclusion checkboxes (template mode)**
+  - Action: In template mode, open MCQ AI config and view Q1-Q5 tabs.
+  - Expect: Each question tab shows checkboxes for "Include Vocabulary Standards" and "Include Main Idea Standards".
+  - Expect: Checkboxes are editable and show the actual standards codes in parentheses.
+  - Expect: When unchecked, standards do not appear in the prompt preview for that question.
+  - Expect: When checked, standards appear in the prompt preview for that question.
+- **Standards checkbox persistence**
+  - Action: Check/uncheck standards inclusion checkboxes and save.
+  - Expect: Settings persist in database (ai_question_prompts column).
+  - Expect: Reopening the modal shows correct checkbox states.
 - **Context selection**
   - Action: Select context fields and save.
   - Expect: Selection persists, preview updates, and template config saves.
@@ -100,11 +143,23 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Manage cover image button color**
   - Action: View the Manage Cover Image button.
   - Expect: Button is yellow with adequate contrast for white text.
+- **Back navigation**
+  - Action: Click Back from Create Lesson.
+  - Expect: Returns to Browse Lessons.
 
 ## 7) AI Config (Lesson Mode)
 - **Open AI config**
   - Action: Open AI config for a lesson field.
   - Expect: Loads lesson-specific config if present, otherwise template defaults.
+- **Per-question standards inclusion checkboxes (lesson mode - view only)**
+  - Action: In lesson mode, open MCQ AI config for a question with standards checkboxes enabled in the template.
+  - Expect: Checkbox section appears with label "(Set by Template)".
+  - Expect: Only checkboxes that were checked in the template are visible.
+  - Expect: Checkboxes are disabled (not editable).
+  - Expect: Text has adequate contrast (darker gray on light background).
+- **Standards checkboxes hidden when none selected**
+  - Action: In lesson mode, open MCQ AI config for a question where no standards checkboxes were selected in template.
+  - Expect: The standards checkbox section does not appear at all.
 - **Save lesson config**
   - Action: Change config and save.
   - Expect: `user_ai_config` snapshot created/updated for the lesson.
@@ -170,6 +225,10 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **List lessons**
   - Action: Open Browse Lessons.
   - Expect: Cards show content ID, template name, author, and thumbnail if available.
+- **Last updated by removed**
+  - Action: View lesson cards.
+  - Expect: "Last updated by" section is NOT displayed.
+  - Expect: Only "Created by" with full name is shown.
 - **Copy link**
   - Action: Click the link icon on a lesson card.
   - Expect: Lesson URL is copied and a “Link copied” toast appears.

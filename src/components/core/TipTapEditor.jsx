@@ -37,7 +37,13 @@ function convertNewlinesToHTML(text) {
     .join('');
 }
 
-export default function TipTapEditor({ content = '', onChange, placeholder = 'Enter text...' }) {
+export default function TipTapEditor({
+  content = '',
+  onChange,
+  placeholder = 'Enter text...',
+  minHeight = '120px',
+  fontSize = '1rem'
+}) {
   // Suppress TipTap duplicate extension warnings
   const originalWarn = console.warn;
   console.warn = (...args) => {
@@ -272,9 +278,9 @@ export default function TipTapEditor({ content = '', onChange, placeholder = 'En
         </button>
       </div>
       <div style={{ 
-        minHeight: '120px',
+        minHeight,
         padding: '0.75rem 1rem',
-        fontSize: '1rem'
+        fontSize
       }}>
         <EditorContent editor={editor} />
       </div>

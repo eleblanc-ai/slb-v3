@@ -265,9 +265,159 @@ export async function getMappedVocabularyStandardsForGrade(gradeLevel, framework
     }
   }
 
-  const codes = matchingRows
+  let codes = matchingRows
     .map(row => row.mappedCode)
     .filter(Boolean);
+
+  // Filter mapped codes to only include the specific grade level requested
+  // Extract grade from mapped codes (e.g., BEST.ELA.9.V.1 -> 9)
+  codes = codes.filter(code => {
+    const gradeMatch = code.match(/\.(\d+)(?:-(\d+))?\.(?:V|R|L)\./i);
+    if (!gradeMatch) return true; // Keep if we can't parse grade
+    
+    const codeStartGrade = parseInt(gradeMatch[1], 10);
+    const codeEndGrade = gradeMatch[2] ? parseInt(gradeMatch[2], 10) : codeStartGrade;
+    
+    // Include if the requested grade falls within the code's grade range
+    return numericGrade >= codeStartGrade && numericGrade <= codeEndGrade;
+  });
+
+  return [...new Set(codes)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Get CCSS main idea standards for a grade (RI.2), with range fallback
+ * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @returns {Promise<string[]>} - Matching CCSS codes
+ */
+export async function getCcssMainIdeaStandardsForGrade(gradeLevel) {
+  if (gradeLevel === null || gradeLevel === undefined) return [];
+
+  const numericGrade = parseInt(gradeLevel.toString(), 10);
+  if (Number.isNaN(numericGrade)) return [];
+
+  const data = await loadMOACData();
+  const codeSet = new Set(
+    data.map(row => row.ccssCode).filter(Boolean)
+  );
+
+  // Try exact match first
+  const exactCode = `CCSS.RI.${numericGrade}.2`;
+  if (codeSet.has(exactCode)) {
+    return [exactCode];
+  }
+
+  // Fall back to ranges
+  const rangeEntries = [];
+  for (const code of codeSet) {
+    const match = code.match(/^CCSS\.RI\.(\d+)-(\d+)\.2$/i);
+    if (match) {
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      if (!Number.isNaN(start) && !Number.isNaN(end)) {
+        rangeEntries.push({ code, start, end });
+      }
+    }
+  }
+
+  if (rangeEntries.length === 0) return [];
+
+  const inclusive = rangeEntries.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+  const candidates = inclusive.length > 0 ? inclusive : rangeEntries;
+
+  // If no inclusive match, choose nearest ranges by distance to grade
+  let filteredCandidates = candidates;
+  if (inclusive.length === 0) {
+    let bestDistance = Infinity;
+    for (const entry of candidates) {
+      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+      }
+    }
+    filteredCandidates = candidates.filter(entry => {
+      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+      return distance === bestDistance;
+    });
+  }
+
+  return filteredCandidates
+    .map(entry => entry.code)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Get framework-specific mapped main idea standards for a grade (mapped from CCSS RI.2)
+ * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {string} framework - Target framework (e.g., 'TEKS', 'BEST', 'BLOOM', 'GSE')
+ * @returns {Promise<string[]>} - Matching mapped codes for the framework
+ */
+export async function getMappedMainIdeaStandardsForGrade(gradeLevel, framework) {
+  if (!framework || framework.toUpperCase() === 'CCSS') return [];
+  if (gradeLevel === null || gradeLevel === undefined) return [];
+
+  const numericGrade = parseInt(gradeLevel.toString(), 10);
+  if (Number.isNaN(numericGrade)) return [];
+
+  const data = await loadMOACData();
+  const normalizedFramework = framework.toUpperCase();
+
+  // Try exact CCSS code first
+  const exactCcssCode = `CCSS.RI.${numericGrade}.2`;
+
+  let matchingRows = data.filter(row =>
+    row.ccssCode === exactCcssCode && row.mappedFramework === normalizedFramework
+  );
+
+  if (matchingRows.length === 0) {
+    // Fall back to ranges
+    const rangeMatches = [];
+    for (const row of data) {
+      if (row.mappedFramework !== normalizedFramework) continue;
+      const match = row.ccssCode?.match(/^CCSS\.RI\.(\d+)-(\d+)\.2$/i);
+      if (!match) continue;
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      if (Number.isNaN(start) || Number.isNaN(end)) continue;
+      rangeMatches.push({ row, start, end });
+    }
+
+    const inclusive = rangeMatches.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+    const candidates = inclusive.length > 0 ? inclusive : rangeMatches;
+
+    if (candidates.length > 0) {
+      let filtered = candidates;
+      if (inclusive.length === 0) {
+        let bestDistance = Infinity;
+        for (const entry of candidates) {
+          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+          if (distance < bestDistance) bestDistance = distance;
+        }
+        filtered = candidates.filter(entry => {
+          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+          return distance === bestDistance;
+        });
+      }
+      matchingRows = filtered.map(entry => entry.row);
+    }
+  }
+
+  let codes = matchingRows
+    .map(row => row.mappedCode)
+    .filter(Boolean);
+
+  // Filter mapped codes to only include the specific grade level requested
+  // Extract grade from mapped codes (e.g., BEST.ELA.9.R.2.2 -> 9)
+  codes = codes.filter(code => {
+    const gradeMatch = code.match(/\.(\d+)(?:-(\d+))?\.(?:V|R|L)\./i);
+    if (!gradeMatch) return true; // Keep if we can't parse grade
+    
+    const codeStartGrade = parseInt(gradeMatch[1], 10);
+    const codeEndGrade = gradeMatch[2] ? parseInt(gradeMatch[2], 10) : codeStartGrade;
+    
+    // Include if the requested grade falls within the code's grade range
+    return numericGrade >= codeStartGrade && numericGrade <= codeEndGrade;
+  });
 
   return [...new Set(codes)].sort((a, b) => a.localeCompare(b));
 }
