@@ -539,7 +539,7 @@ export default function CreateNewLessonType() {
       let candidateStandards = [];
       
       if (selectedStandard && selectedStandard.fullCode) {
-        const mappingResult = await getMappedStandardsWithSource(selectedStandard.fullCode, gradeLevel);
+        const mappingResult = await getMappedStandardsWithSource(selectedStandard.fullCode, gradeLevels);
         standardsText = mappingResult.mappedStandards || standardsText;
         sourceStandardInfo = mappingResult.sourceStandard;
         
@@ -550,7 +550,7 @@ export default function CreateNewLessonType() {
           .filter(s => s && s !== mappingResult.sourceStandard?.code);
       } else if (q.standards && q.standards.length > 0) {
         const firstStandard = q.standards[0];
-        const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+        const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevels);
         standardsText = mappingResult.mappedStandards || standardsText;
         sourceStandardInfo = mappingResult.sourceStandard;
         
@@ -1040,7 +1040,7 @@ export default function CreateNewLessonType() {
           
           if (q.standards && q.standards.length > 0) {
             const firstStandard = q.standards[0];
-            const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+            const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevels);
             standardsText = mappingResult.mappedStandards || standardsText;
             sourceStandards[i] = mappingResult.sourceStandard;
             

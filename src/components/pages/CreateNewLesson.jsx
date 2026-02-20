@@ -634,7 +634,7 @@ export default function CreateNewLesson() {
       
       // First check if user selected a specific standard to use
       if (selectedStandard && selectedStandard.fullCode) {
-        const mappingResult = await getMappedStandardsWithSource(selectedStandard.fullCode, gradeLevel);
+        const mappingResult = await getMappedStandardsWithSource(selectedStandard.fullCode, gradeLevels);
         standardsText = mappingResult.mappedStandards || standardsText;
         sourceStandardInfo = mappingResult.sourceStandard;
         
@@ -647,7 +647,7 @@ export default function CreateNewLesson() {
       // Otherwise map the AI-generated standards (works for any framework)
       else if (q.standards && q.standards.length > 0) {
         const firstStandard = q.standards[0];
-        const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+        const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevels);
         standardsText = mappingResult.mappedStandards || standardsText;
         sourceStandardInfo = mappingResult.sourceStandard;
         
@@ -1429,7 +1429,7 @@ export default function CreateNewLesson() {
           
           if (q.standards && q.standards.length > 0) {
             const firstStandard = q.standards[0];
-            const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevel);
+            const mappingResult = await getMappedStandardsWithSource(firstStandard, gradeLevels);
             standardsText = mappingResult.mappedStandards || standardsText;
             sourceStandards[i] = mappingResult.sourceStandard;
             
