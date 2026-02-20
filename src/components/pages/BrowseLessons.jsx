@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { FileText, Beaker, Calendar, ArrowLeft, Trash2, Link as LinkIcon, Archive } from 'lucide-react';
+import { FileText, Beaker, Calendar, ArrowLeft, Trash2, Link as LinkIcon, Archive, Unlock } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { useToast } from '../../hooks/useToast';
@@ -142,6 +142,26 @@ export default function BrowseLessons() {
       toast.error(`Failed to load lessons. ${error?.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const canReleaseLock = (lesson) => {
+    return lesson.locked_by && (lesson.locked_by === session?.user?.id || profile?.role === 'admin');
+  };
+
+  const handleReleaseLock = async (e, lesson) => {
+    e.stopPropagation();
+    try {
+      const { error } = await supabase
+        .from('lessons')
+        .update({ locked_by: null, locked_by_name: null, locked_at: null })
+        .eq('id', lesson.id);
+      if (error) throw error;
+      setLessons(prev => prev.map(l => l.id === lesson.id ? { ...l, locked_by: null, locked_by_name: null, locked_at: null } : l));
+      toast.success('Lock released.');
+    } catch (err) {
+      console.error('Error releasing lock:', err);
+      toast.error('Failed to release lock.');
     }
   };
 
@@ -488,6 +508,18 @@ export default function BrowseLessons() {
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               {[
+                ...(canReleaseLock(lesson)
+                  ? [
+                      {
+                        key: 'unlock',
+                        onClick: (e) => handleReleaseLock(e, lesson),
+                        icon: <Unlock size={16} />,
+                        color: '#d97706',
+                        hoverBg: '#fef3c7',
+                        title: `Release lock (held by ${lesson.locked_by_name || 'unknown'})`
+                      }
+                    ]
+                  : []),
                 {
                   key: 'link',
                   onClick: (e) => handleCopyLessonLink(e, lesson),

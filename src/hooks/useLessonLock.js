@@ -93,26 +93,57 @@ export default function useLessonLock(lessonId, session, profile) {
     }
   }, [session?.user?.id]);
 
+  const forceReleaseLock = useCallback(async (lessonIdToRelease) => {
+    if (!lessonIdToRelease) return;
+
+    if (lockHeartbeatRef.current) {
+      clearInterval(lockHeartbeatRef.current);
+      lockHeartbeatRef.current = null;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('lessons')
+        .update({ locked_by: null, locked_by_name: null, locked_at: null })
+        .eq('id', lessonIdToRelease);
+      if (error) throw error;
+
+      setIsLessonLocked(false);
+      setLockOwner(null);
+      setLockOwnerName('');
+    } catch (err) {
+      console.error('Error force-releasing lock:', err);
+    }
+  }, []);
+
   // Release lock on unmount and beforeunload
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (lessonId && session?.user?.id && navigator.sendBeacon) {
-        // sendBeacon doesn't support custom headers, so we pass the apikey
-        // as a query param (Supabase PostgREST accepts this) and send the
-        // body as a Blob with Content-Type: application/json.
-        // This works because release_lesson_lock is SECURITY DEFINER,
-        // so the anon key is sufficient — no user JWT required.
+      if (lessonId && session?.user?.id) {
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-        const url = new URL(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/release_lesson_lock`
-        );
-        url.searchParams.set('apikey', anonKey);
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/release_lesson_lock?apikey=${encodeURIComponent(anonKey)}`;
 
-        const body = new Blob(
-          [JSON.stringify({ p_lesson_id: lessonId, p_user_id: session.user.id })],
-          { type: 'application/json' }
-        );
-        navigator.sendBeacon(url.toString(), body);
+        try {
+          fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+            },
+            body: JSON.stringify({ p_lesson_id: lessonId, p_user_id: session.user.id }),
+            keepalive: true,
+          });
+        } catch (err) {
+          // Last resort: try sendBeacon
+          try {
+            const body = new Blob(
+              [JSON.stringify({ p_lesson_id: lessonId, p_user_id: session.user.id })],
+              { type: 'application/json' }
+            );
+            navigator.sendBeacon?.(url, body);
+          } catch (_) { /* ignore */ }
+        }
       }
     };
 
@@ -135,6 +166,7 @@ export default function useLessonLock(lessonId, session, profile) {
     lockOwnerName,
     acquireLessonLock,
     releaseLessonLock,
+    forceReleaseLock,
     refreshLessonLock,
   };
 }

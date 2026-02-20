@@ -147,7 +147,15 @@ export default function CreateNewLesson() {
       setShowUnsavedChangesModal(true);
       setPendingNavigation('back');
     } else {
-      navigate('/browse-lessons');
+      if (lessonId) {
+        setShowSaveToast(true);
+        setTimeout(() => {
+          setShowSaveToast(false);
+          navigate('/browse-lessons');
+        }, 1500);
+      } else {
+        navigate('/browse-lessons');
+      }
     }
   };
 
@@ -727,16 +735,34 @@ export default function CreateNewLesson() {
     }
 
     // Start fresh generation
-    setIsGeneratingLesson(true);
-    setGenerationPaused(false);
-    setCurrentGenerationIndex(0);
-    setHighlightedMissingFields(new Set());
-    
     // Get all AI-enabled fields in order: designer first, then builder
     const aiEnabledDesignerFields = fields.filter(f => f.fieldFor === 'designer' && f.aiEnabled);
     const aiEnabledBuilderFields = fields.filter(f => f.fieldFor === 'builder' && f.aiEnabled);
     const allAIFields = [...aiEnabledDesignerFields, ...aiEnabledBuilderFields];
-    
+
+    // Upfront: validate context fields for ALL AI-enabled fields
+    const allMissing = [];
+    const missingIds = new Set();
+    for (const field of allAIFields) {
+      const missing = validateContextFieldsForField(field, fields, fieldValues);
+      for (const m of missing) {
+        if (!missingIds.has(m.id)) {
+          missingIds.add(m.id);
+          allMissing.push(m);
+        }
+      }
+    }
+    if (allMissing.length > 0) {
+      setMissingFields(allMissing);
+      setShowMissingFieldsModal(true);
+      setHighlightedMissingFields(new Set(allMissing.map(m => m.id)));
+      return;
+    }
+
+    setIsGeneratingLesson(true);
+    setGenerationPaused(false);
+    setCurrentGenerationIndex(0);
+    setHighlightedMissingFields(new Set());
     setTotalGenerationFields(allAIFields.length);
     
     // Generate all fields

@@ -36,6 +36,9 @@ export function validateContextFieldsForField(field, allFields, fieldValues) {
     const contextField = allFields.find(f => f.id === contextFieldId);
     if (!contextField) continue;
 
+    // AI-enabled fields may be blank before generation — skip them
+    if (contextField.aiEnabled) continue;
+
     const value = fieldValues[contextFieldId];
     if (isEmptyValue(value)) {
       missing.push({
