@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { UserPlus, Users, Shield, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
 
 export default function AdminDashboard() {

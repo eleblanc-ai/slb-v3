@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { supabase } from './lib/supabaseClient';
+import { supabase } from './services/supabaseClient';
 import Layout from './components/layout/Layout';
-import ScrollToTop from './components/ScrollToTop';
+import ScrollToTop from './components/layout/ScrollToTop';
+import ToastProvider from './components/core/ToastProvider';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import HomePage from './components/pages/HomePage';
 import PlaceholderPage from './components/pages/PlaceholderPage';
 import Login from './components/auth/Login';
@@ -12,6 +14,8 @@ import CreateNewLesson from './components/pages/CreateNewLesson';
 import BrowseLessonTemplates from './components/pages/BrowseLessonTemplates';
 import BrowseLessons from './components/pages/BrowseLessons';
 import AdminDashboard from './components/pages/AdminDashboard';
+import TestDashboard from './components/pages/TestDashboard';
+import ManualVerificationChecklist from './components/pages/ManualVerificationChecklist';
 import { APP_CONFIG } from './config';
 import './App.css';
 
@@ -212,6 +216,7 @@ function App() {
   }
 
   return (
+    <ToastProvider>
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
@@ -219,7 +224,11 @@ function App() {
           <Route index element={<HomePage />} />
           
           {/* Specific routes */}
-          <Route path="/create-new-lesson-type" element={<CreateNewLessonType />} />
+          <Route path="/create-new-lesson-type" element={
+            <ProtectedRoute roles={['admin']}>
+              <CreateNewLessonType />
+            </ProtectedRoute>
+          } />
           <Route path="/create-new-lesson" element={<CreateNewLesson />} />
           <Route path="/browse-lesson-templates" element={<BrowseLessonTemplates />} />
           <Route path="/browse-lessons" element={<BrowseLessons />} />
@@ -236,8 +245,20 @@ function App() {
             ))}
           
           {/* Admin dashboard route */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin-dashboard" element={<AdminDashboard />} />
+          <Route path="/admin" element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin-dashboard" element={
+            <ProtectedRoute roles={['admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Dev tools */}
+          <Route path="/tests" element={<TestDashboard />} />
+          <Route path="/manual-verification-checklist" element={<ManualVerificationChecklist />} />
           
           {/* Footer routes */}
           {APP_CONFIG.footer.links.map((link, index) => (
@@ -250,6 +271,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   );
 }
 

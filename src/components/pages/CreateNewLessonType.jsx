@@ -1,93 +1,48 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical } from 'lucide-react';
+import { Save, Beaker, ArrowLeft, Sparkles } from 'lucide-react';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { handleFieldDragEnd } from '../../lib/dragUtils';
+import {
+  modalOverlay,
+  pageBackground, pageMaxWidth, pageHeaderRelative, backButton, backButtonHover,
+  pageTitle, pageSubtitle, stateBadge, toolbarRow,
+  fieldsCard, requiredFieldIndicator, fieldsLayout,
+  loadingContainer, loadingText,
+  gradientButton, liftOnHover,
+} from '../../styles/shared';
 import AddEditFieldModal from '../modals/AddFieldModal';
 import NameLessonTypeModal from '../modals/NameLessonTypeModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
 import SuccessModal from '../modals/SuccessModal';
-import BaseField from '../fields/BaseField';
-import TextField from '../fields/TextField';
-import RichTextField from '../fields/RichTextField';
-import { buildFullPrompt } from '../../lib/promptBuilder';
-import DropdownField from '../fields/DropdownField';
-import ChecklistField from '../fields/ChecklistField';
-import ImageField from '../fields/ImageField';
-import AssignStandardsField from '../fields/AssignStandardsField';
-import MCQsField from '../fields/MCQsField';
+import FieldSection from '../core/FieldSection';
+import ModelSelector from '../core/ModelSelector';
+import SaveToast from '../core/SaveToast';
+import { buildFullPrompt } from '../../ai/promptBuilder';
+import { buildFieldResponses } from '../../ai/responseBuilder';
 import { APP_CONFIG } from '../../config';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
-import { callAI, callAIWithFunction, callAIWithBatchedContext, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
-import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
+import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../services/aiClient';
+import { getMappedStandardsWithSource, extractGradesFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
+import { isEmptyValue, validateContextFieldsForField } from '../../lib/fieldValueUtils';
+import { useToast } from '../../hooks/useToast';
+import useFieldCRUD from '../../hooks/useFieldCRUD';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 
-// Sortable Field Wrapper Component
-function SortableField({ id, children }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    position: 'relative',
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <div style={{ position: 'relative' }}>
-        <div
-          {...attributes}
-          {...listeners}
-          style={{
-            position: 'absolute',
-            left: '-2rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            cursor: 'grab',
-            color: '#8b5cf6',
-            padding: '0.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#6d28d9'}
-          onMouseLeave={(e) => e.currentTarget.style.color = '#8b5cf6'}
-          title="Drag to reorder"
-        >
-          <GripVertical size={20} />
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export default function CreateNewLessonType() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { session, profile } = useOutletContext() || {};
   const navigate = useNavigate();
+  const toast = useToast();
   const lessonTypeId = searchParams.get('id');
   const testLessonIdParam = searchParams.get('testLessonId');
   const [lessonTypeData, setLessonTypeData] = useState(null);
   const [showNameModal, setShowNameModal] = useState(!lessonTypeId);
   const [fields, setFields] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingField, setEditingField] = useState(null);
   const [loading, setLoading] = useState(!!lessonTypeId);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [showTestLessonToast, setShowTestLessonToast] = useState(false);
@@ -95,8 +50,6 @@ export default function CreateNewLessonType() {
   const [testLessonId, setTestLessonId] = useState(testLessonIdParam || null);
   const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const modelButtonRef = useRef(null);
 
   // AI state for per-field generation
   const [generatingFieldId, setGeneratingFieldId] = useState(null);
@@ -117,6 +70,31 @@ export default function CreateNewLessonType() {
   const [standardFrameworks, setStandardFrameworks] = useState([]);
   const [defaultStandardFramework, setDefaultStandardFramework] = useState('CCSS');
   const generationCancelledRef = useRef(false);
+  const autoSaveTimeoutRef = useRef(null);
+  const hasInitializedRef = useRef(false);
+  const previousFieldValuesRef = useRef(null);
+  const autoCreateTestLessonPromiseRef = useRef(null);
+  const userHasInteractedRef = useRef(false);
+
+  // Field CRUD hook (add/edit/delete/drag) — includes field_config for template design
+  const {
+    isModalOpen,
+    editingField,
+    sensors,
+    handleFieldAdded,
+    handleEditField,
+    handleDeleteField,
+    handleModalClose,
+    handleDragEnd,
+    openAddFieldModal,
+  } = useFieldCRUD({
+    templateId: lessonTypeData?.id,
+    fields,
+    setFields,
+    session,
+    toast,
+    includeFieldConfig: true,
+  });
 
   useEffect(() => {
     if (!showMarkdownExportModal) return;
@@ -157,55 +135,6 @@ export default function CreateNewLessonType() {
       };
     }));
     setAIConfigField(null);
-  };
-
-  // Drag and drop sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // Handler: drag end - update field order
-  const handleDragEnd = async (event, fieldType) => {
-    const { active, over } = event;
-    
-    if (!over || active.id === over.id) return;
-    
-    const filteredFields = fields.filter(f => f.fieldFor === fieldType);
-    const oldIndex = filteredFields.findIndex(f => f.id === active.id);
-    const newIndex = filteredFields.findIndex(f => f.id === over.id);
-    
-    if (oldIndex === -1 || newIndex === -1) return;
-    
-    // Reorder in local state
-    const reorderedFiltered = arrayMove(filteredFields, oldIndex, newIndex);
-    
-    // Merge back with other field type
-    const otherFields = fields.filter(f => f.fieldFor !== fieldType);
-    const newFields = [...otherFields, ...reorderedFiltered];
-    setFields(newFields);
-    
-    // Update order in database
-    try {
-      const updates = reorderedFiltered.map((field, index) => ({
-        id: field.id,
-        field_order: index
-      }));
-      
-      for (const update of updates) {
-        await supabase
-          .from('lesson_template_fields')
-          .update({ field_order: update.field_order })
-          .eq('id', update.id);
-      }
-      
-      console.log('✅ Field order updated in database');
-    } catch (error) {
-      console.error('Error updating field order:', error);
-      alert('Failed to update field order. Please try again.');
-    }
   };
 
   // Handler: Generate entire lesson (all AI-enabled fields)
@@ -274,7 +203,7 @@ export default function CreateNewLessonType() {
         await autoSaveLesson();
       } catch (error) {
         console.error(`Error generating field ${field.name}:`, error);
-        alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
+        toast.error(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
         setIsGeneratingLesson(false);
         setGenerationPaused(true);
         return;
@@ -286,48 +215,6 @@ export default function CreateNewLessonType() {
     setGenerationPaused(false);
     setCurrentGenerationIndex(0);
     setShowSuccessModal(true);
-  };
-
-  const isEmptyValue = (value) => {
-    if (!value) return true;
-    if (typeof value === 'string') {
-      const textOnly = value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
-      return textOnly === '';
-    }
-    if (Array.isArray(value)) return value.length === 0;
-    if (typeof value === 'object') {
-      if (value.questions) return value.questions.every(q => isEmptyValue(q));
-      return Object.keys(value).length === 0;
-    }
-    return false;
-  };
-
-  // Validate required context fields for a specific field
-  const validateContextFieldsForField = (field, allFields, valuesToCheck = null) => {
-    const missing = [];
-    const currentValues = valuesToCheck || fieldValues || {};
-    
-    // Get AI config for this field
-    let contextFieldIds = field.ai_context_field_ids || [];
-    
-    // Check each context field
-    for (const contextFieldId of contextFieldIds) {
-      const contextField = allFields.find(f => f.id === contextFieldId);
-      if (!contextField) continue;
-
-      const value = currentValues[contextFieldId];
-      const isEmpty = isEmptyValue(value);
-      
-      if (isEmpty) {
-        missing.push({
-          id: contextField.id,
-          name: contextField.name,
-          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
-        });
-      }
-    }
-    
-    return missing;
   };
 
   // Validate all required fields before starting generation
@@ -352,46 +239,78 @@ export default function CreateNewLessonType() {
     return missing;
   };
 
-  // Auto-save lesson after field generation
-  const autoSaveLesson = async () => {
-    if (!testLessonId || !lessonTypeData?.id) return;
-    
+  // Auto-save test lesson (create on first change, update on subsequent changes)
+  const autoSaveLesson = async (updatedFieldValues = null) => {
+    if (!lessonTypeData?.id) return;
+
+    const valuesToSave = updatedFieldValues || fieldValues;
+
     try {
-      const designerFields = fields.filter(f => f.fieldFor === 'designer');
-      const builderFields = fields.filter(f => f.fieldFor === 'builder');
+      const { designerResponses, builderResponses } = buildFieldResponses(fields, valuesToSave, { keyBy: 'name' });
 
-      const designResponses = {};
-      designerFields.forEach(field => {
-        const value = fieldValues[field.id];
-        if (field.type === 'checklist') {
-          designResponses[field.name] = Array.isArray(value) ? value : [];
-        } else {
-          designResponses[field.name] = value || field.placeholder || '';
-        }
-      });
-      
-      const lessonResponses = {};
-      builderFields.forEach(field => {
-        const value = fieldValues[field.id];
-        if (field.type === 'checklist') {
-          lessonResponses[field.name] = Array.isArray(value) ? value : [];
-        } else {
-          lessonResponses[field.name] = value || field.placeholder || '';
-        }
-      });
+      let effectiveTestLessonId = testLessonId;
 
-      await supabase
+      if (!effectiveTestLessonId) {
+        if (!autoCreateTestLessonPromiseRef.current) {
+          console.log('💾 Auto-save: No test lesson ID, creating new test lesson...');
+          autoCreateTestLessonPromiseRef.current = (async () => {
+            const { data: newLesson, error: insertError } = await supabase
+              .from('lessons')
+              .insert({
+                lesson_template_id: lessonTypeData.id,
+                template_name: lessonTypeData.name,
+                is_test: true,
+                status: 'draft',
+                designer_responses: designerResponses,
+                builder_responses: builderResponses,
+                created_by: session?.user?.id,
+                created_at: new Date().toISOString()
+              })
+              .select()
+              .single();
+
+            if (insertError) {
+              console.error('❌ Auto-save insert error:', insertError);
+              throw insertError;
+            }
+
+            console.log('✅ Auto-save created new test lesson:', newLesson.id);
+            setTestLessonId(newLesson.id);
+
+            // Update URL so refresh reloads this test lesson
+            const newUrl = `${window.location.pathname}?id=${lessonTypeData.id}&testLessonId=${newLesson.id}`;
+            window.history.replaceState({}, '', newUrl);
+
+            return newLesson.id;
+          })();
+        }
+
+        try {
+          effectiveTestLessonId = await autoCreateTestLessonPromiseRef.current;
+        } finally {
+          autoCreateTestLessonPromiseRef.current = null;
+        }
+
+        if (!effectiveTestLessonId) return;
+      }
+
+      const { error } = await supabase
         .from('lessons')
         .update({
-          designer_responses: designResponses,
-          builder_responses: lessonResponses,
+          designer_responses: designerResponses,
+          builder_responses: builderResponses,
           template_name: lessonTypeData.name
         })
-        .eq('id', testLessonId);
-      
-      console.log('✅ Auto-saved after field generation');
+        .eq('id', effectiveTestLessonId);
+
+      if (error) {
+        console.error('❌ Auto-save error:', error);
+        throw new Error(`Failed to auto-save: ${error.message}`);
+      }
+
+      console.log('✅ Test lesson auto-saved successfully');
     } catch (error) {
-      console.error('Error auto-saving:', error);
+      console.error('Error auto-saving test lesson:', error);
     }
   };
 
@@ -475,14 +394,14 @@ export default function CreateNewLessonType() {
       // Add grade-specific standards context based on checkboxes
       const gradeField = fields.find(f => f.type === 'grade_band_selector');
       const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-      const gradeLevel = extractGradeFromBand(gradeValue);
+      const gradeLevels = extractGradesFromBand(gradeValue);
       
       const extraContextBlocks = [];
       
       if (includeVocabStandards) {
         const vocabStandards = defaultStandardFramework === 'CCSS'
-          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
-          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+          ? await getCcssVocabularyStandardsForGrade(gradeLevels)
+          : await getMappedVocabularyStandardsForGrade(gradeLevels, defaultStandardFramework);
         
         if (vocabStandards.length > 0) {
           extraContextBlocks.push({
@@ -495,8 +414,8 @@ export default function CreateNewLessonType() {
       
       if (includeMainIdeaStandards) {
         const mainIdeaStandards = defaultStandardFramework === 'CCSS'
-          ? await getCcssMainIdeaStandardsForGrade(gradeLevel)
-          : await getMappedMainIdeaStandardsForGrade(gradeLevel, defaultStandardFramework);
+          ? await getCcssMainIdeaStandardsForGrade(gradeLevels)
+          : await getMappedMainIdeaStandardsForGrade(gradeLevels, defaultStandardFramework);
         
         if (mainIdeaStandards.length > 0) {
           extraContextBlocks.push({
@@ -681,12 +600,13 @@ export default function CreateNewLessonType() {
       setHasGeneratedMap(prev => ({ ...prev, [fieldId]: true }));
     } catch (error) {
       console.error('Error generating individual MCQ:', error);
-      alert(`Failed to generate question: ${error.message}`);
+      toast.error(`Failed to generate question: ${error.message}`);
     }
   };
 
   // Handler: trigger AI generation
   const handleGenerateAI = async (field, valuesOverride = null) => {
+    userHasInteractedRef.current = true;
     try {
       setGeneratingFieldId(field.id);
 
@@ -788,10 +708,24 @@ export default function CreateNewLessonType() {
         
         // Find Content ID field in designer responses
         const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
-        const contentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
+        const rawContentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
+        
+        if (!rawContentId) {
+          throw new Error('Content ID field not found. Please fill in the Content ID field first.');
+        }
+        
+        // Sanitize Content ID for use as a storage filename
+        // (AI-generated values may contain HTML, spaces, or long text)
+        const contentId = rawContentId
+          .replace(/<[^>]*>/g, '')          // strip HTML tags
+          .replace(/&[^;]+;/g, '')          // strip HTML entities
+          .replace(/[^a-zA-Z0-9_\-\.]/g, '_') // keep only safe chars
+          .replace(/_+/g, '_')              // collapse multiple underscores
+          .replace(/^_|_$/g, '')            // trim leading/trailing underscores
+          .substring(0, 120);               // limit length
         
         if (!contentId) {
-          throw new Error('Content ID field not found. Please fill in the Content ID field first.');
+          throw new Error('Content ID is empty after sanitization. Please provide a valid Content ID.');
         }
         
         // Get template name
@@ -867,36 +801,14 @@ export default function CreateNewLessonType() {
         // Auto-save to database after image generation
         console.log('💾 Auto-saving test lesson after image generation...');
         if (testLessonId) {
-          const designerFields = fields.filter(f => f.fieldFor === 'designer');
-          const builderFields = fields.filter(f => f.fieldFor === 'builder');
-          
           const updatedFieldValues = { ...storedFieldValues, [field.id]: imageFieldValue };
-          
-          const designResponses = {};
-          designerFields.forEach(f => {
-            const value = updatedFieldValues[f.id];
-            if (f.type === 'image') {
-              designResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-            } else {
-              designResponses[f.name] = value || f.placeholder || '';
-            }
-          });
-          
-          const lessonResponses = {};
-          builderFields.forEach(f => {
-            const value = updatedFieldValues[f.id];
-            if (f.type === 'image') {
-              lessonResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-            } else {
-              lessonResponses[f.name] = value || f.placeholder || '';
-            }
-          });
+          const { designerResponses, builderResponses } = buildFieldResponses(fields, updatedFieldValues, { keyBy: 'name' });
           
           await supabase
             .from('lessons')
             .update({
-              designer_responses: designResponses,
-              builder_responses: lessonResponses
+              designer_responses: designerResponses,
+              builder_responses: builderResponses
             })
             .eq('id', testLessonId);
           
@@ -968,12 +880,12 @@ export default function CreateNewLessonType() {
         // Extract grade level from fieldValues
         const gradeField = fields.find(f => f.type === 'grade_band_selector');
         const gradeValue = gradeField ? fieldValues[gradeField.id] : null;
-        const gradeLevel = extractGradeFromBand(gradeValue);
+        const gradeLevels = extractGradesFromBand(gradeValue);
 
         // Resolve default vocab standards when using CCSS
         const vocabStandards = defaultStandardFramework === 'CCSS'
-          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
-          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+          ? await getCcssVocabularyStandardsForGrade(gradeLevels)
+          : await getMappedVocabularyStandardsForGrade(gradeLevels, defaultStandardFramework);
         if (vocabStandards.length > 0) {
           console.log('📚 Vocab standards added to MCQ prompts (sequential):', vocabStandards);
         }
@@ -1155,7 +1067,7 @@ export default function CreateNewLessonType() {
         generatedContent = { questions: formattedQuestions, sourceStandards, filteredOutStandards };
       } else {
         // Regular text generation for other field types
-        generatedContent = await callAIWithBatchedContext(prompt, selectedModel, 4096);
+        generatedContent = await callAI(prompt, selectedModel, 4096);
       }
       
       console.log('Generated content:', generatedContent);
@@ -1166,7 +1078,7 @@ export default function CreateNewLessonType() {
       
     } catch (error) {
       console.error('Error generating AI content:', error);
-      alert(`Failed to generate content: ${error.message}`);
+      toast.error(`Failed to generate content: ${error.message}`);
     } finally {
       setGeneratingFieldId(null);
     }
@@ -1182,6 +1094,33 @@ export default function CreateNewLessonType() {
   // Sync fieldValues to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('fieldValues', JSON.stringify(fieldValues));
+  }, [fieldValues]);
+
+  // Auto-save test lesson when field values change (1-second debounce)
+  // Only triggers after the user has actually interacted with a field.
+  useEffect(() => {
+    const currentFieldValues = fieldValues;
+
+    // First time we have data - initialize tracking
+    if (previousFieldValuesRef.current === null) {
+      previousFieldValuesRef.current = currentFieldValues;
+      hasInitializedRef.current = true;
+      return; // Don't auto-save on first load
+    }
+
+    // Only auto-save if fieldValues actually changed AND user has interacted
+    if (previousFieldValuesRef.current !== currentFieldValues) {
+      previousFieldValuesRef.current = currentFieldValues;
+
+      if (lessonTypeData?.id && userHasInteractedRef.current) {
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          autoSaveLesson();
+        }, 1000);
+      }
+    }
   }, [fieldValues]);
 
   const loadLessonType = async (id) => {
@@ -1278,7 +1217,7 @@ export default function CreateNewLessonType() {
       }
     } catch (error) {
       console.error('Error loading lesson template:', error);
-      alert('Failed to load lesson template. Please try again.');
+      toast.error('Failed to load lesson template. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -1286,7 +1225,7 @@ export default function CreateNewLessonType() {
 
   const applyDefaultStandardFramework = async (framework) => {
     if (!lessonTypeData?.id) {
-      alert('Please save the lesson template first.');
+      toast.warning('Please save the lesson template first.');
       return;
     }
 
@@ -1344,7 +1283,7 @@ export default function CreateNewLessonType() {
       setTimeout(() => setShowSaveToast(false), 3000);
     } catch (error) {
       console.error('Error updating default standard framework:', error);
-      alert('Failed to update default standard framework. Please try again.');
+      toast.error('Failed to update default standard framework. Please try again.');
     }
   };
 
@@ -1390,133 +1329,6 @@ export default function CreateNewLessonType() {
   }, []);
 
 
-  const handleFieldAdded = async (fieldData, isEdit) => {
-    if (!lessonTypeData?.id) return;
-
-    try {
-      if (isEdit) {
-        // Update existing field in database
-        const fieldConfig = {};
-        if (fieldData.options) fieldConfig.options = fieldData.options;
-        if (fieldData.min_selections !== undefined) fieldConfig.min_selections = fieldData.min_selections;
-        if (fieldData.max_selections !== undefined) fieldConfig.max_selections = fieldData.max_selections;
-        if (fieldData.framework) fieldConfig.framework = fieldData.framework;
-        
-        const updateData = {
-          field_type: fieldData.type,
-          name: fieldData.name,
-          placeholder_text: fieldData.placeholder,
-          helper_text: fieldData.helperText,
-          required: fieldData.required,
-          ai_enabled: fieldData.aiEnabled,
-          required_for_generation: fieldData.requiredForGeneration,
-          field_for: fieldData.fieldFor,
-          field_config: Object.keys(fieldConfig).length > 0 ? fieldConfig : null
-        };
-        
-        const { error } = await supabase
-          .from('lesson_template_fields')
-          .update(updateData)
-          .eq('id', fieldData.id);
-        
-        if (error) throw error;
-        
-        setFields(fields.map(f => f.id === fieldData.id ? fieldData : f));
-      } else {
-        // Insert new field into database
-        const fieldConfig = {};
-        if (fieldData.options) fieldConfig.options = fieldData.options;
-        if (fieldData.min_selections !== undefined) fieldConfig.min_selections = fieldData.min_selections;
-        if (fieldData.max_selections !== undefined) fieldConfig.max_selections = fieldData.max_selections;
-        if (fieldData.framework) fieldConfig.framework = fieldData.framework;
-        
-        const insertData = {
-          lesson_template_id: lessonTypeData.id,
-          field_type: fieldData.type,
-          name: fieldData.name,
-          placeholder_text: fieldData.placeholder,
-          helper_text: fieldData.helperText,
-          required: fieldData.required,
-          ai_enabled: fieldData.aiEnabled,
-          required_for_generation: fieldData.requiredForGeneration,
-          field_for: fieldData.fieldFor,
-          field_order: fields.length,
-          field_config: Object.keys(fieldConfig).length > 0 ? fieldConfig : null
-        };
-        
-        const { data: newField, error } = await supabase
-          .from('lesson_template_fields')
-          .insert(insertData)
-          .select()
-          .single();
-        
-        if (error) throw error;
-        
-        // Update local state with database ID
-        setFields([...fields, { ...fieldData, id: newField.id }]);
-      }
-      
-      // Update the lesson template's updated_at timestamp
-      const { error: updateError } = await supabase
-        .from('lesson_templates')
-        .update({
-          updated_at: new Date().toISOString(),
-          updated_by: session?.user?.id
-        })
-        .eq('id', lessonTypeData.id);
-      
-      if (updateError) {
-        console.error('Error updating lesson template timestamp:', updateError);
-      }
-    } catch (error) {
-      console.error('Error saving field:', error);
-      console.error('Error details:', error.message, error.details, error.hint);
-      alert(`Failed to save field: ${error.message || 'Please try again.'}`);
-    }
-    
-    setEditingField(null);
-  };
-
-  const handleEditField = (field) => {
-    setEditingField(field);
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteField = async (fieldId) => {
-    if (!lessonTypeData?.id) return;
-
-    try {
-      const { error } = await supabase
-        .from('lesson_template_fields')
-        .delete()
-        .eq('id', fieldId);
-      
-      if (error) throw error;
-      
-      setFields(fields.filter(f => f.id !== fieldId));
-      
-      // Update the lesson template's updated_at timestamp
-      const { error: updateError } = await supabase
-        .from('lesson_templates')
-        .update({
-          updated_at: new Date().toISOString(),
-          updated_by: session?.user?.id
-        })
-        .eq('id', lessonTypeData.id);
-      
-      if (updateError) {
-        console.error('Error updating lesson template timestamp:', updateError);
-      }
-    } catch (error) {
-      console.error('Error deleting field:', error);
-      alert('Failed to delete field. Please try again.');
-    }
-  };
-
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setEditingField(null);
-  };
 
   const handleNameSave = async (data) => {
     setLessonTypeData(data);
@@ -1541,6 +1353,9 @@ export default function CreateNewLessonType() {
       if (error) throw error;
       
       setLessonTypeData({ ...data, id: lessonType.id });
+
+      // Update the URL so a refresh reloads this template
+      setSearchParams({ id: lessonType.id }, { replace: true });
       
       // Generate markdown export file for the new template
       try {
@@ -1550,7 +1365,7 @@ export default function CreateNewLessonType() {
           generateMarkdownExportFileContent,
           generateImportStatement,
           generateMapEntry
-        } = await import('../../lib/generateMarkdownExportFile.js');
+        } = await import('../../export/generateMarkdownExportFile.js');
         
         const camelCaseName = templateNameToCamelCase(data.name);
         const fileName = `${camelCaseName}MarkdownExport.js`;
@@ -1561,7 +1376,7 @@ export default function CreateNewLessonType() {
         // Show modal with instructions
         setMarkdownExportData({
           fileName,
-          filePath: `src/lib/markdown-export/${fileName}`,
+          filePath: `src/export/templates/${fileName}`,
           fileContent,
           importStatement,
           mapEntry,
@@ -1592,7 +1407,7 @@ export default function CreateNewLessonType() {
       }
     } catch (error) {
       console.error('Error creating lesson template:', error);
-      alert('Failed to create lesson template. Please try again.');
+      toast.error('Failed to create lesson template. Please try again.');
     }
   };
 
@@ -1608,38 +1423,11 @@ export default function CreateNewLessonType() {
 
   const handleSaveTestLesson = async () => {
     if (!lessonTypeData?.id) {
-      alert('Please save the lesson template first.');
+      toast.warning('Please save the lesson template first.');
       return;
     }
 
-    // Get all designer and builder fields
-    const designerFields = fields.filter(f => f.fieldFor === 'designer');
-    const builderFields = fields.filter(f => f.fieldFor === 'builder');
-
-    // Collect design responses from actual field values
-    const designResponses = {};
-    designerFields.forEach(field => {
-      const value = fieldValues[field.id];
-      // For image fields, save the full object with url, altText, etc.
-      if (field.type === 'image') {
-        designResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-      } else {
-        // Use actual entered value, or fallback to placeholder or empty string
-        designResponses[field.name] = value || field.placeholder || '';
-      }
-    });
-    
-    // Collect lesson responses from builder field values
-    const lessonResponses = {};
-    builderFields.forEach(field => {
-      const value = fieldValues[field.id];
-      // For image fields, save the full object with url, altText, etc.
-      if (field.type === 'image') {
-        lessonResponses[field.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-      } else {
-        lessonResponses[field.name] = value || field.placeholder || '';
-      }
-    });
+    const { designerResponses, builderResponses } = buildFieldResponses(fields, fieldValues, { keyBy: 'name' });
 
     try {
       let data, error;
@@ -1649,8 +1437,8 @@ export default function CreateNewLessonType() {
         const result = await supabase
           .from('lessons')
           .update({
-            designer_responses: designResponses,
-            builder_responses: lessonResponses,
+            designer_responses: designerResponses,
+            builder_responses: builderResponses,
             template_name: lessonTypeData.name
           })
           .eq('id', testLessonId)
@@ -1665,8 +1453,8 @@ export default function CreateNewLessonType() {
               template_name: lessonTypeData.name,
               is_test: true,
               status: 'draft',
-              designer_responses: designResponses,
-              builder_responses: lessonResponses,
+              designer_responses: designerResponses,
+              builder_responses: builderResponses,
               created_by: session?.user?.id
             })
             .select()
@@ -1689,8 +1477,8 @@ export default function CreateNewLessonType() {
             template_name: lessonTypeData.name,
             is_test: true,
             status: 'draft',
-            designer_responses: designResponses,
-            builder_responses: lessonResponses,
+            designer_responses: designerResponses,
+            builder_responses: builderResponses,
             created_by: session?.user?.id
           })
           .select()
@@ -1714,19 +1502,14 @@ export default function CreateNewLessonType() {
       }, 3000);
     } catch (error) {
       console.error('Error saving test lesson:', error);
-      alert('Failed to save test lesson. Please try again.');
+      toast.error('Failed to save test lesson. Please try again.');
     }
   };
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <p style={{ color: 'var(--gray-600)', fontSize: '1.125rem' }}>
+      <div style={loadingContainer}>
+        <p style={loadingText}>
           Loading lesson template...
         </p>
       </div>
@@ -1734,48 +1517,14 @@ export default function CreateNewLessonType() {
   }
 
   return (
-    <div style={{
-      minHeight: 'calc(100vh - 60px)',
-      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
-      padding: '2rem 1rem 4rem'
-    }}>
-      <div style={{
-        maxWidth: '1600px',
-        margin: '0 auto'
-      }}>
+    <div style={pageBackground}>
+      <div style={pageMaxWidth}>
         {/* Page Header */}
-        <div style={{
-          position: 'relative',
-          marginBottom: '2.5rem'
-        }}>
+        <div style={pageHeaderRelative}>
           <button
-            onClick={() => navigate(testLessonId ? '/browse-lessons' : '/browse-lesson-templates')}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.375rem',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '8px',
-              padding: '0.5rem 0.75rem',
-              fontSize: '0.8125rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-            }}
+            onClick={() => navigate('/browse-lesson-templates?mode=edit')}
+            style={backButton}
+            {...backButtonHover}
           >
             <ArrowLeft size={16} />
             Back
@@ -1790,35 +1539,15 @@ export default function CreateNewLessonType() {
               marginBottom: '0.75rem'
             }}>
               {lessonTypeData?.state && (
-                <span style={{
-                  display: 'inline-block',
-                  padding: '0.375rem 0.875rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  color: '#fff',
-                  borderRadius: '9999px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  backdropFilter: 'blur(8px)'
-                }}>
+                <span style={stateBadge}>
                   {US_STATES.find(s => s.value === lessonTypeData.state)?.label || lessonTypeData.state}
                 </span>
               )}
-              <h1 style={{
-                fontSize: '2.5rem',
-                fontWeight: 700,
-                color: '#fff',
-                margin: 0
-              }}>
+              <h1 style={pageTitle}>
                 {lessonTypeData?.name || 'Create New Lesson Template'}
               </h1>
             </div>
-            <p style={{
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '1.125rem',
-              fontWeight: 500,
-              marginBottom: 0
-            }}>
+            <p style={pageSubtitle}>
               {APP_CONFIG.pages.createNewLessonType.subtitle}
             </p>
           </div>
@@ -1839,90 +1568,8 @@ export default function CreateNewLessonType() {
           gap: '0.75rem'
         }}>
           {/* Toolbar Content - AI Model, Generate, Save Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {/* AI Model with Label */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}> 🤖 AI Model</span>
-              <div style={{ position: 'relative' }}>
-                <button
-                  ref={modelButtonRef}
-                  onClick={() => setShowModelDropdown(!showModelDropdown)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.375rem',
-                    background: '#fff',
-                    color: 'var(--gray-700)',
-                    border: '1px solid var(--gray-300)',
-                    borderRadius: '8px',
-                    padding: '0.5rem 0.75rem',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    minWidth: '130px',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <span>{selectedModel === 'claude-sonnet-4-20250514' ? 'Claude Sonnet 4' : 'GPT-4o'}</span>
-                  <ChevronDown size={14} style={{ transform: showModelDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-                </button>
-                {showModelDropdown && modelButtonRef.current && createPortal(
-                  <>
-                    {/* Invisible overlay to close dropdown when clicking outside */}
-                    <div 
-                      style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        zIndex: 99998
-                      }}
-                      onClick={() => setShowModelDropdown(false)}
-                    />
-                    <div style={{
-                      position: 'fixed',
-                      top: modelButtonRef.current.getBoundingClientRect().bottom + 4,
-                      left: modelButtonRef.current.getBoundingClientRect().left,
-                      width: 150,
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-                      zIndex: 99999,
-                      overflow: 'hidden'
-                    }}>
-                      {['claude-sonnet-4-20250514', 'gpt-4o'].map(model => (
-                        <button
-                          key={model}
-                          onClick={() => {
-                            setSelectedModel(model);
-                            setShowModelDropdown(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '0.5rem 0.75rem',
-                            border: 'none',
-                            background: selectedModel === model ? '#f3f4f6' : '#fff',
-                            color: '#374151',
-                            fontSize: '0.8125rem',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            transition: 'background 0.15s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedModel === model ? '#f3f4f6' : '#fff'}
-                        >
-                          {model === 'claude-sonnet-4-20250514' ? '🤖 Claude Sonnet 4' : '🤖 GPT-4o'}
-                        </button>
-                      ))}
-                    </div>
-                  </>,
-                  document.body
-                )}
-              </div>
-            </div>
+          <div style={{ ...toolbarRow, flexWrap: 'wrap' }}>
+            <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
 
             <div style={{
               display: 'flex',
@@ -1955,35 +1602,15 @@ export default function CreateNewLessonType() {
               onClick={handleGenerateLesson}
               disabled={isGeneratingLesson}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: isGeneratingLesson 
-                  ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
-                  : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
+                ...gradientButton(
+                  isGeneratingLesson ? '#d1d5db' : '#8b5cf6',
+                  isGeneratingLesson ? '#9ca3af' : '#7c3aed',
+                  '139, 92, 246'
+                ),
                 cursor: isGeneratingLesson ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)',
                 opacity: isGeneratingLesson ? 0.7 : 1
               }}
-              onMouseEnter={(e) => {
-                if (!isGeneratingLesson) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isGeneratingLesson) {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
-                }
-              }}
+              {...(isGeneratingLesson ? {} : liftOnHover('139, 92, 246'))}
             >
               <Sparkles size={16} />
               {isGeneratingLesson 
@@ -1997,29 +1624,8 @@ export default function CreateNewLessonType() {
               <button
                 type="button"
                 onClick={handleStopGeneration}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.5rem 0.875rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.3)';
-                }}
+                style={gradientButton('#ef4444', '#dc2626', '239, 68, 68')}
+                {...liftOnHover('239, 68, 68')}
               >
                 Stop Generation
               </button>
@@ -2029,29 +1635,8 @@ export default function CreateNewLessonType() {
 
             <button
               onClick={handleSaveTestLesson}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
-              }}
+              style={gradientButton('#3b82f6', '#2563eb', '59, 130, 246')}
+              {...liftOnHover('59, 130, 246')}
             >
               <Beaker size={16} />
               Save Test Lesson
@@ -2059,29 +1644,8 @@ export default function CreateNewLessonType() {
             
             <button
               onClick={handleSave}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(34, 197, 94, 0.25)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(34, 197, 94, 0.35)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.25)';
-              }}
+              style={gradientButton('#22c55e', '#16a34a', '34, 197, 94')}
+              {...liftOnHover('34, 197, 94')}
             >
               <Save size={16} />
               Save Template
@@ -2092,683 +1656,71 @@ export default function CreateNewLessonType() {
         </div>
 
         {/* Fields Card */}
-        <div style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: '16px',
-          padding: '2rem',
-          minHeight: '500px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-        }}>
+        <div style={fieldsCard} onPointerDown={() => { userHasInteractedRef.current = true; }}>
           
           {/* Required field indicator */}
           {fields.some(f => f.required) && (
-            <div style={{
-              textAlign: 'right',
-              marginBottom: '1rem',
-              fontSize: '0.75rem',
-              color: '#ef4444',
-              fontStyle: 'italic'
-            }}>
+            <div style={requiredFieldIndicator}>
               * Required field
             </div>
           )}
           
           {/* Fields List */}
-          <div style={{
-            display: layoutMode === 'side-by-side' ? 'grid' : 'flex',
-            gridTemplateColumns: layoutMode === 'side-by-side' ? '1fr 1fr' : undefined,
-            flexDirection: layoutMode === 'stacked' ? 'column' : undefined,
-            gap: layoutMode === 'side-by-side' ? '2rem' : '2.5rem'
-          }}>
+          <div style={fieldsLayout(layoutMode)}>
             {/* Designer Fields Section */}
-            <div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '1rem',
-                paddingBottom: '0.75rem',
-                borderBottom: '2px solid var(--gray-200)',
-                minHeight: '3rem'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem'
-                }}>
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-900)',
-                    margin: 0
-                  }}>
-                    Designer Field{fields.filter(f => f.fieldFor === 'designer').length === 1 ? '' : 's'}
-                  </h3>
-                  <span style={{
-                    padding: '0.25rem 0.75rem',
-                    backgroundColor: '#dbeafe',
-                    color: 'var(--primary)',
-                    borderRadius: '9999px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600
-                  }}>
-                    {fields.filter(f => f.fieldFor === 'designer').length}
-                  </span>
-                </div>
-                {/* Show controls only in stacked mode or left side in side-by-side */}
-                {layoutMode === 'stacked' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  {/* Add Field Button */}
-                  <button
-                    onClick={() => {
-                      setEditingField(null);
-                      setIsModalOpen(true);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.375rem',
-                      background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                      color: '#fff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '0.5rem 0.875rem',
-                        fontSize: '0.8125rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.2)';
-                      }}
-                    >
-                      <Plus size={16} />
-                      Add Field
-                    </button>
-                    
-                    {/* Layout Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}>Layout</span>
-                      <div style={{
-                        display: 'flex',
-                        backgroundColor: 'var(--gray-100)',
-                        borderRadius: '8px',
-                        padding: '3px'
-                      }}>
-                        <button
-                          onClick={() => setLayoutMode('stacked')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.375rem 0.625rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            background: layoutMode === 'stacked' ? '#fff' : 'transparent',
-                            color: layoutMode === 'stacked' ? 'var(--primary)' : 'var(--gray-500)',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: layoutMode === 'stacked' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                          }}
-                          title="Stack fields vertically"
-                        >
-                          <Rows3 size={14} />
-                        </button>
-                        <button
-                          onClick={() => setLayoutMode('side-by-side')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.375rem 0.625rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            background: layoutMode === 'side-by-side' ? '#fff' : 'transparent',
-                            color: layoutMode === 'side-by-side' ? 'var(--primary)' : 'var(--gray-500)',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: layoutMode === 'side-by-side' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                          }}
-                          title="Show fields side by side"
-                        >
-                          <Columns2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {fields.filter(f => f.fieldFor === 'designer').length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '2rem',
-                    color: 'var(--gray-400)',
-                    fontSize: '0.875rem'
-                  }}>
-                    No designer fields added yet
-                  </div>
-                ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, 'designer')}
-                  >
-                    <SortableContext
-                      items={fields.filter(f => f.fieldFor === 'designer').map(f => f.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem',
-                        paddingLeft: '2rem'
-                      }}>
-                        {fields.filter(f => f.fieldFor === 'designer').map((field) => {
-                          const aiProps = field.aiEnabled ? {
-                            onGenerateAI: handleGenerateAI,
-                            onAIConfig: handleAIConfig,
-                            isGenerating: generatingFieldId === field.id,
-                            hasGenerated: !!hasGeneratedMap[field.id],
-                          } : {};
-                          
-                          // Check if this field is missing
-                          const isMissing = highlightedMissingFields.has(field.id);
-                          
-                          let fieldComponent;
-                          if (field.type === 'text') {
-                            fieldComponent = (
-                              <TextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'rich_text') {
-                            fieldComponent = (
-                              <RichTextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'grade_band_selector' || field.type === 'theme_selector' || field.type === 'dropdown') {
-                            fieldComponent = (
-                              <DropdownField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'checklist') {
-                            fieldComponent = (
-                              <ChecklistField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'image') {
-                            fieldComponent = (
-                              <ImageField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'assign_standards') {
-                            fieldComponent = (
-                              <AssignStandardsField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'mcqs') {
-                            // Extract question labels from ai_question_prompts for display (designer)
-                            const questionLabelsD = {};
-                            if (field.ai_question_prompts) {
-                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
-                                const qData = field.ai_question_prompts[qKey];
-                                if (qData) {
-                                  questionLabelsD[qKey] = {
-                                    label: typeof qData === 'string' ? null : qData.label,
-                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
-                                  };
-                                }
-                              });
-                            }
-                            
-                            fieldComponent = (
-                              <MCQsField
-                                key={field.id}
-                                field={{ ...field, questionLabels: questionLabelsD }}
-                                value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
-                                onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
-                                onAIConfig={handleAIConfig}
-                                isMissing={isMissing}
-                                defaultStandardFramework={defaultStandardFramework}
-                              />
-                            );
-                          } else {
-                            fieldComponent = (
-                              <BaseField
-                                key={field.id}
-                                field={field}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          }
-                          
-                          return (
-                            <SortableField key={field.id} id={field.id}>
-                              {fieldComponent}
-                            </SortableField>
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                )}
-              </div>
+            <FieldSection
+              sectionLabel="Designer"
+              fieldType="designer"
+              fields={fields}
+              fieldValues={fieldValues}
+              setFieldValues={setFieldValues}
+              sensors={sensors}
+              handleDragEnd={handleDragEnd}
+              layoutMode={layoutMode}
+              setLayoutMode={setLayoutMode}
+              showControls={layoutMode === 'stacked'}
+              highlightedMissingFields={highlightedMissingFields}
+              generatingFieldId={generatingFieldId}
+              hasGeneratedMap={hasGeneratedMap}
+              handleGenerateAI={handleGenerateAI}
+              handleAIConfig={handleAIConfig}
+              handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
+              defaultStandardFramework={defaultStandardFramework}
+              onEditField={handleEditField}
+              onDeleteField={handleDeleteField}
+              onAddField={openAddFieldModal}
+            />
 
-              {/* Builder Fields Section */}
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '1rem',
-                  paddingBottom: '0.75rem',
-                  borderBottom: '2px solid var(--gray-200)',
-                  minHeight: '3rem'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem'
-                  }}>
-                    <h3 style={{
-                      fontSize: '1.25rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-900)',
-                      margin: 0
-                    }}>
-                      Builder Field{fields.filter(f => f.fieldFor === 'builder').length === 1 ? '' : 's'}
-                    </h3>
-                    <span style={{
-                      padding: '0.25rem 0.75rem',
-                      backgroundColor: '#dbeafe',
-                      color: 'var(--primary)',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600
-                    }}>
-                      {fields.filter(f => f.fieldFor === 'builder').length}
-                    </span>
-                  </div>
-                  {/* Show controls in side-by-side mode */}
-                  {layoutMode === 'side-by-side' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      {/* Add Field Button */}
-                      <button
-                        onClick={() => {
-                          setEditingField(null);
-                          setIsModalOpen(true);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.375rem',
-                          background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '8px',
-                          padding: '0.5rem 0.875rem',
-                          fontSize: '0.8125rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.3)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.2)';
-                        }}
-                      >
-                        <Plus size={16} />
-                        Add Field
-                      </button>
-                      
-                      {/* Layout Toggle */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}>Layout</span>
-                        <div style={{
-                          display: 'flex',
-                          backgroundColor: 'var(--gray-100)',
-                          borderRadius: '8px',
-                          padding: '3px'
-                        }}>
-                          <button
-                            onClick={() => setLayoutMode('stacked')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              padding: '0.375rem 0.625rem',
-                              border: 'none',
-                              borderRadius: '6px',
-                              background: layoutMode === 'stacked' ? '#fff' : 'transparent',
-                              color: layoutMode === 'stacked' ? 'var(--primary)' : 'var(--gray-500)',
-                              fontSize: '0.75rem',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              boxShadow: layoutMode === 'stacked' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                            title="Stack fields vertically"
-                          >
-                            <Rows3 size={14} />
-                          </button>
-                          <button
-                            onClick={() => setLayoutMode('side-by-side')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              padding: '0.375rem 0.625rem',
-                              border: 'none',
-                              borderRadius: '6px',
-                              background: layoutMode === 'side-by-side' ? '#fff' : 'transparent',
-                              color: layoutMode === 'side-by-side' ? 'var(--primary)' : 'var(--gray-500)',
-                              fontSize: '0.75rem',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              boxShadow: layoutMode === 'side-by-side' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                            title="Show fields side by side"
-                          >
-                            <Columns2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {fields.filter(f => f.fieldFor === 'builder').length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '2rem',
-                    color: 'var(--gray-400)',
-                    fontSize: '0.875rem'
-                  }}>
-                    No builder fields added yet
-                  </div>
-                ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, 'builder')}
-                  >
-                    <SortableContext
-                      items={fields.filter(f => f.fieldFor === 'builder').map(f => f.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem',
-                        paddingLeft: '2rem'
-                      }}>
-                        {fields.filter(f => f.fieldFor === 'builder').map((field) => {
-                          const aiProps = field.aiEnabled ? {
-                            onGenerateAI: handleGenerateAI,
-                            onAIConfig: handleAIConfig,
-                            isGenerating: generatingFieldId === field.id,
-                            hasGenerated: !!hasGeneratedMap[field.id],
-                          } : {};
-                          
-                          // Check if this field is missing
-                          const isMissing = highlightedMissingFields.has(field.id);
-                          
-                          let fieldComponent;
-                          if (field.type === 'text') {
-                            fieldComponent = (
-                              <TextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'rich_text') {
-                            fieldComponent = (
-                              <RichTextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'grade_band_selector' || field.type === 'theme_selector' || field.type === 'dropdown') {
-                            fieldComponent = (
-                              <DropdownField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'checklist') {
-                            fieldComponent = (
-                              <ChecklistField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'image') {
-                            fieldComponent = (
-                              <ImageField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'assign_standards') {
-                            fieldComponent = (
-                              <AssignStandardsField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'mcqs') {
-                            // Extract question labels from ai_question_prompts for display (builder)
-                            const questionLabelsB = {};
-                            if (field.ai_question_prompts) {
-                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
-                                const qData = field.ai_question_prompts[qKey];
-                                if (qData) {
-                                  questionLabelsB[qKey] = {
-                                    label: typeof qData === 'string' ? null : qData.label,
-                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
-                                  };
-                                }
-                              });
-                            }
-                            
-                            fieldComponent = (
-                              <MCQsField
-                                key={field.id}
-                                field={{ ...field, questionLabels: questionLabelsB }}
-                                value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
-                                onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
-                                onAIConfig={handleAIConfig}
-                                isMissing={isMissing}
-                                defaultStandardFramework={defaultStandardFramework}
-                              />
-                            );
-                          } else {
-                            fieldComponent = (
-                              <BaseField
-                                key={field.id}
-                                field={field}
-                                onEdit={handleEditField}
-                                onDelete={handleDeleteField}
-                                isMissing={isMissing}
-                                {...aiProps}
-                              />
-                            );
-                          }
-                          
-                          return (
-                            <SortableField key={field.id} id={field.id}>
-                              {fieldComponent}
-                            </SortableField>
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                )}
-              </div>
-            </div>
+            {/* Builder Fields Section */}
+            <FieldSection
+              sectionLabel="Builder"
+              fieldType="builder"
+              fields={fields}
+              fieldValues={fieldValues}
+              setFieldValues={setFieldValues}
+              sensors={sensors}
+              handleDragEnd={handleDragEnd}
+              layoutMode={layoutMode}
+              setLayoutMode={setLayoutMode}
+              showControls={layoutMode === 'side-by-side'}
+              highlightedMissingFields={highlightedMissingFields}
+              generatingFieldId={generatingFieldId}
+              hasGeneratedMap={hasGeneratedMap}
+              handleGenerateAI={handleGenerateAI}
+              handleAIConfig={handleAIConfig}
+              handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
+              defaultStandardFramework={defaultStandardFramework}
+              onEditField={handleEditField}
+              onDeleteField={handleDeleteField}
+              onAddField={openAddFieldModal}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Toast Notification */}
-      {showSaveToast && (
-        <div style={{
-          position: 'fixed',
-          top: '5rem',
-          right: '2rem',
-          background: 'linear-gradient(135deg, #ecfeff 0%, #eef2ff 100%)',
-          color: '#1e293b',
-          border: '1px solid #c7d2fe',
-          padding: '1rem 1.5rem',
-          borderRadius: '8px',
-          boxShadow: '0 12px 30px rgba(30, 41, 59, 0.18)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          fontSize: '1rem',
-          fontWeight: 600,
-          zIndex: 9999,
-          animation: 'slideIn 0.3s ease-out'
-        }}>
-          <Check size={20} />
-          Lesson template saved successfully!
-        </div>
-      )}
-
-      {/* Test Lesson Toast Notification */}
-      {showTestLessonToast && (
-        <div style={{
-          position: 'fixed',
-          top: '5rem',
-          right: '2rem',
-          background: 'linear-gradient(135deg, #ecfeff 0%, #eef2ff 100%)',
-          color: '#1e293b',
-          border: '1px solid #c7d2fe',
-          padding: '1rem 1.5rem',
-          borderRadius: '8px',
-          boxShadow: '0 12px 30px rgba(30, 41, 59, 0.18)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          fontSize: '1rem',
-          fontWeight: 600,
-          zIndex: 9999,
-          animation: 'slideIn 0.3s ease-out'
-        }}>
-          <Check size={20} />
-          Test lesson saved successfully!
-        </div>
-      )}
+      {/* Toast Notifications */}
+      <SaveToast visible={showSaveToast} message="Lesson template saved successfully!" />
+      <SaveToast visible={showTestLessonToast} message="Test lesson saved successfully!" />
 
       <NameLessonTypeModal
         visible={showNameModal}
@@ -2816,13 +1768,7 @@ export default function CreateNewLessonType() {
       {showMarkdownExportModal && markdownExportData && createPortal(
         <div
           style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            ...modalOverlay,
             zIndex: 9999,
             padding: '2rem'
           }}
@@ -2885,7 +1831,7 @@ export default function CreateNewLessonType() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(markdownExportData.fileContent);
-                      alert('File content copied to clipboard!');
+                      toast.success('File content copied to clipboard!');
                     }}
                     style={{
                       position: 'absolute',
@@ -2927,7 +1873,7 @@ export default function CreateNewLessonType() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(markdownExportData.importStatement);
-                      alert('Import statement copied!');
+                      toast.success('Import statement copied!');
                     }}
                     style={{
                       position: 'absolute',
@@ -2969,7 +1915,7 @@ export default function CreateNewLessonType() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(markdownExportData.mapEntry);
-                      alert('Map entry copied!');
+                      toast.success('Map entry copied!');
                     }}
                     style={{
                       position: 'absolute',

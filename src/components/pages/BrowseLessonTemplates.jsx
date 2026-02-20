@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
+import { useToast } from '../../hooks/useToast';
 import { FileText, ArrowLeft, X, Copy } from 'lucide-react';
 
 export default function BrowseLessonTemplates() {
   const navigate = useNavigate();
   const { session, profile } = useOutletContext() || {};
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode') || 'edit';
   const [lessonTypes, setLessonTypes] = useState([]);
@@ -126,7 +128,7 @@ export default function BrowseLessonTemplates() {
       setTemplateToDelete(null);
     } catch (error) {
       console.error('Error deleting lesson template:', error);
-      alert('Failed to delete lesson template. Please try again.');
+      toast.error('Failed to delete lesson template. Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -166,7 +168,7 @@ export default function BrowseLessonTemplates() {
 
   const handleCloneConfirm = async () => {
     if (!templateToClone || !cloneName.trim()) {
-      alert('Please enter a name for the cloned template.');
+      toast.warning('Please enter a name for the cloned template.');
       return;
     }
     
@@ -298,7 +300,7 @@ export default function BrowseLessonTemplates() {
       setShowCloneSuccessModal(true);
     } catch (error) {
       console.error('Error cloning lesson template:', error);
-      alert('Failed to clone lesson template. Please try again.');
+      toast.error('Failed to clone lesson template. Please try again.');
     } finally {
       setCloning(false);
     }
@@ -372,14 +374,14 @@ export default function BrowseLessonTemplates() {
               marginBottom: '0.75rem',
               color: '#fff'
             }}>
-              Browse Lesson Templates
+              {mode === 'create' ? 'Create a New Lesson' : 'Browse Lesson Templates'}
             </h1>
             <p style={{
               color: 'rgba(255, 255, 255, 0.9)',
               fontSize: '1.125rem',
               fontWeight: 500
             }}>
-              Continue working on your lesson templates
+              {mode === 'create' ? 'Choose a template for your lesson' : 'Continue working on your lesson templates'}
             </p>
           </div>
         </div>
@@ -1325,7 +1327,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
                   borderRadius: '3px',
                   fontFamily: 'monospace'
                 }}>
-                  src/lib/markdown-export/{clonedTemplateName.toLowerCase().replace(/[^a-z0-9]/g, '')}MarkdownExport.js
+                  src/export/templates/{clonedTemplateName.toLowerCase().replace(/[^a-z0-9]/g, '')}MarkdownExport.js
                 </code>
               </p>
             </div>
@@ -1367,7 +1369,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
                   display: 'block',
                   lineHeight: '1.5'
                 }}>
-{`import { generateMarkdown as generate${clonedTemplateName.replace(/[^a-zA-Z0-9]/g, '')}Markdown } from '../../lib/markdown-export/${clonedTemplateName.toLowerCase().replace(/[^a-z0-9]/g, '')}MarkdownExport';`}
+{`import { generateMarkdown as generate${clonedTemplateName.replace(/[^a-zA-Z0-9]/g, '')}Markdown } from '../../export/templates/${clonedTemplateName.toLowerCase().replace(/[^a-z0-9]/g, '')}MarkdownExport';`}
                 </code>
               </div>
             </div>
@@ -1540,7 +1542,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
                     fontSize: '0.8125rem',
                     fontFamily: 'monospace'
                   }}>
-                    src/lib/markdown-export/
+                    src/export/templates/
                   </code>
                 </li>
                 <li style={{ marginBottom: '0.5rem' }}>

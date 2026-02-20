@@ -119,11 +119,62 @@ export function extractGradeFromBand(gradeValue) {
 }
 
 /**
+ * Sort standard codes numerically by the grade number embedded in the code.
+ * e.g. CCSS.L.3.4 < CCSS.L.9-10.4 < CCSS.L.11-12.4
+ */
+function sortByGradeNumeric(a, b) {
+  const gradeOf = (s) => {
+    const m = s.match(/(\d+)(?:-(\d+))?/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  return gradeOf(a) - gradeOf(b) || a.localeCompare(b);
+}
+
+/**
+ * Extract ALL grade levels from a grade band selector value
+ * @param {string} gradeValue - Grade value from grade_band_selector (e.g., "11–12", "12", "9-10")
+ * @returns {number[]} - Array of all grade numbers in the range (e.g., [9, 10] for "9-10")
+ */
+export function extractGradesFromBand(gradeValue) {
+  if (!gradeValue) return [];
+  
+  // Handle ranges like "11–12" or "9-10"
+  const rangeMatch = gradeValue.match(/(\d+)[–-](\d+)/);
+  if (rangeMatch) {
+    const start = parseInt(rangeMatch[1]);
+    const end = parseInt(rangeMatch[2]);
+    const grades = [];
+    for (let g = start; g <= end; g++) {
+      grades.push(g);
+    }
+    return grades;
+  }
+  
+  // Handle single grades like "12"
+  const singleMatch = gradeValue.match(/^(\d+)$/);
+  if (singleMatch) {
+    return [parseInt(singleMatch[1])];
+  }
+  
+  return [];
+}
+
+/**
  * Get CCSS vocabulary standards for a grade (L.4 and L.6), with range fallback
- * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {number|string|number[]} gradeLevel - Grade level (e.g., 8) or array of grades (e.g., [9, 10])
  * @returns {Promise<string[]>} - Matching CCSS codes
  */
 export async function getCcssVocabularyStandardsForGrade(gradeLevel) {
+  // Handle array of grades: merge results from all grades
+  if (Array.isArray(gradeLevel)) {
+    const allCodes = new Set();
+    for (const g of gradeLevel) {
+      const codes = await getCcssVocabularyStandardsForGrade(g);
+      codes.forEach(c => allCodes.add(c));
+    }
+    return [...allCodes].sort(sortByGradeNumeric);
+  }
+
   if (gradeLevel === null || gradeLevel === undefined) return [];
 
   const numericGrade = parseInt(gradeLevel.toString(), 10);
@@ -205,11 +256,21 @@ export async function getCcssVocabularyStandardsForGrade(gradeLevel) {
 
 /**
  * Get framework-specific mapped vocab standards for a grade (mapped from CCSS L.4/L.6)
- * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {number|string|number[]} gradeLevel - Grade level (e.g., 8) or array of grades (e.g., [9, 10])
  * @param {string} framework - Target framework (e.g., 'TEKS', 'BEST', 'BLOOM', 'GSE')
  * @returns {Promise<string[]>} - Matching mapped codes for the framework
  */
 export async function getMappedVocabularyStandardsForGrade(gradeLevel, framework) {
+  // Handle array of grades: merge results from all grades
+  if (Array.isArray(gradeLevel)) {
+    const allCodes = new Set();
+    for (const g of gradeLevel) {
+      const codes = await getMappedVocabularyStandardsForGrade(g, framework);
+      codes.forEach(c => allCodes.add(c));
+    }
+    return [...allCodes].sort(sortByGradeNumeric);
+  }
+
   if (!framework || framework.toUpperCase() === 'CCSS') return [];
   if (gradeLevel === null || gradeLevel === undefined) return [];
 
@@ -288,9 +349,20 @@ export async function getMappedVocabularyStandardsForGrade(gradeLevel, framework
 /**
  * Get CCSS main idea standards for a grade (RI.2), with range fallback
  * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {number|string|number[]} gradeLevel - Grade level (e.g., 8) or array of grades (e.g., [9, 10])
  * @returns {Promise<string[]>} - Matching CCSS codes
  */
 export async function getCcssMainIdeaStandardsForGrade(gradeLevel) {
+  // Handle array of grades: merge results from all grades
+  if (Array.isArray(gradeLevel)) {
+    const allCodes = new Set();
+    for (const g of gradeLevel) {
+      const codes = await getCcssMainIdeaStandardsForGrade(g);
+      codes.forEach(c => allCodes.add(c));
+    }
+    return [...allCodes].sort(sortByGradeNumeric);
+  }
+
   if (gradeLevel === null || gradeLevel === undefined) return [];
 
   const numericGrade = parseInt(gradeLevel.toString(), 10);
@@ -301,58 +373,74 @@ export async function getCcssMainIdeaStandardsForGrade(gradeLevel) {
     data.map(row => row.ccssCode).filter(Boolean)
   );
 
-  // Try exact match first
-  const exactCode = `CCSS.RI.${numericGrade}.2`;
-  if (codeSet.has(exactCode)) {
-    return [exactCode];
-  }
+  const results = new Set();
 
-  // Fall back to ranges
-  const rangeEntries = [];
-  for (const code of codeSet) {
-    const match = code.match(/^CCSS\.RI\.(\d+)-(\d+)\.2$/i);
-    if (match) {
-      const start = parseInt(match[1], 10);
-      const end = parseInt(match[2], 10);
-      if (!Number.isNaN(start) && !Number.isNaN(end)) {
-        rangeEntries.push({ code, start, end });
+  // Look up both RI.x.2 (informational) and RL.x.2 (literature)
+  for (const strand of ['RI', 'RL']) {
+    // Try exact match first
+    const exactCode = `CCSS.${strand}.${numericGrade}.2`;
+    if (codeSet.has(exactCode)) {
+      results.add(exactCode);
+      continue;
+    }
+
+    // Fall back to ranges
+    const rangeEntries = [];
+    for (const code of codeSet) {
+      const match = code.match(new RegExp(`^CCSS\\.${strand}\\.(\\d+)-(\\d+)\\.2$`, 'i'));
+      if (match) {
+        const start = parseInt(match[1], 10);
+        const end = parseInt(match[2], 10);
+        if (!Number.isNaN(start) && !Number.isNaN(end)) {
+          rangeEntries.push({ code, start, end });
+        }
       }
     }
-  }
 
-  if (rangeEntries.length === 0) return [];
+    if (rangeEntries.length === 0) continue;
 
-  const inclusive = rangeEntries.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
-  const candidates = inclusive.length > 0 ? inclusive : rangeEntries;
+    const inclusive = rangeEntries.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+    const candidates = inclusive.length > 0 ? inclusive : rangeEntries;
 
-  // If no inclusive match, choose nearest ranges by distance to grade
-  let filteredCandidates = candidates;
-  if (inclusive.length === 0) {
-    let bestDistance = Infinity;
-    for (const entry of candidates) {
-      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
-      if (distance < bestDistance) {
-        bestDistance = distance;
+    // If no inclusive match, choose nearest ranges by distance to grade
+    let filteredCandidates = candidates;
+    if (inclusive.length === 0) {
+      let bestDistance = Infinity;
+      for (const entry of candidates) {
+        const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+        if (distance < bestDistance) {
+          bestDistance = distance;
+        }
       }
+      filteredCandidates = candidates.filter(entry => {
+        const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+        return distance === bestDistance;
+      });
     }
-    filteredCandidates = candidates.filter(entry => {
-      const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
-      return distance === bestDistance;
-    });
+
+    filteredCandidates.forEach(entry => results.add(entry.code));
   }
 
-  return filteredCandidates
-    .map(entry => entry.code)
-    .sort((a, b) => a.localeCompare(b));
+  return [...results].sort((a, b) => a.localeCompare(b));
 }
 
 /**
  * Get framework-specific mapped main idea standards for a grade (mapped from CCSS RI.2)
- * @param {number|string} gradeLevel - Grade level (e.g., 8)
+ * @param {number|string|number[]} gradeLevel - Grade level (e.g., 8) or array of grades (e.g., [9, 10])
  * @param {string} framework - Target framework (e.g., 'TEKS', 'BEST', 'BLOOM', 'GSE')
  * @returns {Promise<string[]>} - Matching mapped codes for the framework
  */
 export async function getMappedMainIdeaStandardsForGrade(gradeLevel, framework) {
+  // Handle array of grades: merge results from all grades
+  if (Array.isArray(gradeLevel)) {
+    const allCodes = new Set();
+    for (const g of gradeLevel) {
+      const codes = await getMappedMainIdeaStandardsForGrade(g, framework);
+      codes.forEach(c => allCodes.add(c));
+    }
+    return [...allCodes].sort(sortByGradeNumeric);
+  }
+
   if (!framework || framework.toUpperCase() === 'CCSS') return [];
   if (gradeLevel === null || gradeLevel === undefined) return [];
 
@@ -362,44 +450,50 @@ export async function getMappedMainIdeaStandardsForGrade(gradeLevel, framework) 
   const data = await loadMOACData();
   const normalizedFramework = framework.toUpperCase();
 
-  // Try exact CCSS code first
-  const exactCcssCode = `CCSS.RI.${numericGrade}.2`;
+  // Look up both RI.x.2 (informational) and RL.x.2 (literature)
+  let matchingRows = [];
 
-  let matchingRows = data.filter(row =>
-    row.ccssCode === exactCcssCode && row.mappedFramework === normalizedFramework
-  );
+  for (const strand of ['RI', 'RL']) {
+    const exactCcssCode = `CCSS.${strand}.${numericGrade}.2`;
 
-  if (matchingRows.length === 0) {
-    // Fall back to ranges
-    const rangeMatches = [];
-    for (const row of data) {
-      if (row.mappedFramework !== normalizedFramework) continue;
-      const match = row.ccssCode?.match(/^CCSS\.RI\.(\d+)-(\d+)\.2$/i);
-      if (!match) continue;
-      const start = parseInt(match[1], 10);
-      const end = parseInt(match[2], 10);
-      if (Number.isNaN(start) || Number.isNaN(end)) continue;
-      rangeMatches.push({ row, start, end });
-    }
+    let strandRows = data.filter(row =>
+      row.ccssCode === exactCcssCode && row.mappedFramework === normalizedFramework
+    );
 
-    const inclusive = rangeMatches.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
-    const candidates = inclusive.length > 0 ? inclusive : rangeMatches;
-
-    if (candidates.length > 0) {
-      let filtered = candidates;
-      if (inclusive.length === 0) {
-        let bestDistance = Infinity;
-        for (const entry of candidates) {
-          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
-          if (distance < bestDistance) bestDistance = distance;
-        }
-        filtered = candidates.filter(entry => {
-          const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
-          return distance === bestDistance;
-        });
+    if (strandRows.length === 0) {
+      // Fall back to ranges
+      const rangeMatches = [];
+      for (const row of data) {
+        if (row.mappedFramework !== normalizedFramework) continue;
+        const match = row.ccssCode?.match(new RegExp(`^CCSS\\.${strand}\\.(\\d+)-(\\d+)\\.2$`, 'i'));
+        if (!match) continue;
+        const start = parseInt(match[1], 10);
+        const end = parseInt(match[2], 10);
+        if (Number.isNaN(start) || Number.isNaN(end)) continue;
+        rangeMatches.push({ row, start, end });
       }
-      matchingRows = filtered.map(entry => entry.row);
+
+      const inclusive = rangeMatches.filter(entry => numericGrade >= entry.start && numericGrade <= entry.end);
+      const candidates = inclusive.length > 0 ? inclusive : rangeMatches;
+
+      if (candidates.length > 0) {
+        let filtered = candidates;
+        if (inclusive.length === 0) {
+          let bestDistance = Infinity;
+          for (const entry of candidates) {
+            const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+            if (distance < bestDistance) bestDistance = distance;
+          }
+          filtered = candidates.filter(entry => {
+            const distance = Math.min(Math.abs(numericGrade - entry.start), Math.abs(numericGrade - entry.end));
+            return distance === bestDistance;
+          });
+        }
+        strandRows = filtered.map(entry => entry.row);
+      }
     }
+
+    matchingRows.push(...strandRows);
   }
 
   let codes = matchingRows
@@ -428,7 +522,7 @@ export async function getMappedMainIdeaStandardsForGrade(gradeLevel, framework) 
  * @param {number|string} gradeLevel - Optional grade level to filter results (e.g., 11 or 12)
  * @returns {Object} - Object with arrays for each framework: { CCSS: [...], TEKS: [...], BEST: [...], BLOOM: [...], GSE: [...] }
  */
-export async function getMappedStandards(ccssCode, gradeLevel = null) {
+async function getMappedStandards(ccssCode, gradeLevel = null) {
   const data = await loadMOACData();
   
   // Parse grade level if provided as string
@@ -480,7 +574,7 @@ export async function getMappedStandards(ccssCode, gradeLevel = null) {
  * @param {Object} mappedStandards - Object returned by getMappedStandards
  * @returns {string} - Formatted string like "CCSS.L.3.1; TEKS.ELAR.3.11(D); BEST.ELA.3.C.3.1"
  */
-export function formatMappedStandards(mappedStandards) {
+function formatMappedStandards(mappedStandards) {
   const parts = [];
   
   // Order: CCSS, TEKS, BEST, BLOOM, GSE
@@ -547,7 +641,7 @@ export function insertStandardInOrder(standardsString, standardToInsert) {
  * @param {number|string} gradeLevel - Optional grade level to filter results
  * @returns {string} - Formatted standards string
  */
-export async function getFormattedMappedStandards(ccssCode, gradeLevel = null) {
+async function getFormattedMappedStandards(ccssCode, gradeLevel = null) {
   const mapped = await getMappedStandards(ccssCode, gradeLevel);
   return formatMappedStandards(mapped);
 }
@@ -557,7 +651,7 @@ export async function getFormattedMappedStandards(ccssCode, gradeLevel = null) {
  * @param {string} code - Standard code to identify
  * @returns {string|null} - Framework name ('CCSS', 'TEKS', 'BEST', 'BLOOM', 'GSE') or null if unknown
  */
-export function detectFramework(code) {
+function detectFramework(code) {
   if (!code) return null;
   
   if (code.startsWith('CCSS.')) return 'CCSS';
@@ -575,7 +669,7 @@ export function detectFramework(code) {
  * @param {string} standardCode - The non-CCSS standard code to look up (e.g., "TEKS.ELAR.3.11(D)")
  * @returns {string[]} - Array of CCSS codes that map to this standard
  */
-export async function getCCSSFromMappedCode(standardCode) {
+async function getCCSSFromMappedCode(standardCode) {
   const data = await loadMOACData();
   
   // Find all rows where mappedCode matches exactly
@@ -594,7 +688,7 @@ export async function getCCSSFromMappedCode(standardCode) {
  * @param {number|string} gradeLevel - Optional grade level to filter results
  * @returns {Object} - Object with arrays for each framework: { CCSS: [...], TEKS: [...], BEST: [...], BLOOM: [...], GSE: [...] }
  */
-export async function getMappedStandardsFromAny(standardCode, gradeLevel = null) {
+async function getMappedStandardsFromAny(standardCode, gradeLevel = null) {
   const framework = detectFramework(standardCode);
   
   // Initialize result object
@@ -645,7 +739,7 @@ export async function getMappedStandardsFromAny(standardCode, gradeLevel = null)
  * @param {number|string} gradeLevel - Optional grade level to filter results
  * @returns {string} - Formatted standards string in order: CCSS; TEKS; BEST; BLOOM; GSE
  */
-export async function getFormattedMappedStandardsFromAny(standardCode, gradeLevel = null) {
+async function getFormattedMappedStandardsFromAny(standardCode, gradeLevel = null) {
   const mapped = await getMappedStandardsFromAny(standardCode, gradeLevel);
   return formatMappedStandards(mapped);
 }
@@ -655,7 +749,7 @@ export async function getFormattedMappedStandardsFromAny(standardCode, gradeLeve
  * @param {string} standardCode - Any standard code
  * @returns {string|null} - The statement text or null if not found
  */
-export async function getStandardStatement(standardCode) {
+async function getStandardStatement(standardCode) {
   const data = await loadMOACData();
   const framework = detectFramework(standardCode);
   

@@ -66,6 +66,7 @@ export default function ConfirmModal({
             gap: '0.75rem',
             justifyContent: 'flex-end'
           }}>
+            {cancelText && (
             <button
               type="button"
               onClick={onCancel}
@@ -89,6 +90,7 @@ export default function ConfirmModal({
             >
               {cancelText}
             </button>
+            )}
             <button
               type="button"
               onClick={onConfirm}

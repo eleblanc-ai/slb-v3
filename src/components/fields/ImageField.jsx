@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '../../hooks/useToast';
 import BaseField from './BaseField';
 
 export default function ImageField({ 
@@ -14,6 +15,7 @@ export default function ImageField({
   isMissing,
   hideRequiredAsterisk
 }) {
+  const toast = useToast();
   const [imageDescription, setImageDescription] = useState(value?.description || '');
   const [aiGeneratedUrl, setAiGeneratedUrl] = useState(value?.url || '');
   const [altText, setAltText] = useState(value?.altText || '');
@@ -69,7 +71,7 @@ export default function ImageField({
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Failed to download image. Please try again.');
+      toast.error('Failed to download image. Please try again.');
     }
   };
 

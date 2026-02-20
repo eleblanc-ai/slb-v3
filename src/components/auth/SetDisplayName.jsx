@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { APP_CONFIG } from '../../config';
 
 export default function SetDisplayName({ userId, defaultDisplayName = '', onComplete, onSignOut }) {
@@ -39,7 +39,7 @@ export default function SetDisplayName({ userId, defaultDisplayName = '', onComp
     <div style={{
       minHeight: '100vh',
       width: '100%',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
       paddingTop: APP_CONFIG.auth.paddingTop,
       display: 'flex',
       alignItems: 'flex-start',

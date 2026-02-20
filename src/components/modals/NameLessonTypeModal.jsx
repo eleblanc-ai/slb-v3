@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { US_STATES } from '../../config/usStates';
 import { APP_CONFIG } from '../../config';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 
 export default function NameLessonTypeModal({ visible, onClose, onSave, initialName = '', initialCategory = 'Core ELA', initialState = '' }) {
   const navigate = useNavigate();

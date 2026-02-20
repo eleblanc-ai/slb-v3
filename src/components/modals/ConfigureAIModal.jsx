@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X, Eye } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { APP_CONFIG } from '../../config';
-import { buildFullPrompt } from '../../lib/promptBuilder';
-import { extractGradeFromBand, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
+import { buildFullPrompt } from '../../ai/promptBuilder';
+import { extractGradesFromBand, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
-import TipTapEditor from '../core/TipTapEditor';
+import { useToast } from '../../hooks/useToast';
+import SyncConfirmModal from './ai-config/SyncConfirmModal';
+import PromptPreviewPanel from './ai-config/PromptPreviewPanel';
+import ContextFieldsPanel from './ai-config/ContextFieldsPanel';
+import QuestionPromptsEditor from './ai-config/QuestionPromptsEditor';
 
 /**
  * ConfigureAIModal - Modal for configuring AI generation settings for a field
@@ -22,6 +26,7 @@ export default function ConfigureAIModal({
   mode = 'template', // 'template' or 'lesson'
   defaultStandardFramework = 'CCSS'
 }) {
+  const toast = useToast();
   const [prompt, setPrompt] = useState('');
   // MCQ question prompts (q1-q5) - each question has its own prompt, label, and tooltip
   const [questionPrompts, setQuestionPrompts] = useState({
@@ -32,12 +37,58 @@ export default function ConfigureAIModal({
     q5: { prompt: '', label: '', tooltip: '', includeVocabStandards: false, includeMainIdeaStandards: false }
   });
   const [activeQuestionTab, setActiveQuestionTab] = useState(0);
+
+  // Auto-resize textarea to fit content, preserving scroll position
+  const autoResize = useCallback((el) => {
+    if (!el) return;
+    const scrollContainer = configPanelRef.current;
+    const savedScroll = scrollContainer ? scrollContainer.scrollTop : 0;
+    // Temporarily add a sentinel char so scrollHeight accounts for trailing newlines
+    const val = el.value;
+    const endsWithNewline = val.endsWith('\n') || val.endsWith('\r');
+    if (endsWithNewline) el.value = val + '.';
+    el.style.height = 'auto';
+    const h = el.scrollHeight;
+    if (endsWithNewline) el.value = val;
+    el.style.height = h + 'px';
+    if (scrollContainer) scrollContainer.scrollTop = savedScroll;
+  }, []);
+
+  // Strip TipTap HTML wrapping from DB values so textareas show clean plain text
+  const stripHtml = (val) => {
+    if (!val || typeof val !== 'string') return val || '';
+    const trimmed = val.trim();
+    if (!/<\/?[a-z][\s\S]*>/i.test(trimmed)) return trimmed;
+    // Not structured TipTap HTML — return as-is (plain text with literal tags)
+    if (!/^<(?:p|h[1-6]|ul|ol|div|blockquote|table)\b/i.test(trimmed)) return trimmed;
+    // 1. Strip actual HTML structure tags first.
+    //    Entity-encoded tags (&lt;p&gt;) do NOT match /<[^>]*>/ so they survive.
+    let text = trimmed
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(?:p|div|li|h[1-6]|blockquote)>/gi, '\n')
+      .replace(/<[^>]*>/g, '');
+    // 2. Decode entities to reveal literal tag names.
+    text = text
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#0*39;/g, "'")
+      .replace(/&#x0*27;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return text;
+  };
+
   const [systemInstructions, setSystemInstructions] = useState('');
   const [contextInstructions, setContextInstructions] = useState('');
   const [formatRequirements, setFormatRequirements] = useState('');
   const [selectedFields, setSelectedFields] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const configPanelRef = useRef(null);
+  const hasResizedAfterLoadRef = useRef(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSyncConfirm, setShowSyncConfirm] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -92,6 +143,22 @@ export default function ConfigureAIModal({
     };
   }, []);
 
+  // Auto-resize all textareas once after values first load (not on every keystroke)
+  useEffect(() => {
+    if (loading || !configPanelRef.current || hasResizedAfterLoadRef.current) return;
+    hasResizedAfterLoadRef.current = true;
+    const timer = setTimeout(() => {
+      const textareas = configPanelRef.current?.querySelectorAll('textarea');
+      textareas?.forEach(autoResize);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loading, systemInstructions, prompt, formatRequirements, contextInstructions, questionPrompts]);
+
+  // Reset the flag when the modal opens for a different field
+  useEffect(() => {
+    hasResizedAfterLoadRef.current = false;
+  }, [field?.id]);
+
   console.log('🔧 ConfigureAIModal mode:', mode, 'field:', field?.name);
 
   useEffect(() => {
@@ -106,13 +173,13 @@ export default function ConfigureAIModal({
       const gradeValue = gradeField
         ? (fieldValues?.[gradeField.id] ?? storedFieldValues?.[gradeField.id])
         : null;
-      const gradeLevel = extractGradeFromBand(gradeValue);
+      const gradeLevels = extractGradesFromBand(gradeValue);
 
       if (defaultStandardFramework === 'CCSS') {
-        const standards = await getCcssVocabularyStandardsForGrade(gradeLevel);
+        const standards = await getCcssVocabularyStandardsForGrade(gradeLevels);
         setVocabStandards(standards);
       } else {
-        const standards = await getMappedVocabularyStandardsForGrade(gradeLevel, defaultStandardFramework);
+        const standards = await getMappedVocabularyStandardsForGrade(gradeLevels, defaultStandardFramework);
         setVocabStandards(standards);
       }
     };
@@ -132,13 +199,13 @@ export default function ConfigureAIModal({
       const gradeValue = gradeField
         ? (fieldValues?.[gradeField.id] ?? storedFieldValues?.[gradeField.id])
         : null;
-      const gradeLevel = extractGradeFromBand(gradeValue);
+      const gradeLevels = extractGradesFromBand(gradeValue);
 
       if (defaultStandardFramework === 'CCSS') {
-        const standards = await getCcssMainIdeaStandardsForGrade(gradeLevel);
+        const standards = await getCcssMainIdeaStandardsForGrade(gradeLevels);
         setMainIdeaStandards(standards);
       } else {
-        const standards = await getMappedMainIdeaStandardsForGrade(gradeLevel, defaultStandardFramework);
+        const standards = await getMappedMainIdeaStandardsForGrade(gradeLevels, defaultStandardFramework);
         setMainIdeaStandards(standards);
       }
     };
@@ -184,41 +251,41 @@ export default function ConfigureAIModal({
       }
       
       if (configData) {
-        setPrompt(configData.ai_prompt || `Generate content for the ${field.name} field.`);
+        setPrompt(stripHtml(configData.ai_prompt) || `Generate content for the ${field.name} field.`);
         // Load question prompts for MCQs
         if (configData.ai_question_prompts) {
           const savedPrompts = configData.ai_question_prompts;
           setQuestionPrompts({
             q1: { 
-              prompt: savedPrompts.q1?.prompt || savedPrompts.q1 || defaultQuestionPrompts.q1.prompt, 
+              prompt: stripHtml(savedPrompts.q1?.prompt || savedPrompts.q1) || defaultQuestionPrompts.q1.prompt, 
               label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
               tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip,
               includeVocabStandards: savedPrompts.q1?.includeVocabStandards || false,
               includeMainIdeaStandards: savedPrompts.q1?.includeMainIdeaStandards || false
             },
             q2: { 
-              prompt: savedPrompts.q2?.prompt || savedPrompts.q2 || defaultQuestionPrompts.q2.prompt, 
+              prompt: stripHtml(savedPrompts.q2?.prompt || savedPrompts.q2) || defaultQuestionPrompts.q2.prompt, 
               label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
               tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip,
               includeVocabStandards: savedPrompts.q2?.includeVocabStandards || false,
               includeMainIdeaStandards: savedPrompts.q2?.includeMainIdeaStandards || false
             },
             q3: { 
-              prompt: savedPrompts.q3?.prompt || savedPrompts.q3 || defaultQuestionPrompts.q3.prompt, 
+              prompt: stripHtml(savedPrompts.q3?.prompt || savedPrompts.q3) || defaultQuestionPrompts.q3.prompt, 
               label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
               tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip,
               includeVocabStandards: savedPrompts.q3?.includeVocabStandards || false,
               includeMainIdeaStandards: savedPrompts.q3?.includeMainIdeaStandards || false
             },
             q4: { 
-              prompt: savedPrompts.q4?.prompt || savedPrompts.q4 || defaultQuestionPrompts.q4.prompt, 
+              prompt: stripHtml(savedPrompts.q4?.prompt || savedPrompts.q4) || defaultQuestionPrompts.q4.prompt, 
               label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
               tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip,
               includeVocabStandards: savedPrompts.q4?.includeVocabStandards || false,
               includeMainIdeaStandards: savedPrompts.q4?.includeMainIdeaStandards || false
             },
             q5: { 
-              prompt: savedPrompts.q5?.prompt || savedPrompts.q5 || defaultQuestionPrompts.q5.prompt, 
+              prompt: stripHtml(savedPrompts.q5?.prompt || savedPrompts.q5) || defaultQuestionPrompts.q5.prompt, 
               label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
               tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip,
               includeVocabStandards: savedPrompts.q5?.includeVocabStandards || false,
@@ -228,9 +295,9 @@ export default function ConfigureAIModal({
         } else {
           setQuestionPrompts(defaultQuestionPrompts);
         }
-        setSystemInstructions(configData.ai_system_instructions || defaultSystemInstructions);
-        setContextInstructions(configData.ai_context_instructions || defaultContextInstructions);
-        setFormatRequirements(configData.ai_format_requirements || defaultFormatReqs);
+        setSystemInstructions(stripHtml(configData.ai_system_instructions) || defaultSystemInstructions);
+        setContextInstructions(stripHtml(configData.ai_context_instructions) || defaultContextInstructions);
+        setFormatRequirements(stripHtml(configData.ai_format_requirements) || defaultFormatReqs);
         setSelectedFields(configData.ai_context_field_ids || []);
       } else {
         setPrompt(`Generate content for the ${field.name} field.`);
@@ -308,32 +375,32 @@ export default function ConfigureAIModal({
 
       const defaultQuestionPrompts = getDefaultQuestionPrompts();
 
-      setPrompt(templateData.ai_prompt || `Generate content for the ${field.name} field.`);
+      setPrompt(stripHtml(templateData.ai_prompt) || `Generate content for the ${field.name} field.`);
       if (templateData.ai_question_prompts) {
         const savedPrompts = templateData.ai_question_prompts;
         setQuestionPrompts({
           q1: { 
-            prompt: savedPrompts.q1?.prompt || savedPrompts.q1 || defaultQuestionPrompts.q1.prompt, 
+            prompt: stripHtml(savedPrompts.q1?.prompt || savedPrompts.q1) || defaultQuestionPrompts.q1.prompt, 
             label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
             tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip
           },
           q2: { 
-            prompt: savedPrompts.q2?.prompt || savedPrompts.q2 || defaultQuestionPrompts.q2.prompt, 
+            prompt: stripHtml(savedPrompts.q2?.prompt || savedPrompts.q2) || defaultQuestionPrompts.q2.prompt, 
             label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
             tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip
           },
           q3: { 
-            prompt: savedPrompts.q3?.prompt || savedPrompts.q3 || defaultQuestionPrompts.q3.prompt, 
+            prompt: stripHtml(savedPrompts.q3?.prompt || savedPrompts.q3) || defaultQuestionPrompts.q3.prompt, 
             label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
             tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip
           },
           q4: { 
-            prompt: savedPrompts.q4?.prompt || savedPrompts.q4 || defaultQuestionPrompts.q4.prompt, 
+            prompt: stripHtml(savedPrompts.q4?.prompt || savedPrompts.q4) || defaultQuestionPrompts.q4.prompt, 
             label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
             tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip
           },
           q5: { 
-            prompt: savedPrompts.q5?.prompt || savedPrompts.q5 || defaultQuestionPrompts.q5.prompt, 
+            prompt: stripHtml(savedPrompts.q5?.prompt || savedPrompts.q5) || defaultQuestionPrompts.q5.prompt, 
             label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
             tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip
           }
@@ -341,9 +408,9 @@ export default function ConfigureAIModal({
       } else {
         setQuestionPrompts(defaultQuestionPrompts);
       }
-      setSystemInstructions(templateData.ai_system_instructions || defaultSystemInstructions);
-      setContextInstructions(templateData.ai_context_instructions || defaultContextInstructions);
-      setFormatRequirements(templateData.ai_format_requirements || defaultFormatReqs);
+      setSystemInstructions(stripHtml(templateData.ai_system_instructions) || defaultSystemInstructions);
+      setContextInstructions(stripHtml(templateData.ai_context_instructions) || defaultContextInstructions);
+      setFormatRequirements(stripHtml(templateData.ai_format_requirements) || defaultFormatReqs);
       setSelectedFields(templateData.ai_context_field_ids || []);
 
       if (onSave) {
@@ -361,7 +428,7 @@ export default function ConfigureAIModal({
       setShowSyncConfirm(false);
     } catch (err) {
       console.error('Error syncing AI config:', err);
-      alert('Failed to sync AI configuration from template. Please try again.');
+      toast.error('Failed to sync AI configuration from template. Please try again.');
     } finally {
       setSyncing(false);
     }
@@ -437,7 +504,7 @@ export default function ConfigureAIModal({
       onClose();
     } catch (err) {
       console.error('Error saving AI config:', err);
-      alert('Failed to save AI configuration. Please try again.');
+      toast.error('Failed to save AI configuration. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -663,54 +730,10 @@ export default function ConfigureAIModal({
           minHeight: 0
         }}>
           {showPreview ? (
-            <div style={{
-              width: '100%',
-              padding: '2rem',
-              overflowY: 'auto',
-              background: '#fafafa',
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'center'
-            }}>
-              <div style={{
-                maxWidth: '900px',
-                width: '100%',
-                background: '#fff',
-                border: '2px solid var(--gray-200)',
-                borderRadius: '12px',
-                padding: '2rem',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
-              }}>
-                <div style={{
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  color: 'var(--gray-700)',
-                  marginBottom: '1.5rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  paddingBottom: '1rem',
-                  borderBottom: '2px solid var(--gray-200)'
-                }}>
-                  Full Prompt Preview
-                </div>
-                <div style={{
-                  fontSize: '0.875rem',
-                  fontFamily: 'ui-monospace, monospace',
-                  whiteSpace: 'pre-wrap',
-                  color: 'var(--gray-700)',
-                  lineHeight: '1.8',
-                  background: 'var(--gray-50)',
-                  padding: '1.5rem',
-                  borderRadius: '8px',
-                  border: '1px solid var(--gray-200)'
-                }}>
-                  {promptPreview}
-                </div>
-              </div>
-            </div>
+            <PromptPreviewPanel promptPreview={promptPreview} />
           ) : (
             <>
-              <div style={{
+              <div ref={configPanelRef} style={{
                 width: (mode === 'template' || (mode === 'lesson' && selectedFields.length > 0)) ? '65%' : '100%',
                 padding: '1.5rem',
                 overflowY: 'auto',
@@ -733,12 +756,27 @@ export default function ConfigureAIModal({
                       }}>
                         System Instructions
                       </label>
-                      <TipTapEditor
-                        content={systemInstructions}
-                        onChange={(value) => setSystemInstructions(value)}
+                      <textarea
+                        ref={autoResize}
+                        value={systemInstructions}
+                        onChange={(e) => { setSystemInstructions(e.target.value); autoResize(e.target); }}
                         placeholder="e.g., You are an AI assistant..."
-                        minHeight="110px"
-                        fontSize="0.8125rem"
+                        style={{
+                          width: '100%',
+                          minHeight: '110px',
+                          padding: '0.75rem',
+                          fontSize: '0.8125rem',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          border: '1px solid var(--gray-300)',
+                          borderRadius: '8px',
+                          resize: 'vertical',
+                          outline: 'none',
+                          lineHeight: 1.6,
+                          boxSizing: 'border-box',
+                          color: 'var(--gray-900)',
+                          background: '#fff',
+                          overflow: 'hidden',
+                        }}
                       />
                     </div>
 
@@ -760,241 +798,42 @@ export default function ConfigureAIModal({
                       }}>
                         Field Prompt
                       </label>
-                      <TipTapEditor
-                        content={prompt}
-                        onChange={(value) => setPrompt(value)}
+                      <textarea
+                        ref={autoResize}
+                        value={prompt}
+                        onChange={(e) => { setPrompt(e.target.value); autoResize(e.target); }}
                         placeholder="Example: Generate..."
-                        minHeight="140px"
-                        fontSize="0.8125rem"
+                        style={{
+                          width: '100%',
+                          minHeight: '140px',
+                          padding: '0.75rem',
+                          fontSize: '0.8125rem',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          border: '2px solid #60a5fa',
+                          borderRadius: '8px',
+                          resize: 'vertical',
+                          outline: 'none',
+                          lineHeight: 1.6,
+                          boxSizing: 'border-box',
+                          color: 'var(--gray-900)',
+                          background: '#fff',
+                          overflow: 'hidden',
+                        }}
                       />
                     </div>
                     )}
 
                     {field?.type === 'mcqs' && (
-                      <div style={{
-                        marginBottom: '1.5rem',
-                        background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                        padding: '1.25rem',
-                        borderRadius: '12px',
-                        border: '2px solid #86efac'
-                      }}>
-                        <label style={{
-                          fontSize: '0.875rem',
-                          fontWeight: 600,
-                          color: '#166534',
-                          display: 'block',
-                          marginBottom: '0.5rem'
-                        }}>
-                          Question Prompts
-                        </label>
-                        <p style={{
-                          fontSize: '0.75rem',
-                          color: '#15803d',
-                          marginBottom: '0.75rem',
-                          lineHeight: 1.5
-                        }}>
-                          Each question has its own customizable prompt with a specific focus area. Click each tab to edit its prompt.
-                        </p>
-                        
-                        {/* Question Tabs */}
-                        <div style={{
-                          display: 'flex',
-                          borderBottom: '2px solid #86efac',
-                          marginBottom: '1rem',
-                          background: '#f0fdf4',
-                          borderRadius: '8px 8px 0 0'
-                        }}>
-                          {questionKeys.map((key, index) => (
-                            <button
-                              key={key}
-                              type="button"
-                              onClick={() => setActiveQuestionTab(index)}
-                              style={{
-                                flex: 1,
-                                padding: '8px 12px',
-                                border: 'none',
-                                background: activeQuestionTab === index ? '#fff' : 'transparent',
-                                borderBottom: activeQuestionTab === index ? '3px solid #16a34a' : '3px solid transparent',
-                                color: activeQuestionTab === index ? '#166534' : '#15803d',
-                                fontWeight: activeQuestionTab === index ? 600 : 400,
-                                fontSize: 12,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                marginBottom: '-2px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '2px'
-                              }}
-                            >
-                              <span>{`Q${index + 1}`}</span>
-                              <span style={{ fontSize: 10, opacity: 0.8 }}>{questionPrompts[key]?.label || ''}</span>
-                            </button>
-                          ))}
-                        </div>
-                        
-                        {/* Question Prompt Content */}
-                        {questionKeys.map((qKey, index) => (
-                          <div
-                            key={qKey}
-                            style={{ display: activeQuestionTab === index ? 'block' : 'none' }}
-                          >
-                            {/* Label and Tooltip row - only show in template mode */}
-                            {mode === 'template' && (
-                              <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
-                                <div style={{ flex: 1 }}>
-                                  <label style={{
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600,
-                                    color: '#166534',
-                                    display: 'block',
-                                    marginBottom: '0.25rem'
-                                  }}>
-                                    Tab Label
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={questionPrompts[qKey]?.label || ''}
-                                    onChange={(e) => setQuestionPrompts(prev => ({
-                                      ...prev,
-                                      [qKey]: { ...prev[qKey], label: e.target.value }
-                                    }))}
-                                    placeholder="e.g., Central Idea"
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.5rem',
-                                      border: '2px solid #86efac',
-                                      borderRadius: '6px',
-                                      fontSize: '0.8125rem',
-                                      color: 'var(--gray-900)',
-                                      backgroundColor: '#fff',
-                                      outline: 'none',
-                                      boxSizing: 'border-box'
-                                    }}
-                                  />
-                                </div>
-                                <div style={{ flex: 2 }}>
-                                  <label style={{
-                                    fontSize: '0.75rem',
-                                    fontWeight: 600,
-                                    color: '#166534',
-                                    display: 'block',
-                                    marginBottom: '0.25rem'
-                                  }}>
-                                    Tooltip Description
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={questionPrompts[qKey]?.tooltip || ''}
-                                    onChange={(e) => setQuestionPrompts(prev => ({
-                                      ...prev,
-                                      [qKey]: { ...prev[qKey], tooltip: e.target.value }
-                                    }))}
-                                    placeholder="e.g., Asks about the main idea or central claim"
-                                    style={{
-                                      width: '100%',
-                                      padding: '0.5rem',
-                                      border: '2px solid #86efac',
-                                      borderRadius: '6px',
-                                      fontSize: '0.8125rem',
-                                      color: 'var(--gray-900)',
-                                      backgroundColor: '#fff',
-                                      outline: 'none',
-                                      boxSizing: 'border-box'
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )}  
-                            
-                            {/* Standards Inclusion Checkboxes - Show in template mode always, in lesson mode only if selected */}
-                            {(mode === 'template' || (mode === 'lesson' && (questionPrompts[qKey]?.includeVocabStandards || questionPrompts[qKey]?.includeMainIdeaStandards))) && (
-                              <div style={{
-                                marginBottom: '0.75rem',
-                                padding: '0.75rem',
-                                background: mode === 'lesson' ? '#f8f9fa' : '#f0fdf4',
-                                borderRadius: '8px',
-                                border: mode === 'lesson' ? '1px solid #dee2e6' : '1px solid #86efac'
-                              }}>
-                                <div style={{
-                                  fontSize: '0.75rem',
-                                  fontWeight: 600,
-                                  color: mode === 'lesson' ? '#495057' : '#166534',
-                                  marginBottom: '0.5rem'
-                                }}>
-                                  Include Grade-Specific Standards {mode === 'lesson' && '(Set by Template)'}
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                  {(mode === 'template' || questionPrompts[qKey]?.includeVocabStandards) && (
-                                    <label style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      cursor: mode === 'lesson' ? 'not-allowed' : 'pointer',
-                                      fontSize: '0.8125rem',
-                                      color: mode === 'lesson' ? '#495057' : '#15803d'
-                                    }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={questionPrompts[qKey]?.includeVocabStandards || false}
-                                        onChange={(e) => setQuestionPrompts(prev => ({
-                                          ...prev,
-                                          [qKey]: { ...prev[qKey], includeVocabStandards: e.target.checked }
-                                        }))}
-                                        disabled={mode === 'lesson'}
-                                        style={{ cursor: mode === 'lesson' ? 'not-allowed' : 'pointer' }}
-                                      />
-                                      <span>Include Vocabulary Standards ({vocabStandards.length > 0 ? vocabStandards.join('; ') : 'None'})</span>
-                                    </label>
-                                  )}
-                                  {(mode === 'template' || questionPrompts[qKey]?.includeMainIdeaStandards) && (
-                                    <label style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.5rem',
-                                      cursor: mode === 'lesson' ? 'not-allowed' : 'pointer',
-                                      fontSize: '0.8125rem',
-                                      color: mode === 'lesson' ? '#495057' : '#15803d'
-                                    }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={questionPrompts[qKey]?.includeMainIdeaStandards || false}
-                                        onChange={(e) => setQuestionPrompts(prev => ({
-                                          ...prev,
-                                          [qKey]: { ...prev[qKey], includeMainIdeaStandards: e.target.checked }
-                                        }))}
-                                        disabled={mode === 'lesson'}
-                                        style={{ cursor: mode === 'lesson' ? 'not-allowed' : 'pointer' }}
-                                      />
-                                      <span>Include Main Idea Standards ({mainIdeaStandards.length > 0 ? mainIdeaStandards.join('; ') : 'None'})</span>
-                                    </label>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            
-                            <label style={{
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              color: '#166534',
-                              display: 'block',
-                              marginBottom: '0.25rem'
-                            }}>
-                              Question {index + 1} Prompt
-                            </label>
-                            <TipTapEditor
-                              content={questionPrompts[qKey]?.prompt || ''}
-                              onChange={(value) => setQuestionPrompts(prev => ({
-                                ...prev,
-                                [qKey]: { ...prev[qKey], prompt: value }
-                              }))}
-                              placeholder={`Enter the prompt for Question ${index + 1}...`}
-                              minHeight="180px"
-                              fontSize="0.8125rem"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      <QuestionPromptsEditor
+                        questionPrompts={questionPrompts}
+                        onChangeQuestionPrompts={setQuestionPrompts}
+                        activeTab={activeQuestionTab}
+                        onChangeActiveTab={setActiveQuestionTab}
+                        questionKeys={questionKeys}
+                        vocabStandards={vocabStandards}
+                        mainIdeaStandards={mainIdeaStandards}
+                        mode={mode}
+                      />
                     )}
 
                     <div style={{ marginBottom: '1.5rem' }}>
@@ -1007,12 +846,27 @@ export default function ConfigureAIModal({
                       }}>
                         Format Requirements
                       </label>
-                      <TipTapEditor
-                        content={formatRequirements}
-                        onChange={(value) => setFormatRequirements(value)}
+                      <textarea
+                        ref={autoResize}
+                        value={formatRequirements}
+                        onChange={(e) => { setFormatRequirements(e.target.value); autoResize(e.target); }}
                         placeholder="e.g., Return only plain text..."
-                        minHeight="100px"
-                        fontSize="0.8125rem"
+                        style={{
+                          width: '100%',
+                          minHeight: '100px',
+                          padding: '0.75rem',
+                          fontSize: '0.8125rem',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                          border: '1px solid var(--gray-300)',
+                          borderRadius: '8px',
+                          resize: 'vertical',
+                          outline: 'none',
+                          lineHeight: 1.6,
+                          boxSizing: 'border-box',
+                          color: 'var(--gray-900)',
+                          background: '#fff',
+                          overflow: 'hidden',
+                        }}
                       />
                     </div>
 
@@ -1027,12 +881,27 @@ export default function ConfigureAIModal({
                         }}>
                           Context Instructions
                         </label>
-                        <TipTapEditor
-                          content={contextInstructions}
-                          onChange={(value) => setContextInstructions(value)}
+                        <textarea
+                          ref={autoResize}
+                          value={contextInstructions}
+                          onChange={(e) => { setContextInstructions(e.target.value); autoResize(e.target); }}
                           placeholder="e.g., Use the following context..."
-                          minHeight="90px"
-                          fontSize="0.8125rem"
+                          style={{
+                            width: '100%',
+                            minHeight: '90px',
+                            padding: '0.75rem',
+                            fontSize: '0.8125rem',
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                            border: '1px solid var(--gray-300)',
+                            borderRadius: '8px',
+                            resize: 'vertical',
+                            outline: 'none',
+                            lineHeight: 1.6,
+                            boxSizing: 'border-box',
+                            color: 'var(--gray-900)',
+                            background: '#fff',
+                            overflow: 'hidden',
+                          }}
                         />
                       </div>
                     )}
@@ -1041,243 +910,24 @@ export default function ConfigureAIModal({
               </div>
 
               {mode === 'lesson' && selectedFields.length > 0 && (
-                <div style={{
-                  width: '35%',
-                  padding: '1.5rem',
-                  overflowY: 'auto',
-                  background: '#fafafa',
-                  borderLeft: '1px solid var(--gray-200)',
-                  minHeight: 0
-                }}>
-                  <div style={{
-                    background: '#fff',
-                    padding: '1.25rem',
-                    borderRadius: '12px',
-                    border: '2px solid #fbbf24'
-                  }}>
-                    <label style={{
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-900)',
-                      display: 'block',
-                      marginBottom: '0.5rem'
-                    }}>
-                      Context Fields (Set by Template)
-                    </label>
-                    <p style={{
-                      fontSize: '0.75rem',
-                      color: '#92400e',
-                      marginBottom: '0.75rem',
-                      lineHeight: 1.5
-                    }}>
-                      These fields are used as context for AI generation. They were configured by the template designer.
-                    </p>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#059669',
-                        marginBottom: '0.5rem'
-                      }}>
-                        DESIGNER
-                      </div>
-                      <div style={{
-                        border: '2px solid #10b981',
-                        borderRadius: '8px',
-                        background: '#f0fdf4',
-                        padding: '0.75rem'
-                      }}>
-                        {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).length === 0 ? (
-                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                            No designer fields
-                          </p>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).map(contextField => (
-                              <div key={contextField.id} style={{
-                                padding: '0.625rem',
-                                background: '#d1fae5',
-                                borderRadius: '8px',
-                                fontSize: '0.8125rem',
-                                fontWeight: 500
-                              }}>
-                                {contextField.name}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#7c3aed',
-                        marginBottom: '0.5rem'
-                      }}>
-                        BUILDER
-                      </div>
-                      <div style={{
-                        border: '2px solid #7c3aed',
-                        borderRadius: '8px',
-                        background: '#faf5ff',
-                        padding: '0.75rem'
-                      }}>
-                        {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).length === 0 ? (
-                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                            No builder fields
-                          </p>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id) && selectedFields.includes(f.id)).map(contextField => (
-                              <div key={contextField.id} style={{
-                                padding: '0.625rem',
-                                background: '#ede9fe',
-                                borderRadius: '8px',
-                                fontSize: '0.8125rem',
-                                fontWeight: 500
-                              }}>
-                                {contextField.name}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <ContextFieldsPanel
+                  mode="lesson"
+                  allFields={allFields}
+                  selectedFields={selectedFields}
+                  allowSelfContext={allowSelfContext}
+                  currentFieldId={field?.id}
+                />
               )}
 
               {mode === 'template' && (
-                <div style={{
-                  width: '35%',
-                  padding: '1.5rem',
-                  overflowY: 'auto',
-                  background: '#fafafa',
-                  borderLeft: '1px solid var(--gray-200)',
-                  minHeight: 0
-                }}>
-                  <div style={{
-                    background: '#fff',
-                    padding: '1.25rem',
-                    borderRadius: '12px',
-                    border: '2px solid var(--gray-200)'
-                  }}>
-                    <label style={{
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-900)',
-                      display: 'block',
-                      marginBottom: '0.5rem'
-                    }}>
-                      Context Fields
-                    </label>
-                    
-                    <div style={{ marginBottom: '1rem' }}>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#059669',
-                        marginBottom: '0.5rem'
-                      }}>
-                        DESIGNER
-                      </div>
-                      <div style={{
-                        border: '2px solid #10b981',
-                        borderRadius: '8px',
-                        background: '#f0fdf4',
-                        padding: '0.75rem'
-                      }}>
-                        {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id)).length === 0 ? (
-                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                            No designer fields
-                          </p>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'designer' && (allowSelfContext || f.id !== field.id)).map(contextField => (
-                              <label key={contextField.id} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                padding: '0.625rem',
-                                background: selectedFields.includes(contextField.id) ? '#d1fae5' : '#fff',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.8125rem'
-                              }}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedFields.includes(contextField.id)}
-                                  onChange={() => toggleField(contextField.id)}
-                                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                                />
-                                <span>{contextField.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#7c3aed',
-                        marginBottom: '0.5rem'
-                      }}>
-                        BUILDER
-                      </div>
-                      <div style={{
-                        border: '2px solid #7c3aed',
-                        borderRadius: '8px',
-                        background: '#faf5ff',
-                        padding: '0.75rem'
-                      }}>
-                        {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id)).length === 0 ? (
-                          <p style={{ color: 'var(--gray-400)', fontSize: '0.75rem', margin: 0 }}>
-                            No builder fields
-                          </p>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                            {allFields.filter(f => f.fieldFor === 'builder' && (allowSelfContext || f.id !== field.id)).map(contextField => (
-                              <label key={contextField.id} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                padding: '0.625rem',
-                                background: selectedFields.includes(contextField.id) ? '#ede9fe' : '#fff',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                fontSize: '0.8125rem'
-                              }}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedFields.includes(contextField.id)}
-                                  onChange={() => toggleField(contextField.id)}
-                                  style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                                />
-                                <span>{contextField.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--gray-600)',
-                      marginTop: '0.75rem',
-                      fontWeight: 600,
-                      textAlign: 'center'
-                    }}>
-                      {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} selected
-                    </div>
-                  </div>
-                </div>
+                <ContextFieldsPanel
+                  mode="template"
+                  allFields={allFields}
+                  selectedFields={selectedFields}
+                  onToggleField={toggleField}
+                  allowSelfContext={allowSelfContext}
+                  currentFieldId={field?.id}
+                />
               )}
             </>
           )}
@@ -1288,27 +938,10 @@ export default function ConfigureAIModal({
           borderTop: '1px solid var(--gray-200)',
           padding: '1rem 1.5rem',
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           alignItems: 'center',
           background: 'linear-gradient(to right, #fafafa, #ffffff)'
         }}>
-          <button
-            onClick={resetAll}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              color: '#ef4444',
-              background: '#fff',
-              border: '2px solid var(--gray-200)',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            Reset All
-          </button>
-          
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <button
               onClick={onClose}
@@ -1348,138 +981,14 @@ export default function ConfigureAIModal({
       </div>
 
       {showSyncConfirm && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: `blur(${APP_CONFIG.modals.backdropBlur})`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1100,
-          padding: '1rem'
-        }}>
-          <div style={{
-            backgroundColor: '#fff',
-            borderRadius: '12px',
-            maxWidth: '520px',
-            width: '100%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
-            <div style={{
-              padding: '1.5rem',
-              borderBottom: '1px solid var(--gray-200)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <h2 style={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: 'var(--gray-900)',
-                margin: 0
-              }}>
-                Sync AI Config from Template
-              </h2>
-              <button
-                onClick={() => setShowSyncConfirm(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--gray-500)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ padding: '1.5rem' }}>
-              <p style={{
-                color: 'var(--gray-600)',
-                fontSize: '0.95rem',
-                marginBottom: '1rem',
-                lineHeight: 1.5
-              }}>
-                This will overwrite the current lesson AI settings for <strong>{field?.name}</strong> with the latest
-                template configuration.
-              </p>
-
-              <div style={{
-                background: '#f8fafc',
-                border: '1px solid var(--gray-200)',
-                borderRadius: '10px',
-                padding: '0.75rem 1rem',
-                marginBottom: '1.25rem'
-              }}>
-                <div style={{
-                  fontSize: '0.8125rem',
-                  color: 'var(--gray-700)',
-                  marginBottom: '0.5rem',
-                  fontWeight: 600
-                }}>
-                  Want a backup first?
-                </div>
-                <button
-                  onClick={downloadCurrentConfig}
-                  style={{
-                    padding: '0.4rem 0.75rem',
-                    fontSize: '0.8125rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-800)',
-                    background: '#fff',
-                    border: '1px solid var(--gray-300)',
-                    borderRadius: '8px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Download current config
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => setShowSyncConfirm(false)}
-                  style={{
-                    padding: '0.6rem 1rem',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-700)',
-                    background: '#fff',
-                    border: '1px solid var(--gray-300)',
-                    borderRadius: '8px',
-                    cursor: 'pointer'
-                  }}
-                  disabled={syncing}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSyncFromTemplate}
-                  style={{
-                    padding: '0.6rem 1rem',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    background: syncing ? '#93c5fd' : '#2563eb',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: syncing ? 'not-allowed' : 'pointer'
-                  }}
-                  disabled={syncing}
-                >
-                  {syncing ? 'Syncing...' : 'Sync now'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SyncConfirmModal
+          visible={showSyncConfirm}
+          fieldName={field?.name}
+          syncing={syncing}
+          onSync={handleSyncFromTemplate}
+          onCancel={() => setShowSyncConfirm(false)}
+          onDownloadBackup={downloadCurrentConfig}
+        />
       )}
     </div>
   );

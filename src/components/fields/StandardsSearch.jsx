@@ -151,8 +151,9 @@ export default function StandardsSearch({
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (showSuggestions && selectedIndex >= 0 && suggestions[selectedIndex]) {
-        handleSelectSuggestion(suggestions[selectedIndex]);
+      if (showSuggestions && suggestions.length > 0) {
+        const idx = selectedIndex >= 0 ? selectedIndex : 0;
+        handleSelectSuggestion(suggestions[idx]);
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();

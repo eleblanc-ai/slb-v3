@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { FileText, Beaker, Calendar, User, ArrowLeft, Trash2, Link as LinkIcon, Archive } from 'lucide-react';
-import { supabase } from '../../lib/supabaseClient';
+import { FileText, Beaker, Calendar, ArrowLeft, Trash2, Link as LinkIcon, Archive } from 'lucide-react';
+import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
+import { useToast } from '../../hooks/useToast';
 import ConfirmModal from '../modals/ConfirmModal';
 
 export default function BrowseLessons() {
   const navigate = useNavigate();
   const { session, profile } = useOutletContext() || {};
+  const toast = useToast();
   const [lessons, setLessons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lessonToDelete, setLessonToDelete] = useState(null);
@@ -16,6 +18,15 @@ export default function BrowseLessons() {
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showCopyToast, setShowCopyToast] = useState(false);
   const [copyToastText, setCopyToastText] = useState('Link copied');
+  const scrollPositionRef = useRef(null);
+
+  // Restore scroll position after delete/archive removes a card
+  useLayoutEffect(() => {
+    if (scrollPositionRef.current !== null) {
+      window.scrollTo(0, scrollPositionRef.current);
+      scrollPositionRef.current = null;
+    }
+  }, [lessons]);
 
   useEffect(() => {
     loadLessons();
@@ -128,7 +139,7 @@ export default function BrowseLessons() {
         await supabase.auth.signOut();
         return;
       }
-      alert(`Failed to load lessons. ${error?.message || 'Please try again.'}`);
+      toast.error(`Failed to load lessons. ${error?.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
@@ -204,7 +215,7 @@ export default function BrowseLessons() {
 
     // Check permission before deleting
     if (!canDeleteLesson(lessonToDelete)) {
-      alert('You do not have permission to delete this lesson.');
+      toast.warning('You do not have permission to delete this lesson.');
       setShowDeleteModal(false);
       setLessonToDelete(null);
       return;
@@ -240,13 +251,14 @@ export default function BrowseLessons() {
 
       if (error) throw error;
 
-      // Remove from UI
-      setLessons(lessons.filter(l => l.id !== lessonToDelete.id));
+      // Remove from UI — preserve scroll position so user can keep deleting
+      scrollPositionRef.current = window.scrollY;
+      setLessons(prev => prev.filter(l => l.id !== lessonToDelete.id));
       setShowDeleteModal(false);
       setLessonToDelete(null);
     } catch (error) {
       console.error('Error deleting lesson:', error);
-      alert('Failed to delete lesson. Please try again.');
+      toast.error('Failed to delete lesson. Please try again.');
     }
   };
 
@@ -254,7 +266,7 @@ export default function BrowseLessons() {
     if (!lessonToArchive) return;
 
     if (!canArchiveLesson(lessonToArchive)) {
-      alert('You do not have permission to archive this lesson.');
+      toast.warning('You do not have permission to archive this lesson.');
       setShowArchiveModal(false);
       setLessonToArchive(null);
       return;
@@ -272,12 +284,13 @@ export default function BrowseLessons() {
 
       if (error) throw error;
 
-      setLessons(lessons.filter(l => l.id !== lessonToArchive.id));
+      scrollPositionRef.current = window.scrollY;
+      setLessons(prev => prev.filter(l => l.id !== lessonToArchive.id));
       setShowArchiveModal(false);
       setLessonToArchive(null);
     } catch (error) {
       console.error('Error archiving lesson:', error);
-      alert('Failed to archive lesson. Please try again.');
+      toast.error('Failed to archive lesson. Please try again.');
     }
   };
 
@@ -332,7 +345,29 @@ export default function BrowseLessons() {
           e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.05)';
         }}
       >
-        {null}
+        {/* Test Lesson Badge */}
+        {lesson.is_test && (
+          <div style={{
+            position: 'absolute',
+            top: '0.75rem',
+            left: '0.75rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            backgroundColor: '#7c3aed',
+            color: '#fff',
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            padding: '0.25rem 0.625rem',
+            borderRadius: '6px',
+            zIndex: 2,
+            letterSpacing: '0.03em',
+            boxShadow: '0 2px 6px rgba(124, 58, 237, 0.35)'
+          }}>
+            <Beaker size={12} />
+            Test Lesson
+          </div>
+        )}
 
         {/* Thumbnail */}
         <div style={{

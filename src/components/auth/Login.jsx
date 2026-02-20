@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { APP_CONFIG } from '../../config';
+import { ALLOWED_EMAILS } from '../../config/allowedEmails';
 import favicon from '../../assets/favicon.ico';
 
 export default function Login({ onLogin }) {
@@ -13,7 +14,7 @@ export default function Login({ onLogin }) {
 
   const isAllowedSignupEmail = (value) => {
     const normalized = value.trim().toLowerCase();
-    return normalized.endsWith('@thinkcerca.com') || normalized.endsWith('@protonmail.com');
+    return ALLOWED_EMAILS.some((entry) => normalized === entry.toLowerCase());
   };
 
   const handleSubmit = async (e) => {
@@ -25,7 +26,7 @@ export default function Login({ onLogin }) {
     try {
       if (mode === 'signup') {
         if (!isAllowedSignupEmail(email)) {
-          throw new Error('Please use your @thinkcerca.com or @protonmail.com email address to sign up.');
+          throw new Error('Please reach out to the AI Lab for help.');
         }
 
         const { data, error } = await supabase.auth.signUp({

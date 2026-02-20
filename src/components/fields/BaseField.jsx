@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Edit2, Trash2, ChevronDown, Sparkles, Settings } from 'lucide-react';
+import { sanitizeHTML } from '../../lib/sanitize';
 
 /**
  * BaseField - Parent component for all field types
@@ -227,7 +228,7 @@ export default function BaseField({
                     marginTop: '0.5rem',
                     lineHeight: '1.6'
                   }}
-                  dangerouslySetInnerHTML={{ __html: field.helperText }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHTML(field.helperText) }}
                 />
               )}
             </div>

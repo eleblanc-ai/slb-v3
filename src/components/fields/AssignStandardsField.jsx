@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import BaseField from './BaseField';
-import { supabase } from '../../lib/supabaseClient';
+import { useToast } from '../../hooks/useToast';
+import { supabase } from '../../services/supabaseClient';
 
 /**
  * AssignStandardsField - A field that allows designers to assign educational standards
@@ -19,6 +20,7 @@ export default function AssignStandardsField({
   hasGenerated,
   hideRequiredAsterisk
 }) {
+  const toast = useToast();
   const maxStandards = field?.max_selections > 0 ? field.max_selections : 10;
   const [standardsData, setStandardsData] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
@@ -328,7 +330,7 @@ export default function AssignStandardsField({
                 console.log('✅ Framework auto-saved:', newFramework);
               } catch (error) {
                 console.error('Error saving framework:', error);
-                alert('Failed to save framework selection. Please try again.');
+                toast.error('Failed to save framework selection. Please try again.');
               }
             }}
             disabled={isLoading}

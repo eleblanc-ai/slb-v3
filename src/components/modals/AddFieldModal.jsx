@@ -84,8 +84,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
   const [fieldFor, setFieldFor] = useState(field?.fieldFor || 'designer');
   const [fieldNameError, setFieldNameError] = useState('');
   const [dropdownOptions, setDropdownOptions] = useState(field?.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
-  const [minSelections, setMinSelections] = useState(field?.min_selections || 0);
-  const [maxSelections, setMaxSelections] = useState(field?.max_selections || 0);
+  const [minSelections, setMinSelections] = useState(field?.min_selections ? String(field.min_selections) : '');
+  const [maxSelections, setMaxSelections] = useState(field?.max_selections ? String(field.max_selections) : '');
   const [maxStandardsInput, setMaxStandardsInput] = useState(
     field?.max_selections ? String(field.max_selections) : ''
   );
@@ -108,8 +108,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setRequiredForGeneration(field.requiredForGeneration || false);
       setFieldFor(field.fieldFor || 'designer');
       setDropdownOptions(field.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
-      setMinSelections(field.min_selections || 0);
-      setMaxSelections(field.max_selections || 0);
+      setMinSelections(field.min_selections ? String(field.min_selections) : '');
+      setMaxSelections(field.max_selections ? String(field.max_selections) : '');
       setMaxStandardsInput(field.max_selections ? String(field.max_selections) : '');
       setFramework(field.framework || defaultFramework || 'CCSS');
       console.log('✅ Framework state updated to:', field.framework || defaultFramework || 'CCSS');
@@ -131,8 +131,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setFieldFor('designer');
       setFieldNameError('');
       setDropdownOptions('');
-      setMinSelections(0);
-      setMaxSelections(0);
+      setMinSelections('');
+      setMaxSelections('');
       setMaxStandardsInput('');
       setFramework(defaultFramework || 'CCSS');
     }
@@ -185,7 +185,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       placeholder: placeholderText,
       helperText: helperText,
       required: required,
-      aiEnabled: selectedType === 'mcqs' ? true : aiEnabled, // Auto-enable AI for MCQs
+      aiEnabled: (selectedType === 'mcqs' || selectedType === 'image') ? true : aiEnabled, // Auto-enable AI for MCQs and images
       requiredForGeneration: requiredForGeneration,
       fieldFor: fieldFor,
     };
@@ -201,8 +201,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     
     // Add min/max selections for checklist
     if (selectedType === 'checklist') {
-      fieldData.min_selections = minSelections || 0;
-      fieldData.max_selections = maxSelections || fieldData.options.length;
+      fieldData.min_selections = parseInt(minSelections, 10) || 0;
+      fieldData.max_selections = parseInt(maxSelections, 10) || fieldData.options.length;
     }
     
     // Add framework for assign_standards field
@@ -539,8 +539,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       type="number"
                       min="0"
                       value={minSelections}
-                      onChange={(e) => setMinSelections(parseInt(e.target.value) || 0)}
-                      placeholder="0"
+                      onChange={(e) => setMinSelections(e.target.value)}
+                      placeholder="0 (optional)"
                       style={{
                         width: '100%',
                         padding: '0.625rem',
@@ -564,8 +564,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       type="number"
                       min="0"
                       value={maxSelections}
-                      onChange={(e) => setMaxSelections(parseInt(e.target.value) || 0)}
-                      placeholder="0"
+                      onChange={(e) => setMaxSelections(e.target.value)}
+                      placeholder="0 (unlimited)"
                       style={{
                         width: '100%',
                         padding: '0.625rem',

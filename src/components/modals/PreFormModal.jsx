@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ClipboardList, Sparkles, FileEdit, ArrowRight, ArrowLeft } from 'lucide-react';
+import React from 'react';
+import { Sparkles } from 'lucide-react';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
 import DropdownField from '../fields/DropdownField';
@@ -18,60 +18,25 @@ export default function PreFormModal({
   fieldValues = {},
   onFieldChange
 }) {
-  const [currentStep, setCurrentStep] = useState(1);
-  
   if (!visible) return null;
 
-  // Step 1: Fields required for AI generation
+  // Fields required for AI generation
   const requiredFields = fields.filter(f => f.requiredForGeneration);
-  
-  // Step 2: Manual entry fields (not AI-enabled and not required)
-  const manualFields = fields.filter(f => !f.aiEnabled && !f.requiredForGeneration);
-  
-  console.log('📋 PreFormModal rendered with:', {
-    visible,
-    currentStep,
-    totalFields: fields.length,
-    requiredFieldsCount: requiredFields.length,
-    manualFieldsCount: manualFields.length,
-    requiredFields: requiredFields.map(f => ({ name: f.name, type: f.type })),
-    manualFields: manualFields.map(f => ({ name: f.name, type: f.type }))
-  });
 
-  // Check if all required fields (Step 1) are filled
+  // Check if all required fields are filled
   const allRequiredFieldsFilled = requiredFields.every(field => {
-    // Section headers don't need to be filled
     if (field.type === 'section_header') return true;
-    
-    // Vocabulary words and MCQs can be skipped in pre-form (they're too complex)
     if (field.type === 'vocabulary_words' || field.type === 'mcqs') return true;
     
     const value = fieldValues[field.id];
     if (!value) return false;
     if (typeof value === 'string' && value.trim() === '') return false;
     if (Array.isArray(value) && value.length === 0) return false;
-    
-    // For image fields, check if URL exists
     if (field.type === 'image' && typeof value === 'object') {
       return value.url && value.url.trim() !== '';
     }
-    
     return true;
   });
-
-  const handleNext = () => {
-    if (allRequiredFieldsFilled) {
-      setCurrentStep(2);
-    }
-  };
-
-  const handleBack = () => {
-    setCurrentStep(1);
-  };
-
-  const handleContinue = () => {
-    onClose();
-  };
 
   // Render fields helper function
   const renderFields = (fieldsToRender) => {
@@ -96,7 +61,6 @@ export default function PreFormModal({
         {fieldsToRender.map((field) => {
           let fieldComponent;
           const commonProps = {
-            key: field.id,
             field,
             value: fieldValues[field.id] || '',
             onChange: (value) => onFieldChange(field.id, value),
@@ -105,20 +69,21 @@ export default function PreFormModal({
 
           switch (field.type) {
             case 'text':
-              fieldComponent = <TextField {...commonProps} />;
+              fieldComponent = <TextField key={field.id} {...commonProps} />;
               break;
             case 'rich_text':
-              fieldComponent = <RichTextField {...commonProps} />;
+              fieldComponent = <RichTextField key={field.id} {...commonProps} />;
               break;
             case 'dropdown':
-              fieldComponent = <DropdownField {...commonProps} />;
+              fieldComponent = <DropdownField key={field.id} {...commonProps} />;
               break;
             case 'checklist':
-              fieldComponent = <ChecklistField {...commonProps} />;
+              fieldComponent = <ChecklistField key={field.id} {...commonProps} />;
               break;
             case 'grade_band_selector':
               fieldComponent = (
                 <DropdownField
+                  key={field.id}
                   {...commonProps}
                   field={{
                     ...field,
@@ -130,6 +95,7 @@ export default function PreFormModal({
             case 'theme_selector':
               fieldComponent = (
                 <DropdownField
+                  key={field.id}
                   {...commonProps}
                   field={{
                     ...field,
@@ -139,11 +105,12 @@ export default function PreFormModal({
               );
               break;
             case 'image':
-              fieldComponent = <ImageField {...commonProps} />;
+              fieldComponent = <ImageField key={field.id} {...commonProps} />;
               break;
             case 'assign_standards':
               fieldComponent = (
                 <AssignStandardsField
+                  key={field.id}
                   {...commonProps}
                   value={fieldValues[field.id] || []}
                 />
@@ -159,9 +126,8 @@ export default function PreFormModal({
               break;
             case 'vocabulary_words':
             case 'mcqs':
-              // These complex field types can't be easily edited in pre-form
               fieldComponent = (
-                <div style={{ 
+                <div key={field.id} style={{ 
                   padding: '1rem',
                   backgroundColor: '#f0f9ff',
                   border: '1px solid #bae6fd',
@@ -174,7 +140,7 @@ export default function PreFormModal({
               break;
             default:
               fieldComponent = (
-                <div style={{ 
+                <div key={field.id} style={{ 
                   padding: '1rem',
                   backgroundColor: '#fef3c7',
                   border: '1px solid #fbbf24',
@@ -191,14 +157,6 @@ export default function PreFormModal({
       </div>
     );
   };
-
-  // Determine which fields to show based on current step
-  const currentFields = currentStep === 1 ? requiredFields : manualFields;
-  const stepIcon = currentStep === 1 ? Sparkles : FileEdit;
-  const stepTitle = currentStep === 1 ? 'Required for AI Generation' : 'Manual Entry Fields';
-  const stepDescription = currentStep === 1 
-    ? 'Fill in these fields so AI can generate your lesson content'
-    : 'These fields won\'t be AI-generated. Fill them now or skip and complete them later';
 
   return (
     <div style={{
@@ -233,10 +191,9 @@ export default function PreFormModal({
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '0.5rem'
+            gap: '0.75rem'
           }}>
-            {React.createElement(stepIcon, { size: 24, style: { color: '#3b82f6' } })}
+            <Sparkles size={24} style={{ color: '#3b82f6' }} />
             <div style={{ flex: 1 }}>
               <h2 style={{
                 fontSize: '1.5rem',
@@ -244,47 +201,16 @@ export default function PreFormModal({
                 color: 'var(--gray-900)',
                 margin: 0
               }}>
-                {stepTitle}
+                Required for AI Generation
               </h2>
               <p style={{
                 fontSize: '0.875rem',
                 color: 'var(--gray-600)',
                 margin: '0.25rem 0 0 0'
               }}>
-                {stepDescription}
+                Fill in these fields so AI can generate your lesson content
               </p>
             </div>
-          </div>
-          {/* Progress Indicator */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginTop: '1rem'
-          }}>
-            <div style={{
-              flex: 1,
-              height: '4px',
-              backgroundColor: currentStep >= 1 ? '#3b82f6' : 'var(--gray-200)',
-              borderRadius: '2px',
-              transition: 'background-color 0.3s ease'
-            }} />
-            <div style={{
-              flex: 1,
-              height: '4px',
-              backgroundColor: currentStep >= 2 ? '#3b82f6' : 'var(--gray-200)',
-              borderRadius: '2px',
-              transition: 'background-color 0.3s ease'
-            }} />
-          </div>
-          <div style={{
-            fontSize: '0.75rem',
-            color: 'var(--gray-500)',
-            marginTop: '0.5rem',
-            textAlign: 'center',
-            fontWeight: 600
-          }}>
-            Step {currentStep} of 2
           </div>
         </div>
 
@@ -294,7 +220,7 @@ export default function PreFormModal({
           overflowY: 'auto',
           flex: 1
         }}>
-          {renderFields(currentFields)}
+          {renderFields(requiredFields)}
         </div>
 
         {/* Footer */}
@@ -302,123 +228,37 @@ export default function PreFormModal({
           padding: '1.5rem',
           borderTop: '1px solid var(--gray-200)',
           display: 'flex',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           gap: '1rem'
         }}>
-          <div>
-            {currentStep === 2 && (
-              <button
-                onClick={handleBack}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: '#fff',
-                  color: '#3b82f6',
-                  border: '2px solid #3b82f6',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#eff6ff';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fff';
-                }}
-              >
-                <ArrowLeft size={18} />
-                Back
-              </button>
-            )}
-          </div>
-          
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            {currentStep === 1 ? (
-              <button
-                onClick={handleNext}
-                disabled={!allRequiredFieldsFilled}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  backgroundColor: allRequiredFieldsFilled ? '#3b82f6' : 'var(--gray-300)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: allRequiredFieldsFilled ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s ease',
-                  opacity: allRequiredFieldsFilled ? 1 : 0.6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseOver={(e) => {
-                  if (allRequiredFieldsFilled) {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (allRequiredFieldsFilled) {
-                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                  }
-                }}
-              >
-                Next
-                <ArrowRight size={18} />
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={handleContinue}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: '#fff',
-                    color: '#374151',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = '#f9fafb';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#fff';
-                  }}
-                >
-                  Skip
-                </button>
-                <button
-                  onClick={handleContinue}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    backgroundColor: '#3b82f6',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                  }}
-                >
-                  Continue to Lesson Editor
-                </button>
-              </>
-            )}
-          </div>
+          <button
+            onClick={onClose}
+            disabled={!allRequiredFieldsFilled}
+            style={{
+              padding: '0.75rem 1.5rem',
+              backgroundColor: allRequiredFieldsFilled ? '#3b82f6' : 'var(--gray-300)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: allRequiredFieldsFilled ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s ease',
+              opacity: allRequiredFieldsFilled ? 1 : 0.6
+            }}
+            onMouseOver={(e) => {
+              if (allRequiredFieldsFilled) {
+                e.currentTarget.style.backgroundColor = '#2563eb';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (allRequiredFieldsFilled) {
+                e.currentTarget.style.backgroundColor = '#3b82f6';
+              }
+            }}
+          >
+            Continue to Lesson Editor
+          </button>
         </div>
       </div>
     </div>

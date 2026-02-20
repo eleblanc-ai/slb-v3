@@ -1,89 +1,50 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { Plus, Save, Check, Beaker, ArrowLeft, Sparkles, Columns2, Rows3, ChevronDown, GripVertical, Download, Upload, X, Eye } from 'lucide-react';
+import { Save, ArrowLeft, Sparkles, Download, Upload, Eye } from 'lucide-react';
 import { marked } from 'marked';
+import { sanitizeHTML } from '../../lib/sanitize';
 import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import {
+  pageBackground, pageMaxWidth, pageHeaderRelative, backButton, backButtonHover,
+  pageTitle, pageSubtitle, stateBadge, toolbarContainer, toolbarRow,
+  fieldsCard, requiredFieldIndicator, fieldsLayout,
+  loadingContainer, loadingText,
+  coverImageContainer, coverImageFull, markdownBody, markdownPreviewCSS,
+  gradientButton, liftOnHover,
+} from '../../styles/shared';
 import AddEditFieldModal from '../modals/AddFieldModal';
 import ConfigureAIModal from '../modals/ConfigureAIModal';
 import MissingFieldsModal from '../modals/MissingFieldsModal';
 import PreFormModal from '../modals/PreFormModal';
 import SuccessModal from '../modals/SuccessModal';
 import UploadCoverImageModal from '../modals/UploadCoverImageModal';
-import BaseField from '../fields/BaseField';
-import TextField from '../fields/TextField';
-import RichTextField from '../fields/RichTextField';
-import { buildFullPrompt } from '../../lib/promptBuilder';
-import DropdownField from '../fields/DropdownField';
-import ChecklistField from '../fields/ChecklistField';
-import ImageField from '../fields/ImageField';
-import AssignStandardsField from '../fields/AssignStandardsField';
-import MCQsField from '../fields/MCQsField';
+import UnsavedChangesModal from '../modals/UnsavedChangesModal';
+import ConfirmModal from '../modals/ConfirmModal';
+import ExportModal from '../modals/ExportModal';
+import PreviewModal from '../modals/PreviewModal';
+import FieldSection from '../core/FieldSection';
+import ModelSelector from '../core/ModelSelector';
+import SaveToast from '../core/SaveToast';
+import { buildFullPrompt } from '../../ai/promptBuilder';
+import { buildFieldResponses } from '../../ai/responseBuilder';
 import { APP_CONFIG } from '../../config';
-import { supabase } from '../../lib/supabaseClient';
+import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
-import { callAI, callAIWithFunction, callAIWithBatchedContext, generateImage, generateAltText, summarizePassageForImage } from '../../lib/aiClient';
-import { getFormattedMappedStandardsFromAny, getMappedStandardsWithSource, extractGradeFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
+import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../services/aiClient';
+import { getMappedStandardsWithSource, extractGradesFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
+import { isEmptyValue, validateContextFieldsForField, getMissingRequiredFields } from '../../lib/fieldValueUtils';
+import { useToast } from '../../hooks/useToast';
+import useLessonLock from '../../hooks/useLessonLock';
+import useFieldCRUD from '../../hooks/useFieldCRUD';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
-import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../lib/markdown-export/additionalreadingpracticeMarkdownExport';
-import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../lib/markdown-export/additionalreadingpracticefloridaMarkdownExport';
-// Sortable Field Wrapper Component
-function SortableField({ id, children }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    position: 'relative',
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <div style={{ position: 'relative' }}>
-        <div
-          {...attributes}
-          {...listeners}
-          style={{
-            position: 'absolute',
-            left: '-2rem',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            cursor: 'grab',
-            color: '#8b5cf600',
-            padding: '0.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.2s',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.color = '#6d28d900'}
-          onMouseLeave={(e) => e.currentTarget.style.color = '#8b5cf600'}
-          title="Drag to reorder"
-        >
-          <GripVertical size={20} />
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
+import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../export/templates/additionalreadingpracticeMarkdownExport';
+import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../export/templates/additionalreadingpracticefloridaMarkdownExport';
 export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
   const { session, profile } = useOutletContext() || {};
   const navigate = useNavigate();
+  const toast = useToast();
   
   // Helper function to check if a field is used as context by any AI-enabled field
   const isFieldUsedAsContext = (fieldId) => {
@@ -99,15 +60,11 @@ export default function CreateNewLesson() {
   const lessonId = currentLessonId || urlLessonId;
   const [templateData, setTemplateData] = useState(null);
   const [fields, setFields] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingField, setEditingField] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [fieldValues, setFieldValues] = useState({});
   const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const modelButtonRef = useRef(null);
 
   // AI state for per-field generation
   const [generatingFieldId, setGeneratingFieldId] = useState(null);
@@ -150,13 +107,28 @@ export default function CreateNewLesson() {
   const [missingRequiredFields, setMissingRequiredFields] = useState([]);
   const [preFormCompleted, setPreFormCompleted] = useState(false);
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
+  const [duplicateContentIdWarning, setDuplicateContentIdWarning] = useState(null);
   const generateButtonRef = useRef(null);
   
-  // Lesson lock state
-  const [isLessonLocked, setIsLessonLocked] = useState(false);
-  const [lockOwner, setLockOwner] = useState(null);
-  const [lockOwnerName, setLockOwnerName] = useState('');
-  const lockHeartbeatRef = useRef(null);
+  // Lesson lock hook
+  const { isLessonLocked, lockOwner, lockOwnerName, acquireLessonLock, releaseLessonLock, refreshLessonLock } = useLessonLock(lessonId, session, profile);
+
+  // Field CRUD hook (add/edit/delete)
+  const {
+    isModalOpen,
+    editingField,
+    handleFieldAdded,
+    handleEditField,
+    handleDeleteField,
+    handleModalClose,
+  } = useFieldCRUD({
+    templateId: templateData?.id,
+    fields,
+    setFields,
+    session,
+    toast,
+    includeFieldConfig: false,
+  });
 
   // Handler: open AI config modal
   const handleAIConfig = (field) => {
@@ -205,131 +177,9 @@ export default function CreateNewLesson() {
     setPendingNavigation(null);
   };
 
-  // Lesson locking functions
-  const acquireLessonLock = async (lessonIdToLock) => {
-    if (!lessonIdToLock || !session?.user?.id) return { success: false };
-    
-    const userName = profile?.display_name || session?.user?.email || 'Unknown User';
-    
-    try {
-      const { data, error } = await supabase.rpc('acquire_lesson_lock', {
-        p_lesson_id: lessonIdToLock,
-        p_user_id: session.user.id,
-        p_user_name: userName
-      });
-      
-      if (error) {
-        console.error('Error acquiring lock:', error);
-        return { success: false };
-      }
-      
-      if (data?.success) {
-        setIsLessonLocked(false);
-        setLockOwner(null);
-        setLockOwnerName('');
-        
-        // Start heartbeat to keep lock alive
-        if (lockHeartbeatRef.current) {
-          clearInterval(lockHeartbeatRef.current);
-        }
-        lockHeartbeatRef.current = setInterval(() => {
-          refreshLessonLock(lessonIdToLock);
-        }, 30000); // Refresh every 30 seconds (lock expires after 5 min of no heartbeat)
-        
-        return { success: true };
-      } else {
-        // Lesson is locked by someone else
-        setIsLessonLocked(true);
-        setLockOwner(data?.locked_by);
-        setLockOwnerName(data?.locked_by_name || 'Another user');
-        return { success: false, lockedBy: data?.locked_by_name };
-      }
-    } catch (err) {
-      console.error('Error in acquireLessonLock:', err);
-      return { success: false };
-    }
-  };
-  
-  const releaseLessonLock = async (lessonIdToRelease) => {
-    if (!lessonIdToRelease || !session?.user?.id) return;
-    
-    // Stop heartbeat
-    if (lockHeartbeatRef.current) {
-      clearInterval(lockHeartbeatRef.current);
-      lockHeartbeatRef.current = null;
-    }
-    
-    try {
-      await supabase.rpc('release_lesson_lock', {
-        p_lesson_id: lessonIdToRelease,
-        p_user_id: session.user.id
-      });
-    } catch (err) {
-      console.error('Error releasing lock:', err);
-    }
-  };
-  
-  const refreshLessonLock = async (lessonIdToRefresh) => {
-    if (!lessonIdToRefresh || !session?.user?.id) return;
-    
-    try {
-      const { data, error } = await supabase.rpc('refresh_lesson_lock', {
-        p_lesson_id: lessonIdToRefresh,
-        p_user_id: session.user.id
-      });
-      console.log('🔄 Lock heartbeat:', new Date().toLocaleTimeString(), data ? '✅' : '❌');
-    } catch (err) {
-      console.error('Error refreshing lock:', err);
-    }
-  };
-  
-  // Release lock when component unmounts or user navigates away
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (lessonId) {
-        // Use sendBeacon for reliable cleanup on page unload
-        navigator.sendBeacon && navigator.sendBeacon(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/release_lesson_lock`,
-          JSON.stringify({ p_lesson_id: lessonId, p_user_id: session?.user?.id })
-        );
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      if (lessonId && session?.user?.id) {
-        releaseLessonLock(lessonId);
-      }
-      if (lockHeartbeatRef.current) {
-        clearInterval(lockHeartbeatRef.current);
-      }
-    };
-  }, [lessonId, session?.user?.id]);
-
   // Check for missing required fields (field.required = true)
-  const getMissingRequiredFields = (valuesToCheck) => {
-    const missing = [];
-    const requiredFields = fields.filter(f => f.required === true);
-    
-    for (const field of requiredFields) {
-      const value = valuesToCheck[field.id];
-      const isEmpty = !value || 
-                      (typeof value === 'string' && value.trim() === '') ||
-                      (Array.isArray(value) && value.length === 0) ||
-                      (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
-      
-      if (isEmpty) {
-        missing.push({
-          id: field.id,
-          name: field.name,
-          section: field.fieldFor === 'designer' ? 'Designer' : 'Builder'
-        });
-      }
-    }
-    
-    return missing;
+  const checkMissingRequiredFields = (valuesToCheck) => {
+    return getMissingRequiredFields(fields, valuesToCheck);
   };
 
   // Handler: export lesson as markdown
@@ -377,7 +227,7 @@ export default function CreateNewLesson() {
     
     if (!generateFunction) {
       console.error('No markdown export function found for template:', templateData?.name);
-      alert(`No export function found for template "${templateData?.name}". Please contact support.`);
+      toast.error(`No export function found for template "${templateData?.name}". Please contact support.`);
       return;
     }
     
@@ -385,7 +235,7 @@ export default function CreateNewLesson() {
     setExportMarkdown(markdown);
     
     // Check for missing required fields
-    const missing = getMissingRequiredFields(freshFieldValues);
+    const missing = checkMissingRequiredFields(freshFieldValues);
     setMissingRequiredFields(missing);
     
     setShowExportModal(true);
@@ -434,7 +284,7 @@ export default function CreateNewLesson() {
     const generateFunction = templateNameToFunctionMap[templateData?.name];
     
     if (!generateFunction) {
-      alert(`No preview available for template "${templateData?.name}".`);
+      toast.error(`No preview available for template "${templateData?.name}".`);
       return;
     }
     
@@ -462,7 +312,7 @@ export default function CreateNewLesson() {
     setPreviewCoverImage(imageUrl);
     
     // Check for missing required fields
-    const missing = getMissingRequiredFields(freshFieldValues);
+    const missing = checkMissingRequiredFields(freshFieldValues);
     setMissingRequiredFields(missing);
     
     setShowPreviewModal(true);
@@ -544,56 +394,7 @@ export default function CreateNewLesson() {
       }
     } catch (error) {
       console.error('Error saving lesson AI config:', error);
-      alert('Failed to save AI configuration. Please try again.');
-    }
-  };
-
-  // Drag and drop sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // Handler: drag end - update field order
-  const handleDragEnd = async (event, fieldType) => {
-    const { active, over } = event;
-    
-    if (!over || active.id === over.id) return;
-    
-    const filteredFields = fields.filter(f => f.fieldFor === fieldType);
-    const oldIndex = filteredFields.findIndex(f => f.id === active.id);
-    const newIndex = filteredFields.findIndex(f => f.id === over.id);
-    
-    if (oldIndex === -1 || newIndex === -1) return;
-    
-    // Reorder in local state
-    const reorderedFiltered = arrayMove(filteredFields, oldIndex, newIndex);
-    
-    // Merge back with other field type
-    const otherFields = fields.filter(f => f.fieldFor !== fieldType);
-    const newFields = [...otherFields, ...reorderedFiltered];
-    setFields(newFields);
-    
-    // Update order in database
-    try {
-      const updates = reorderedFiltered.map((field, index) => ({
-        id: field.id,
-        field_order: index
-      }));
-      
-      for (const update of updates) {
-        await supabase
-          .from('lesson_template_fields')
-          .update({ field_order: update.field_order })
-          .eq('id', update.id);
-      }
-      
-      console.log('✅ Field order updated in database');
-    } catch (error) {
-      console.error('Error updating field order:', error);
-      alert('Failed to update field order. Please try again.');
+      toast.error('Failed to save AI configuration. Please try again.');
     }
   };
 
@@ -692,14 +493,14 @@ export default function CreateNewLesson() {
       const defaultFramework = templateData?.default_standard_framework || 'CCSS';
       const gradeField = fields.find(f => f.type === 'grade_band_selector');
       const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-      const gradeLevel = extractGradeFromBand(gradeValue);
+      const gradeLevels = extractGradesFromBand(gradeValue);
       
       const extraContextBlocks = [];
       
       if (includeVocabStandards) {
         const vocabStandards = defaultFramework === 'CCSS'
-          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
-          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultFramework);
+          ? await getCcssVocabularyStandardsForGrade(gradeLevels)
+          : await getMappedVocabularyStandardsForGrade(gradeLevels, defaultFramework);
         
         if (vocabStandards.length > 0) {
           extraContextBlocks.push({
@@ -712,8 +513,8 @@ export default function CreateNewLesson() {
       
       if (includeMainIdeaStandards) {
         const mainIdeaStandards = defaultFramework === 'CCSS'
-          ? await getCcssMainIdeaStandardsForGrade(gradeLevel)
-          : await getMappedMainIdeaStandardsForGrade(gradeLevel, defaultFramework);
+          ? await getCcssMainIdeaStandardsForGrade(gradeLevels)
+          : await getMappedMainIdeaStandardsForGrade(gradeLevels, defaultFramework);
         
         if (mainIdeaStandards.length > 0) {
           extraContextBlocks.push({
@@ -907,7 +708,7 @@ export default function CreateNewLesson() {
       setHasGeneratedMap(prev => ({ ...prev, [fieldId]: true }));
     } catch (error) {
       console.error('Error generating individual MCQ:', error);
-      alert(`Failed to generate question: ${error.message}`);
+      toast.error(`Failed to generate question: ${error.message}`);
     }
   };
 
@@ -983,7 +784,7 @@ export default function CreateNewLesson() {
         await autoSaveLesson(currentFieldValues);
       } catch (error) {
         console.error(`Error generating field ${field.name}:`, error);
-        alert(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
+        toast.error(`Failed to generate "${field.name}": ${error.message}\n\nGeneration paused.`);
         setIsGeneratingLesson(false);
         setGenerationPaused(true);
         return;
@@ -997,91 +798,6 @@ export default function CreateNewLesson() {
     setShowSuccessModal(true);
   };
 
-  const isEmptyValue = (value) => {
-    if (!value) return true;
-    if (typeof value === 'string') {
-      const textOnly = value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
-      return textOnly === '';
-    }
-    if (Array.isArray(value)) return value.length === 0;
-    if (typeof value === 'object') {
-      if (value.questions) return value.questions.every(q => isEmptyValue(q));
-      return Object.keys(value).length === 0;
-    }
-    return false;
-  };
-
-  // Validate required context fields for a specific field
-  const validateContextFieldsForField = (field, allFields, valuesToCheck = null) => {
-    const missing = [];
-    // Use provided values (during generation loop) or fall back to state
-    const currentValues = valuesToCheck || fieldValues;
-    
-    // Get AI config for this field
-    let contextFieldIds = field.ai_context_field_ids || [];
-    
-    // Check if lesson has user_ai_config override
-    if (lessonId) {
-      // Would need to fetch from DB, but for now use field's config
-      // In practice, this should check lessonData.user_ai_config[field.id]
-    }
-    
-    // Check each context field
-    for (const contextFieldId of contextFieldIds) {
-      const contextField = allFields.find(f => f.id === contextFieldId);
-      if (!contextField) continue;
-
-      const value = currentValues[contextFieldId];
-      const isEmpty = isEmptyValue(value);
-      
-      if (isEmpty) {
-        missing.push({
-          id: contextField.id,
-          name: contextField.name,
-          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
-        });
-      }
-    }
-    
-    return missing;
-  };
-
-  // Validate all required fields before starting generation
-  const validateRequiredFields = (aiFields) => {
-    const missing = [];
-    // CRITICAL: Use current fieldValues state, not stale localStorage
-    const currentValues = fieldValues;
-    
-    // Get all unique context field IDs from all AI fields
-    const allContextFieldIds = new Set();
-    aiFields.forEach(field => {
-      const contextIds = field.ai_context_field_ids || [];
-      contextIds.forEach(id => allContextFieldIds.add(id));
-    });
-    
-    // Check each required context field
-    for (const contextFieldId of allContextFieldIds) {
-      const contextField = fields.find(f => f.id === contextFieldId);
-      if (!contextField) continue;
-      
-      // Only validate if field is marked as requiredForGeneration
-      if (!contextField.requiredForGeneration) continue;
-      
-      const value = currentValues[contextFieldId];
-      const isEmpty = isEmptyValue(value);
-      
-      if (isEmpty) {
-        missing.push({
-          id: contextField.id,
-          name: contextField.name,
-          section: contextField.fieldFor === 'designer' ? 'Designer' : 'Builder'
-        });
-      }
-    }
-    
-    return missing;
-  };
-
   // Auto-save lesson after field generation
   const autoSaveLesson = async (updatedFieldValues = null) => {
     if (!templateData?.id) return;
@@ -1090,58 +806,7 @@ export default function CreateNewLesson() {
     const valuesToSave = updatedFieldValues || fieldValues;
     
     try {
-      const designerFields = fields.filter(f => f.fieldFor === 'designer');
-      const builderFields = fields.filter(f => f.fieldFor === 'builder');
-
-      console.log('💾 Auto-save: Designer fields found:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
-      console.log('💾 Auto-save: Builder fields found:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
-      console.log('💾 Auto-save: Values to save:', valuesToSave);
-
-      // Build designer responses object using field IDs as keys (matching handleSave)
-      const designerResponses = {};
-      for (const field of designerFields) {
-        const value = valuesToSave[field.id];
-        
-        if (value !== undefined && value !== null) {
-          designerResponses[field.id] = value;
-          console.log(`💾 Auto-save: Designer field "${field.name}" (${field.id}):`, value);
-        } else {
-          // Provide appropriate empty value based on field type
-          if (field.type === 'checklist' || field.type === 'assign_standards') {
-            designerResponses[field.id] = [];
-          } else if (field.type === 'mcqs') {
-            designerResponses[field.id] = { questions: ['', '', '', '', ''] };
-          } else if (field.type === 'image') {
-            designerResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-          } else {
-            designerResponses[field.id] = '';
-          }
-          console.log(`💾 Auto-save: Designer field "${field.name}" (${field.id}): [empty]`);
-        }
-      }
-      
-      // Build builder responses object using field IDs as keys (matching handleSave)
-      const builderResponses = {};
-      for (const field of builderFields) {
-        const value = valuesToSave[field.id];
-        
-        if (value !== undefined && value !== null) {
-          builderResponses[field.id] = value;
-          console.log(`💾 Auto-save: Builder field "${field.name}" (${field.id}):`, value);
-        } else {
-          // Provide appropriate empty value based on field type
-          if (field.type === 'checklist' || field.type === 'assign_standards') {
-            builderResponses[field.id] = [];
-          } else if (field.type === 'mcqs') {
-            builderResponses[field.id] = { questions: ['', '', '', '', ''] };
-          } else if (field.type === 'image') {
-            builderResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-          } else {
-            builderResponses[field.id] = '';
-          }
-          console.log(`💾 Auto-save: Builder field "${field.name}" (${field.id}): [empty]`);
-        }
-      }
+      const { designerResponses, builderResponses } = buildFieldResponses(fields, valuesToSave, { keyBy: 'id' });
 
       console.log('💾 Auto-save: Final designer responses:', designerResponses);
       console.log('💾 Auto-save: Final builder responses:', builderResponses);
@@ -1152,6 +817,17 @@ export default function CreateNewLesson() {
         if (!autoCreateLessonPromiseRef.current) {
           console.log('💾 Auto-save: No lesson ID, creating new lesson...');
           autoCreateLessonPromiseRef.current = (async () => {
+            // Check for duplicate Content ID before first create
+            const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
+            const contentIdValue = contentIdField ? valuesToSave[contentIdField.id] : null;
+            if (contentIdValue?.trim()) {
+              const duplicate = await checkDuplicateContentId(contentIdValue);
+              if (duplicate) {
+                toast.warning(`Duplicate Content ID "${duplicate.contentId}" — another lesson ("${duplicate.template_name || 'Unknown'}") already uses this ID. Please change it before saving.`);
+                return null;
+              }
+            }
+
             const { data: newLesson, error: insertError } = await supabase
               .from('lessons')
               .insert({
@@ -1187,6 +863,9 @@ export default function CreateNewLesson() {
         } finally {
           autoCreateLessonPromiseRef.current = null;
         }
+
+        // If duplicate was found, abort auto-save
+        if (!effectiveLessonId) return;
       }
 
       const { error } = await supabase
@@ -1355,10 +1034,23 @@ export default function CreateNewLesson() {
         
         // Find Content ID field in designer responses
         const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
-        const contentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
+        const rawContentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
         
-        if (!contentId) {
+        if (!rawContentId) {
           throw new Error('Content ID field not found. Please fill in the Content ID field first.');
+        }
+
+        // Sanitize the Content ID for use as a storage filename:
+        // Strip HTML, keep only alphanumeric/underscore/hyphen/dot, truncate to 120 chars
+        const contentId = rawContentId
+          .replace(/<[^>]*>/g, '')
+          .replace(/[^a-zA-Z0-9_\-\.]/g, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_|_$/g, '')
+          .substring(0, 120);
+
+        if (!contentId) {
+          throw new Error('Content ID is empty after sanitization. Please enter a valid Content ID.');
         }
         
         // Get template name
@@ -1568,13 +1260,13 @@ export default function CreateNewLesson() {
         // Extract grade level from fieldValues
         const gradeField = fields.find(f => f.type === 'grade_band_selector');
         const gradeValue = gradeField ? storedFieldValues[gradeField.id] : null;
-        const gradeLevel = extractGradeFromBand(gradeValue);
+        const gradeLevels = extractGradesFromBand(gradeValue);
 
         // Resolve default vocab standards when using CCSS
         const defaultFramework = templateData?.default_standard_framework || 'CCSS';
         const vocabStandards = defaultFramework === 'CCSS'
-          ? await getCcssVocabularyStandardsForGrade(gradeLevel)
-          : await getMappedVocabularyStandardsForGrade(gradeLevel, defaultFramework);
+          ? await getCcssVocabularyStandardsForGrade(gradeLevels)
+          : await getMappedVocabularyStandardsForGrade(gradeLevels, defaultFramework);
         if (vocabStandards.length > 0) {
           console.log('📚 Vocab standards added to MCQ prompts (sequential):', vocabStandards);
         }
@@ -1756,7 +1448,7 @@ export default function CreateNewLesson() {
         generatedContent = { questions: formattedQuestions, sourceStandards, filteredOutStandards };
       } else {
         // Regular text generation for other field types
-        generatedContent = await callAIWithBatchedContext(prompt, selectedModel, 4096);
+        generatedContent = await callAI(prompt, selectedModel, 4096);
       }
       
       console.log('=== AI RESPONSE ===');
@@ -1771,7 +1463,7 @@ export default function CreateNewLesson() {
       return generatedContent;
     } catch (error) {
       console.error('Error generating AI content:', error);
-      alert(`Failed to generate content: ${error.message}`);
+      toast.error(`Failed to generate content: ${error.message}`);
       throw error; // Re-throw so continueGeneration can catch it
     } finally {
       setGeneratingFieldId(null);
@@ -2029,129 +1721,44 @@ export default function CreateNewLesson() {
       }
     } catch (error) {
       console.error('Error loading lesson template:', error);
-      alert('Failed to load lesson template. Please try again.');
+      toast.error('Failed to load lesson template. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFieldAdded = async (fieldData, isEdit) => {
-    if (!templateData?.id) return;
-
+  // Check if a Content ID is already used by another lesson
+  const checkDuplicateContentId = async (contentIdValue) => {
+    if (!contentIdValue?.trim()) return null;
     try {
-      if (isEdit) {
-        // Update existing field in database
-        const updateData = {
-          field_type: fieldData.type,
-          name: fieldData.name,
-          placeholder_text: fieldData.placeholder,
-          helper_text: fieldData.helperText,
-          required: fieldData.required,
-          ai_enabled: fieldData.aiEnabled,
-          required_for_generation: fieldData.requiredForGeneration,
-          field_for: fieldData.fieldFor
-        };
-        
-        const { error } = await supabase
-          .from('lesson_template_fields')
-          .update(updateData)
-          .eq('id', fieldData.id);
-        
-        if (error) throw error;
-        
-        setFields(fields.map(f => f.id === fieldData.id ? fieldData : f));
-      } else {
-        // Insert new field into database
-        const insertData = {
-          lesson_template_id: templateData.id,
-          field_type: fieldData.type,
-          name: fieldData.name,
-          placeholder_text: fieldData.placeholder,
-          helper_text: fieldData.helperText,
-          required: fieldData.required,
-          ai_enabled: fieldData.aiEnabled,
-          required_for_generation: fieldData.requiredForGeneration,
-          field_for: fieldData.fieldFor,
-          field_order: fields.length
-        };
-        
-        const { data: newField, error } = await supabase
-          .from('lesson_template_fields')
-          .insert(insertData)
-          .select()
-          .single();
-        
-        if (error) throw error;
-        
-        // Update local state with database ID
-        setFields([...fields, { ...fieldData, id: newField.id }]);
-      }
-      
-      // Update the lesson template's updated_at timestamp
-      const { error: updateError } = await supabase
-        .from('lesson_templates')
-        .update({
-          updated_at: new Date().toISOString(),
-          updated_by: session?.user?.id
-        })
-        .eq('id', templateData.id);
-      
-      if (updateError) {
-        console.error('Error updating lesson template timestamp:', updateError);
-      }
-    } catch (error) {
-      console.error('Error saving field:', error);
-      console.error('Error details:', error.message, error.details, error.hint);
-      alert(`Failed to save field: ${error.message || 'Please try again.'}`);
-    }
-    
-    setEditingField(null);
-  };
-
-  const handleEditField = (field) => {
-    setEditingField(field);
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteField = async (fieldId) => {
-    if (!templateData?.id) return;
-
-    try {
-      const { error } = await supabase
+      // Find all "Content ID" field IDs across all templates
+      const { data: cidFields, error: fieldsError } = await supabase
         .from('lesson_template_fields')
-        .delete()
-        .eq('id', fieldId);
-      
-      if (error) throw error;
-      
-      setFields(fields.filter(f => f.id !== fieldId));
-      
-      // Update the lesson template's updated_at timestamp
-      const { error: updateError } = await supabase
-        .from('lesson_templates')
-        .update({
-          updated_at: new Date().toISOString(),
-          updated_by: session?.user?.id
-        })
-        .eq('id', templateData.id);
-      
-      if (updateError) {
-        console.error('Error updating lesson template timestamp:', updateError);
+        .select('id')
+        .ilike('name', 'Content ID');
+      if (fieldsError || !cidFields?.length) return null;
+
+      const trimmed = contentIdValue.trim();
+      for (const f of cidFields) {
+        const query = supabase
+          .from('lessons')
+          .select('id, template_name')
+          .filter(`designer_responses->>` + f.id, 'eq', trimmed);
+        if (lessonId) query.neq('id', lessonId);
+        const { data: matches } = await query.limit(1);
+        if (matches?.length > 0) return { ...matches[0], contentId: trimmed };
       }
-    } catch (error) {
-      console.error('Error deleting field:', error);
-      alert('Failed to delete field. Please try again.');
+      return null;
+    } catch (err) {
+      console.warn('Content ID uniqueness check failed:', err);
+      return null;
     }
   };
 
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setEditingField(null);
-  };
-
-  const handleSave = async () => {
+  // Proceed with saving — always checks for duplicate Content IDs
+  const executeSave = async () => {
     if (!templateData?.id) {
-      alert('No template selected.');
+      toast.warning('No template selected.');
       return;
     }
     
@@ -2159,62 +1766,21 @@ export default function CreateNewLesson() {
       // Get current field values from state
       const currentFieldValues = fieldValues;
       
-      // Separate designer and builder fields
-      const designerFields = fields.filter(f => f.fieldFor === 'designer');
-      const builderFields = fields.filter(f => f.fieldFor === 'builder');
-      
       console.log('💾 === SAVING LESSON ===');
       console.log('💾 Template ID:', templateData.id);
       console.log('💾 Lesson ID:', lessonId || 'NEW');
-      console.log('💾 Designer fields:', designerFields.length, designerFields.map(f => `${f.name} (${f.id})`));
-      console.log('💾 Builder fields:', builderFields.length, builderFields.map(f => `${f.name} (${f.id})`));
       console.log('💾 Current field values:', currentFieldValues);
       
-      // Build designer responses object - SAVE EVERYTHING
-      const designerResponses = {};
-      for (const field of designerFields) {
-        const value = currentFieldValues[field.id];
-        
-        if (value !== undefined && value !== null) {
-          // Save whatever value exists
-          designerResponses[field.id] = value;
-          console.log(`💾 Designer field "${field.name}" (${field.id}):`, value);
-        } else {
-          // Provide appropriate empty value based on field type
-          if (field.type === 'checklist' || field.type === 'assign_standards') {
-            designerResponses[field.id] = [];
-          } else if (field.type === 'mcqs') {
-            designerResponses[field.id] = { questions: ['', '', '', '', ''] };
-          } else if (field.type === 'image') {
-            designerResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-          } else {
-            designerResponses[field.id] = '';
-          }
-          console.log(`💾 Designer field "${field.name}" (${field.id}): [empty]`);
-        }
-      }
-      
-      // Build builder responses object - SAVE EVERYTHING
-      const builderResponses = {};
-      for (const field of builderFields) {
-        const value = currentFieldValues[field.id];
-        
-        if (value !== undefined && value !== null) {
-          // Save whatever value exists
-          builderResponses[field.id] = value;
-          console.log(`💾 Builder field "${field.name}" (${field.id}):`, value);
-        } else {
-          // Provide appropriate empty value based on field type
-          if (field.type === 'checklist' || field.type === 'assign_standards') {
-            builderResponses[field.id] = [];
-          } else if (field.type === 'mcqs') {
-            builderResponses[field.id] = { questions: ['', '', '', '', ''] };
-          } else if (field.type === 'image') {
-            builderResponses[field.id] = { description: '', url: '', altText: '', imageModel: '', altTextModel: '' };
-          } else {
-            builderResponses[field.id] = '';
-          }
-          console.log(`💾 Builder field "${field.name}" (${field.id}): [empty]`);
+      const { designerResponses, builderResponses } = buildFieldResponses(fields, currentFieldValues, { keyBy: 'id' });
+
+      // Check for duplicate Content ID — hard block, no bypass
+      const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
+      const contentIdValue = contentIdField ? currentFieldValues[contentIdField.id] : null;
+      if (contentIdValue?.trim()) {
+        const duplicate = await checkDuplicateContentId(contentIdValue);
+        if (duplicate) {
+          setDuplicateContentIdWarning(duplicate);
+          return; // Block save until Content ID is changed
         }
       }
       
@@ -2290,163 +1856,16 @@ export default function CreateNewLesson() {
     } catch (error) {
       console.error('❌ ERROR SAVING LESSON:', error);
       console.error('❌ Error details:', error.message, error.details);
-      alert(`Failed to save lesson: ${error.message}`);
+      toast.error(`Failed to save lesson: ${error.message}`);
     }
   };
 
-  const handleSaveLesson = async () => {
-    if (!templateData?.id) {
-      alert('Please save the lesson template first.');
-      return;
-    }
-
-    // Get all designer and builder fields
-    const designerFields = fields.filter(f => f.fieldFor === 'designer');
-    const builderFields = fields.filter(f => f.fieldFor === 'builder');
-
-    // Helper function to upload data URLs to storage
-    const uploadDataUrlIfNeeded = async (value, fieldName) => {
-      if (value && typeof value === 'object' && value.url && value.url.startsWith('data:image')) {
-        console.log('🔄 Uploading data URL for field:', fieldName);
-        const contentId = fieldValues[designerFields.find(f => f.name === 'Content ID')?.id] || `lesson-${Date.now()}`;
-        const templateName = templateData?.name || 'unknown-template';
-        const fileName = `${templateName}/${contentId}-${fieldName}.png`;
-        
-        // Convert base64 to blob
-        const base64Data = value.url.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/png' });
-        
-        // Delete old if exists
-        await supabase.storage.from('lesson-images').remove([fileName]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Upload
-        const { error: uploadError } = await supabase.storage
-          .from('lesson-images')
-          .upload(fileName, blob, {
-            contentType: 'image/png',
-            cacheControl: '0'
-          });
-        
-        if (uploadError) throw new Error(`Failed to upload image: ${uploadError.message}`);
-        
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('lesson-images')
-          .getPublicUrl(fileName);
-        
-        return { ...value, url: `${publicUrl}?t=${Date.now()}` };
-      }
-      return value;
-    };
-
-    // Collect design responses from actual field values
-    const designResponses = {};
-    for (const field of designerFields) {
-      const value = fieldValues[field.id];
-      // For checklist fields, ensure array; for others, use value or fallback to placeholder/empty
-      if (field.type === 'checklist') {
-        designResponses[field.name] = Array.isArray(value) ? value : [];
-      } else if (field.type === 'image') {
-        // For image fields, upload data URL if needed, then save
-        designResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-      } else if (field.type === 'mcqs') {
-        designResponses[field.name] = value || { questions: ['', '', '', '', ''] };
-      } else {
-        designResponses[field.name] = value || field.placeholder || '';
-      }
-    }
-    
-    // Collect lesson responses from builder field values
-    const lessonResponses = {};
-    for (const field of builderFields) {
-      const value = fieldValues[field.id];
-      // For checklist fields, ensure array; for others, use value or fallback to placeholder/empty
-      if (field.type === 'checklist') {
-        lessonResponses[field.name] = Array.isArray(value) ? value : [];
-      } else if (field.type === 'image') {
-        // For image fields, upload data URL if needed, then save
-        lessonResponses[field.name] = await uploadDataUrlIfNeeded(value, field.name) || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
-      } else if (field.type === 'mcqs') {
-        lessonResponses[field.name] = value || { questions: ['', '', '', '', ''] };
-      } else {
-        lessonResponses[field.name] = value || field.placeholder || '';
-      }
-    }
-
-    try {
-      let data, error;
-      
-      if (lessonId) {
-        // Update existing test lesson
-        const result = await supabase
-          .from('lessons')
-          .update({
-            designer_responses: designResponses,
-            builder_responses: lessonResponses,
-            template_name: templateData.name
-          })
-          .eq('id', lessonId)
-          .select()
-          .single();
-        data = result.data;
-        error = result.error;
-      } else {
-        // Create new test lesson
-        const result = await supabase
-          .from('lessons')
-          .insert({
-            lesson_template_id: templateData.id,
-            template_name: templateData.name,
-            is_test: true,
-            status: 'draft',
-            designer_responses: designResponses,
-            builder_responses: lessonResponses,
-            created_by: session?.user?.id
-          })
-          .select()
-          .single();
-        data = result.data;
-        error = result.error;
-        
-        if (data) {
-          setTestLessonId(data.id);
-        }
-      }
-
-      if (error) throw error;
-
-      console.log('Test lesson saved:', data);
-      
-      // Clear unsaved changes flag
-      setHasUnsavedChanges(false);
-      
-      // Show success toast
-      setShowTestLessonToast(true);
-      setTimeout(() => {
-        setShowTestLessonToast(false);
-      }, 3000);
-    } catch (error) {
-      console.error('Error saving test lesson:', error);
-      alert('Failed to save test lesson. Please try again.');
-    }
-  };
+  const handleSave = () => executeSave();
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <p style={{ color: 'var(--gray-600)', fontSize: '1.125rem' }}>
+      <div style={loadingContainer}>
+        <p style={loadingText}>
           Loading lesson template...
         </p>
       </div>
@@ -2485,11 +1904,7 @@ export default function CreateNewLesson() {
           }
         `}
       </style>
-      <div style={{
-        minHeight: 'calc(100vh - 60px)',
-      background: 'linear-gradient(180deg, #2b6fda 0%, #5aa3f5 65%, #eef6ff 88%, #ffffff 100%)',
-      padding: '2rem 1rem 4rem'
-    }}>
+      <div style={pageBackground}>
       {/* Show Preview Mode when lesson is locked */}
       {isLessonLocked ? (
         <div style={{
@@ -2563,20 +1978,11 @@ export default function CreateNewLesson() {
           <div style={{ padding: '2rem' }}>
             {/* Cover Image */}
             {previewCoverImage && (
-              <div style={{
-                marginBottom: '2rem',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-              }}>
+              <div style={coverImageContainer}>
                 <img 
                   src={previewCoverImage} 
                   alt="Cover" 
-                  style={{
-                    width: '100%',
-                    height: 'auto',
-                    display: 'block'
-                  }}
+                  style={coverImageFull}
                 />
               </div>
             )}
@@ -2584,123 +1990,27 @@ export default function CreateNewLesson() {
             {/* Rendered Markdown */}
             <div 
               className="markdown-preview"
-              style={{
-                fontSize: '1rem',
-                lineHeight: '1.75',
-                color: 'var(--gray-800)'
-              }}
+              style={markdownBody}
               dangerouslySetInnerHTML={{
-                __html: marked.parse(previewMarkdown || '', {
+                __html: sanitizeHTML(marked.parse(previewMarkdown || '', {
                   breaks: true,
                   gfm: true
-                })
+                }))
               }}
             />
-            <style>{`
-              .markdown-preview h1 {
-                font-size: 2rem;
-                font-weight: 700;
-                margin: 1.5rem 0 1rem;
-                color: var(--gray-900);
-              }
-              .markdown-preview h2 {
-                font-size: 1.5rem;
-                font-weight: 700;
-                margin: 1.25rem 0 0.75rem;
-                color: var(--gray-900);
-              }
-              .markdown-preview h3 {
-                font-size: 1.25rem;
-                font-weight: 600;
-                margin: 1rem 0 0.5rem;
-                color: #3b82f6;
-              }
-              .markdown-preview h4 {
-                font-size: 1.125rem;
-                font-weight: 600;
-                margin: 0.875rem 0 0.5rem;
-                color: var(--gray-900);
-              }
-              .markdown-preview p {
-                margin: 1rem 0;
-              }
-              .markdown-preview ul, .markdown-preview ol {
-                margin: 0.75rem 0;
-                padding-left: 1.5rem;
-              }
-              .markdown-preview li {
-                margin: 0.25rem 0;
-              }
-              .markdown-preview strong {
-                font-weight: 600;
-              }
-              .markdown-preview code {
-                background-color: #f3f4f6;
-                padding: 0.125rem 0.375rem;
-                border-radius: 0.25rem;
-                font-family: monospace;
-                font-size: 0.875em;
-              }
-              .markdown-preview pre {
-                background-color: #f3f4f6;
-                padding: 1rem;
-                border-radius: 0.5rem;
-                overflow-x: auto;
-                margin: 1rem 0;
-              }
-              .markdown-preview pre code {
-                background: none;
-                padding: 0;
-              }
-              .markdown-preview blockquote {
-                border-left: 4px solid #e5e7eb;
-                padding-left: 1rem;
-                margin: 1rem 0;
-                color: var(--gray-600);
-              }
-            `}</style>
+            <style>{markdownPreviewCSS}</style>
           </div>
         </div>
       ) : (
       <>
       {!showPreFormModal && (
-        <div style={{
-          maxWidth: '1600px',
-          margin: '0 auto'
-        }}>
+        <div style={pageMaxWidth}>
         {/* Page Header */}
-        <div style={{
-          position: 'relative',
-          marginBottom: '2.5rem'
-        }}>
+        <div style={pageHeaderRelative}>
           <button
             onClick={handleBack}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.375rem',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '8px',
-              padding: '0.5rem 0.75rem',
-              fontSize: '0.8125rem',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-            }}
+            style={backButton}
+            {...backButtonHover}
           >
             <ArrowLeft size={16} />
             Back
@@ -2715,137 +2025,25 @@ export default function CreateNewLesson() {
               marginBottom: '0.75rem'
             }}>
               {templateData?.state && (
-                <span style={{
-                  display: 'inline-block',
-                  padding: '0.375rem 0.875rem',
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  color: '#fff',
-                  borderRadius: '9999px',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  backdropFilter: 'blur(8px)'
-                }}>
+                <span style={stateBadge}>
                   {US_STATES.find(s => s.value === templateData.state)?.label || templateData.state}
                 </span>
               )}
-              <h1 style={{
-                fontSize: '2.5rem',
-                fontWeight: 700,
-                color: '#fff',
-                margin: 0
-              }}>
+              <h1 style={pageTitle}>
                 {templateData?.name || 'New Lesson'}
               </h1>
             </div>
-            <p style={{
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '1.125rem',
-              fontWeight: 500,
-              marginBottom: 0
-            }}>
+            <p style={pageSubtitle}>
               Fill in the fields and generate educational content with AI
             </p>
           </div>
         </div>
 
         {/* Toolbar */}
-        <div style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: '12px',
-          padding: '1rem',
-          marginBottom: '1.5rem',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem'
-        }}>
+        <div style={toolbarContainer}>
           {/* Row 1: AI Model + Generate */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', position: 'relative' }}>
-            {/* AI Model with Label */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}> 🤖 AI Model</span>
-              <div style={{ position: 'relative' }}>
-                <button
-                  ref={modelButtonRef}
-                  onClick={() => setShowModelDropdown(!showModelDropdown)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.375rem',
-                    background: '#fff',
-                    color: 'var(--gray-700)',
-                    border: '1px solid var(--gray-300)',
-                    borderRadius: '8px',
-                    padding: '0.5rem 0.75rem',
-                    fontSize: '0.8125rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    minWidth: '130px',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <span>{selectedModel === 'claude-sonnet-4-20250514' ? 'Claude Sonnet 4' : 'GPT-4o'}</span>
-                  <ChevronDown size={14} style={{ transform: showModelDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-                </button>
-                {showModelDropdown && modelButtonRef.current && createPortal(
-                  <>
-                    {/* Invisible overlay to close dropdown when clicking outside */}
-                    <div 
-                      style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        zIndex: 99998
-                      }}
-                      onClick={() => setShowModelDropdown(false)}
-                    />
-                    <div style={{
-                      position: 'fixed',
-                      top: modelButtonRef.current.getBoundingClientRect().bottom + 4,
-                      left: modelButtonRef.current.getBoundingClientRect().left,
-                      width: 150,
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-                      zIndex: 99999,
-                      overflow: 'hidden'
-                    }}>
-                      {['claude-sonnet-4-20250514', 'gpt-4o'].map(model => (
-                        <button
-                          key={model}
-                          onClick={() => {
-                            setSelectedModel(model);
-                            setShowModelDropdown(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '0.5rem 0.75rem',
-                            border: 'none',
-                            background: selectedModel === model ? '#f3f4f6' : '#fff',
-                            color: '#374151',
-                            fontSize: '0.8125rem',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            transition: 'background 0.15s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedModel === model ? '#f3f4f6' : '#fff'}
-                        >
-                          {model === 'claude-sonnet-4-20250514' ? '🤖 Claude Sonnet 4' : '🤖 GPT-4o'}
-                        </button>
-                      ))}
-                    </div>
-                  </>,
-                  document.body
-                )}
-              </div>
-            </div>
+          <div style={{ ...toolbarRow, position: 'relative' }}>
+            <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
 
             <button
               ref={generateButtonRef}
@@ -2856,20 +2054,12 @@ export default function CreateNewLesson() {
               disabled={isGeneratingLesson || isLessonLocked}
               title={isLessonLocked ? `Lesson is being edited by ${lockOwnerName}` : ''}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: (isGeneratingLesson || isLessonLocked)
-                  ? 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)'
-                  : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
+                ...gradientButton(
+                  (isGeneratingLesson || isLessonLocked) ? '#d1d5db' : '#8b5cf6',
+                  (isGeneratingLesson || isLessonLocked) ? '#9ca3af' : '#7c3aed',
+                  '139, 92, 246'
+                ),
                 cursor: (isGeneratingLesson || isLessonLocked) ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
                 boxShadow: pulseGenerateButton && !isLessonLocked
                   ? '0 0 0 4px rgba(139, 92, 246, 0.35), 0 0 20px rgba(124, 58, 237, 0.55)' 
                   : '0 2px 4px rgba(139, 92, 246, 0.3)',
@@ -2877,18 +2067,7 @@ export default function CreateNewLesson() {
                 animation: (pulseGenerateButton && !isLessonLocked) ? 'pulse 1s ease-in-out infinite' : 'none',
                 transform: (pulseGenerateButton && !isLessonLocked) ? 'scale(1.05)' : 'scale(1)'
               }}
-              onMouseEnter={(e) => {
-                if (!isGeneratingLesson && !isLessonLocked) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isGeneratingLesson && !isLessonLocked) {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
-                }
-              }}
+              {...liftOnHover('245, 158, 11', () => isGeneratingLesson || isLessonLocked)}
             >
               <Sparkles size={16} />
               {isGeneratingLesson 
@@ -2902,29 +2081,8 @@ export default function CreateNewLesson() {
               <button
                 type="button"
                 onClick={handleStopGeneration}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
-                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '0.5rem 0.875rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(239, 68, 68, 0.35)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(239, 68, 68, 0.3)';
-                }}
+                style={gradientButton('#ef4444', '#dc2626', '239, 68, 68')}
+                {...liftOnHover('239, 68, 68')}
               >
                 Stop Generation
               </button>
@@ -2946,37 +2104,16 @@ export default function CreateNewLesson() {
           </div>
 
           {/* Row 2: Save, Export, Manage Cover Image */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+          <div style={toolbarRow}>
             <button
               onClick={handleSave}
               disabled={isLessonLocked}
               title={isLessonLocked ? `Lesson is being edited by ${lockOwnerName}` : ''}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: isLessonLocked ? '#9ca3af' : 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: isLessonLocked ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: isLessonLocked ? 'none' : '0 2px 4px rgba(34, 197, 94, 0.25)',
-                opacity: isLessonLocked ? 0.7 : 1
+                ...gradientButton('#22c55e', '#16a34a', '34, 197, 94'),
+                ...(isLessonLocked ? { background: '#9ca3af', cursor: 'not-allowed', boxShadow: 'none', opacity: 0.7 } : {}),
               }}
-              onMouseEnter={(e) => {
-                if (isLessonLocked) return;
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(34, 197, 94, 0.35)';
-              }}
-              onMouseLeave={(e) => {
-                if (isLessonLocked) return;
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(34, 197, 94, 0.25)';
-              }}
+              {...(isLessonLocked ? {} : liftOnHover('34, 197, 94'))}
             >
               <Save size={16} />
               Save Lesson
@@ -2984,29 +2121,8 @@ export default function CreateNewLesson() {
 
             <button
               onClick={handlePreviewLesson}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.25)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.35)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.25)';
-              }}
+              style={gradientButton('#3b82f6', '#2563eb', '59, 130, 246')}
+              {...liftOnHover('59, 130, 246')}
             >
               <Eye size={16} />
               Preview Lesson
@@ -3014,29 +2130,8 @@ export default function CreateNewLesson() {
 
             <button
               onClick={handleExportLesson}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(249, 115, 22, 0.25)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(249, 115, 22, 0.35)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(249, 115, 22, 0.25)';
-              }}
+              style={gradientButton('#f97316', '#ea580c', '249, 115, 22')}
+              {...liftOnHover('249, 115, 22')}
             >
               <Download size={16} />
               Export Lesson Content
@@ -3044,29 +2139,8 @@ export default function CreateNewLesson() {
             
             <button
               onClick={() => setShowUploadCoverImageModal(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.5rem 0.875rem',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(217, 119, 6, 0.25)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(217, 119, 6, 0.35)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(217, 119, 6, 0.25)';
-              }}
+              style={gradientButton('#f59e0b', '#d97706', '217, 119, 6')}
+              {...liftOnHover('217, 119, 6')}
             >
               <Upload size={16} />
               Manage Cover Image
@@ -3075,587 +2149,63 @@ export default function CreateNewLesson() {
         </div>
 
         {/* Fields Card */}
-        <div style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: '16px',
-          padding: '2rem',
-          minHeight: '500px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-        }}>
+        <div style={fieldsCard}>
           
           {/* Required field indicator */}
           {fields.some(f => f.required) && (
-            <div style={{
-              textAlign: 'right',
-              marginBottom: '1rem',
-              fontSize: '0.75rem',
-              color: '#ef4444',
-              fontStyle: 'italic'
-            }}>
+            <div style={requiredFieldIndicator}>
               * Required field
             </div>
           )}
           
           {/* Fields List */}
-          <div style={{
-            display: layoutMode === 'side-by-side' ? 'grid' : 'flex',
-            gridTemplateColumns: layoutMode === 'side-by-side' ? '1fr 1fr' : undefined,
-            flexDirection: layoutMode === 'stacked' ? 'column' : undefined,
-            gap: layoutMode === 'side-by-side' ? '2rem' : '2.5rem'
-          }}>
+          <div style={fieldsLayout(layoutMode)}>
             {/* Designer Fields Section */}
-            <div style={{ minWidth: 0 }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '1rem',
-                paddingBottom: '0.75rem',
-                borderBottom: '2px solid var(--gray-200)',
-                minHeight: '3rem'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem'
-                }}>
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-900)',
-                    margin: 0
-                  }}>
-                    Designer Field{fields.filter(f => f.fieldFor === 'designer').length === 1 ? '' : 's'}
-                  </h3>
-                  <span style={{
-                    padding: '0.25rem 0.75rem',
-                    backgroundColor: '#dbeafe',
-                    color: 'var(--primary)',
-                    borderRadius: '9999px',
-                    fontSize: '0.75rem',
-                    fontWeight: 600
-                  }}>
-                    {fields.filter(f => f.fieldFor === 'designer').length}
-                  </span>
-                </div>
-                {/* Show controls only in stacked mode or left side in side-by-side */}
-                {layoutMode === 'stacked' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  {/* Add Field Button */}
-                  
-                    
-                    {/* Layout Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}>Layout</span>
-                      <div style={{
-                        display: 'flex',
-                        backgroundColor: 'var(--gray-100)',
-                        borderRadius: '8px',
-                        padding: '3px'
-                      }}>
-                        <button
-                          onClick={() => setLayoutMode('stacked')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.375rem 0.625rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            background: layoutMode === 'stacked' ? '#fff' : 'transparent',
-                            color: layoutMode === 'stacked' ? 'var(--primary)' : 'var(--gray-500)',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: layoutMode === 'stacked' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                          }}
-                          title="Stack fields vertically"
-                        >
-                          <Rows3 size={14} />
-                        </button>
-                        <button
-                          onClick={() => setLayoutMode('side-by-side')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.375rem 0.625rem',
-                            border: 'none',
-                            borderRadius: '6px',
-                            background: layoutMode === 'side-by-side' ? '#fff' : 'transparent',
-                            color: layoutMode === 'side-by-side' ? 'var(--primary)' : 'var(--gray-500)',
-                            fontSize: '0.75rem',
-                            fontWeight: 500,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            boxShadow: layoutMode === 'side-by-side' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                          }}
-                          title="Show fields side by side"
-                        >
-                          <Columns2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {fields.filter(f => f.fieldFor === 'designer').length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '2rem',
-                    color: 'var(--gray-400)',
-                    fontSize: '0.875rem'
-                  }}>
-                    No designer fields added yet
-                  </div>
-                ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, 'designer')}
-                  >
-                    <SortableContext
-                      items={fields.filter(f => f.fieldFor === 'designer').map(f => f.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem',
-                        paddingLeft: '2rem'
-                      }}>
-                        {fields.filter(f => f.fieldFor === 'designer').map((field) => {
-                          const aiProps = field.aiEnabled ? {
-                            onGenerateAI: handleGenerateAI,
-                            onAIConfig: handleAIConfig,
-                            isGenerating: generatingFieldId === field.id,
-                            hasGenerated: !!hasGeneratedMap[field.id],
-                          } : {};
-                          
-                          // Check if this field is missing
-                          const isMissing = highlightedMissingFields.has(field.id);
-                          
-                          // Check if this field is used as context
-                          const isUsedAsContext = isFieldUsedAsContext(field.id);
-                          
-                          let fieldComponent;
-                          if (field.type === 'text') {
-                            fieldComponent = (
-                              <TextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'rich_text') {
-                            fieldComponent = (
-                              <RichTextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'grade_band_selector' || field.type === 'theme_selector' || field.type === 'dropdown') {
-                            fieldComponent = (
-                              <DropdownField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'checklist') {
-                            fieldComponent = (
-                              <ChecklistField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'image') {
-                            fieldComponent = (
-                              <ImageField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'assign_standards') {
-                            fieldComponent = (
-                              <AssignStandardsField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'mcqs') {
-                            // Extract question labels from ai_question_prompts for display
-                            const questionLabels = {};
-                            if (field.ai_question_prompts) {
-                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
-                                const qData = field.ai_question_prompts[qKey];
-                                if (qData) {
-                                  questionLabels[qKey] = {
-                                    label: typeof qData === 'string' ? null : qData.label,
-                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
-                                  };
-                                }
-                              });
-                            }
-                            
-                            fieldComponent = (
-                              <MCQsField
-                                key={field.id}
-                                field={{ ...field, questionLabels }}
-                                value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
-                                onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
-                                onAIConfig={handleAIConfig}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                isGenerating={generatingFieldId === field.id}
-                                defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
-                              />
-                            );
-                          } else {
-                            fieldComponent = (
-                              <BaseField
-                                key={field.id}
-                                field={field}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          }
-                          
-                          return (
-                            <SortableField key={field.id} id={field.id}>
-                              {fieldComponent}
-                            </SortableField>
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                )}
-              </div>
+            <FieldSection
+              sectionLabel="Designer"
+              fieldType="designer"
+              fields={fields}
+              fieldValues={fieldValues}
+              setFieldValues={setFieldValues}
+              layoutMode={layoutMode}
+              setLayoutMode={setLayoutMode}
+              showControls={layoutMode === 'stacked'}
+              highlightedMissingFields={highlightedMissingFields}
+              generatingFieldId={generatingFieldId}
+              hasGeneratedMap={hasGeneratedMap}
+              handleGenerateAI={handleGenerateAI}
+              handleAIConfig={handleAIConfig}
+              handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
+              defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
+              isFieldUsedAsContext={isFieldUsedAsContext}
+            />
 
               {/* Builder Fields Section */}
-              <div style={{ minWidth: 0 }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '1rem',
-                  paddingBottom: '0.75rem',
-                  borderBottom: '2px solid var(--gray-200)',
-                  minHeight: '3rem'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.75rem'
-                  }}>
-                    <h3 style={{
-                      fontSize: '1.25rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-900)',
-                      margin: 0
-                    }}>
-                      Builder Field{fields.filter(f => f.fieldFor === 'builder').length === 1 ? '' : 's'}
-                    </h3>
-                    <span style={{
-                      padding: '0.25rem 0.75rem',
-                      backgroundColor: '#dbeafe',
-                      color: 'var(--primary)',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600
-                    }}>
-                      {fields.filter(f => f.fieldFor === 'builder').length}
-                    </span>
-                  </div>
-                  {/* Show controls in side-by-side mode */}
-                  {layoutMode === 'side-by-side' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      {/* Add Field Button */}
-                      
-                      {/* Layout Toggle */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--gray-500)' }}>Layout</span>
-                        <div style={{
-                          display: 'flex',
-                          backgroundColor: 'var(--gray-100)',
-                          borderRadius: '8px',
-                          padding: '3px'
-                        }}>
-                          <button
-                            onClick={() => setLayoutMode('stacked')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              padding: '0.375rem 0.625rem',
-                              border: 'none',
-                              borderRadius: '6px',
-                              background: layoutMode === 'stacked' ? '#fff' : 'transparent',
-                              color: layoutMode === 'stacked' ? 'var(--primary)' : 'var(--gray-500)',
-                              fontSize: '0.75rem',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              boxShadow: layoutMode === 'stacked' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                            title="Stack fields vertically"
-                          >
-                            <Rows3 size={14} />
-                          </button>
-                          <button
-                            onClick={() => setLayoutMode('side-by-side')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.25rem',
-                              padding: '0.375rem 0.625rem',
-                              border: 'none',
-                              borderRadius: '6px',
-                              background: layoutMode === 'side-by-side' ? '#fff' : 'transparent',
-                              color: layoutMode === 'side-by-side' ? 'var(--primary)' : 'var(--gray-500)',
-                              fontSize: '0.75rem',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              boxShadow: layoutMode === 'side-by-side' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                            }}
-                            title="Show fields side by side"
-                          >
-                            <Columns2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {fields.filter(f => f.fieldFor === 'builder').length === 0 ? (
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '2rem',
-                    color: 'var(--gray-400)',
-                    fontSize: '0.875rem'
-                  }}>
-                    No builder fields added yet
-                  </div>
-                ) : (
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={(event) => handleDragEnd(event, 'builder')}
-                  >
-                    <SortableContext
-                      items={fields.filter(f => f.fieldFor === 'builder').map(f => f.id)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem',
-                        paddingLeft: '2rem'
-                      }}>
-                        {fields.filter(f => f.fieldFor === 'builder').map((field) => {
-                          const aiProps = field.aiEnabled ? {
-                            onGenerateAI: handleGenerateAI,
-                            onAIConfig: handleAIConfig,
-                            isGenerating: generatingFieldId === field.id,
-                            hasGenerated: !!hasGeneratedMap[field.id],
-                          } : {};
-                          
-                          // Check if this field is missing
-                          const isMissing = highlightedMissingFields.has(field.id);
-                          
-                          // Check if this field is used as context
-                          const isUsedAsContext = isFieldUsedAsContext(field.id);
-                          
-                          let fieldComponent;
-                          if (field.type === 'text') {
-                            fieldComponent = (
-                              <TextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'rich_text') {
-                            fieldComponent = (
-                              <RichTextField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'grade_band_selector' || field.type === 'theme_selector' || field.type === 'dropdown') {
-                            fieldComponent = (
-                              <DropdownField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || ''}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'checklist') {
-                            fieldComponent = (
-                              <ChecklistField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'image') {
-                            fieldComponent = (
-                              <ImageField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'assign_standards') {
-                            fieldComponent = (
-                              <AssignStandardsField
-                                key={field.id}
-                                field={field}
-                                value={fieldValues[field.id] || []}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          } else if (field.type === 'mcqs') { console.log('🔥 BUILDER MCQ:', field.name, field.type);
-                            // Extract question labels from ai_question_prompts for display
-                            const questionLabels = {};
-                            if (field.ai_question_prompts) {
-                              ['q1', 'q2', 'q3', 'q4', 'q5'].forEach(qKey => {
-                                const qData = field.ai_question_prompts[qKey];
-                                if (qData) {
-                                  questionLabels[qKey] = {
-                                    label: typeof qData === 'string' ? null : qData.label,
-                                    tooltip: typeof qData === 'string' ? null : qData.tooltip
-                                  };
-                                }
-                              });
-                            }
-                            
-                            fieldComponent = (
-                              <MCQsField
-                                key={field.id}
-                                field={{ ...field, questionLabels }}
-                                value={fieldValues[field.id] || { questions: ['', '', '', '', ''] }}
-                                onChange={(value) => setFieldValues(prev => ({ ...prev, [field.id]: value }))}
-                                onAIGenerate={field.aiEnabled ? () => handleGenerateAI(field) : undefined}
-                                onGenerateIndividual={field.aiEnabled ? handleGenerateIndividualMCQ : undefined}
-                                onAIConfig={handleAIConfig}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                isGenerating={generatingFieldId === field.id}
-                              />
-                            );
-                          } else {
-                            fieldComponent = (
-                              <BaseField
-                                key={field.id}
-                                field={field}
-                                isMissing={isMissing}
-                                isUsedAsContext={isUsedAsContext}
-                                {...aiProps}
-                              />
-                            );
-                          }
-                          
-                          return (
-                            <SortableField key={field.id} id={field.id}>
-                              {fieldComponent}
-                            </SortableField>
-                          );
-                        })}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
-                )}
-              </div>
+            <FieldSection
+              sectionLabel="Builder"
+              fieldType="builder"
+              fields={fields}
+              fieldValues={fieldValues}
+              setFieldValues={setFieldValues}
+              layoutMode={layoutMode}
+              setLayoutMode={setLayoutMode}
+              showControls={layoutMode === 'side-by-side'}
+              highlightedMissingFields={highlightedMissingFields}
+              generatingFieldId={generatingFieldId}
+              hasGeneratedMap={hasGeneratedMap}
+              handleGenerateAI={handleGenerateAI}
+              handleAIConfig={handleAIConfig}
+              handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
+              defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
+              isFieldUsedAsContext={isFieldUsedAsContext}
+            />
             </div>
         </div>
       </div>
       )}
 
       {/* Save Toast Notification */}
-      {showSaveToast && (
-        <div style={{
-          position: 'fixed',
-          top: '5rem',
-          right: '2rem',
-          background: 'linear-gradient(135deg, #ecfeff 0%, #eef2ff 100%)',
-          color: '#1e293b',
-          border: '1px solid #c7d2fe',
-          padding: '1rem 1.5rem',
-          borderRadius: '8px',
-          boxShadow: '0 12px 30px rgba(30, 41, 59, 0.18)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          fontSize: '1rem',
-          fontWeight: 600,
-          zIndex: 9999,
-          animation: 'slideIn 0.3s ease-out'
-        }}>
-          <Check size={20} />
-          Lesson saved successfully!
-        </div>
-      )}
+      <SaveToast visible={showSaveToast} message="Lesson saved successfully!" />
 
       <AddEditFieldModal
         visible={isModalOpen}
@@ -3701,583 +2251,49 @@ export default function CreateNewLesson() {
       )}
 
       {/* Unsaved Changes Modal */}
-      {showUnsavedChangesModal && createPortal(
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          backdropFilter: 'blur(4px)'
-        }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            padding: '2rem',
-            maxWidth: '500px',
-            width: '90%',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
-          }}>
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: 700,
-              color: 'var(--gray-900)',
-              marginBottom: '1rem'
-            }}>
-              Unsaved Changes
-            </h2>
-            <p style={{
-              fontSize: '1rem',
-              color: 'var(--gray-700)',
-              marginBottom: '2rem',
-              lineHeight: 1.6
-            }}>
-              You have unsaved changes. Would you like to save your lesson before leaving?
-            </p>
-            <div style={{
-              display: 'flex',
-              gap: '0.75rem',
-              justifyContent: 'flex-end'
-            }}>
-              <button
-                onClick={handleCancelNavigation}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: 'var(--gray-700)',
-                  background: '#fff',
-                  border: '2px solid var(--gray-300)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDiscardChanges}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: '#ef4444',
-                  background: '#fff',
-                  border: '2px solid #ef4444',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                Discard Changes
-              </button>
-              <button
-                onClick={handleSaveAndNavigate}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(102, 126, 234, 0.3)'
-                }}
-              >
-                Save & Leave
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {showUnsavedChangesModal && (
+        <UnsavedChangesModal
+          onCancel={handleCancelNavigation}
+          onDiscard={handleDiscardChanges}
+          onSave={handleSaveAndNavigate}
+        />
       )}
 
       {/* Export Modal */}
-      {showExportModal && createPortal(
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          backdropFilter: 'blur(4px)',
-          padding: '2rem'
-        }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            padding: '2rem',
-            maxWidth: '900px',
-            width: '90%',
-            maxHeight: '80vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '1.5rem'
-            }}>
-              <h2 style={{
-                fontSize: '1.5rem',
-                fontWeight: 700,
-                color: 'var(--gray-900)',
-                margin: 0
-              }}>
-                Export Lesson - Markdown
-              </h2>
-              <button
-                onClick={() => setShowExportModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--gray-500)',
-                  padding: '0.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '4px',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--gray-100)';
-                  e.currentTarget.style.color = 'var(--gray-700)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = 'var(--gray-500)';
-                }}
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            {/* Missing Required Fields Warning */}
-            {missingRequiredFields.length > 0 && (
-              <div style={{
-                backgroundColor: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: '8px',
-                padding: '1rem 1.25rem',
-                marginBottom: '1rem'
-              }}>
-                <p style={{
-                  color: '#991b1b',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  margin: '0 0 0.5rem 0'
-                }}>
-                  The following required fields must be filled out before exporting:
-                </p>
-                <ul style={{
-                  margin: 0,
-                  paddingLeft: '1.25rem',
-                  color: '#b91c1c',
-                  fontSize: '0.875rem'
-                }}>
-                  {missingRequiredFields.map((field, idx) => (
-                    <li key={field.id || idx}>
-                      {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              backgroundColor: '#f9fafb',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-              padding: '1.5rem',
-              marginBottom: '1.5rem'
-            }}>
-              <pre style={{
-                margin: 0,
-                fontFamily: 'monospace',
-                fontSize: '0.875rem',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordWrap: 'break-word',
-                color: 'var(--gray-800)'
-              }}>
-                {exportMarkdown}
-              </pre>
-            </div>
-            
-            <div style={{
-              display: 'flex',
-              gap: '0.75rem',
-              justifyContent: 'flex-end'
-            }}>
-              <button
-                onClick={() => setShowExportModal(false)}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: 'var(--gray-700)',
-                  background: '#fff',
-                  border: '2px solid var(--gray-300)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                Close
-              </button>
-              <button
-                disabled={missingRequiredFields.length > 0}
-                onClick={() => {
-                  if (missingRequiredFields.length > 0) return;
-                  const blob = new Blob([exportMarkdown], { type: 'text/markdown' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  // Get Content ID from fieldValues
-                  const contentIdField = fields.find(f => f.name === 'Content ID');
-                  const contentId = contentIdField ? fieldValues[contentIdField.id] : null;
-                  const filename = contentId ? `${contentId}.md` : `${templateData?.name || 'lesson'}-export.md`;
-                  a.download = filename;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-                }}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: missingRequiredFields.length > 0 ? '#9ca3af' : '#fff',
-                  background: missingRequiredFields.length > 0 ? '#e5e7eb' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: missingRequiredFields.length > 0 ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: missingRequiredFields.length > 0 ? 'none' : '0 2px 4px rgba(16, 185, 129, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
-                  opacity: missingRequiredFields.length > 0 ? 0.6 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (missingRequiredFields.length > 0) return;
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  if (missingRequiredFields.length > 0) return;
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
-                }}
-              >
-                <Download size={16} />
-                Download
-              </button>
-              <button
-                disabled={missingRequiredFields.length > 0}
-                onClick={() => {
-                  if (missingRequiredFields.length > 0) return;
-                  navigator.clipboard.writeText(exportMarkdown);
-                  alert('Markdown copied to clipboard!');
-                }}
-                style={{
-                  padding: '0.625rem 1.25rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: missingRequiredFields.length > 0 ? '#9ca3af' : '#fff',
-                  background: missingRequiredFields.length > 0 ? '#e5e7eb' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: missingRequiredFields.length > 0 ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: missingRequiredFields.length > 0 ? 'none' : '0 2px 4px rgba(99, 102, 241, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.375rem',
-                  opacity: missingRequiredFields.length > 0 ? 0.6 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (missingRequiredFields.length > 0) return;
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(99, 102, 241, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  if (missingRequiredFields.length > 0) return;
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(99, 102, 241, 0.3)';
-                }}
-              >
-                Copy to Clipboard
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {showExportModal && (
+        <ExportModal
+          markdown={exportMarkdown}
+          missingRequiredFields={missingRequiredFields}
+          templateName={templateData?.name}
+          fields={fields}
+          fieldValues={fieldValues}
+          onClose={() => setShowExportModal(false)}
+        />
       )}
 
       {/* Preview Modal */}
-      {showPreviewModal && createPortal(
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10000,
-          backdropFilter: 'blur(4px)',
-          padding: '2rem'
-        }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            maxWidth: '1000px',
-            width: '90%',
-            maxHeight: '90vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
-            overflow: 'hidden'
-          }}>
-            {/* Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '1.5rem 2rem',
-              borderBottom: '1px solid var(--gray-200)'
-            }}>
-              <h2 style={{
-                fontSize: '1.5rem',
-                fontWeight: 700,
-                color: 'var(--gray-900)',
-                margin: 0
-              }}>
-                Lesson Preview
-              </h2>
-              <button
-                onClick={() => setShowPreviewModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--gray-500)',
-                  padding: '0.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '4px',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--gray-100)';
-                  e.currentTarget.style.color = 'var(--gray-700)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = 'var(--gray-500)';
-                }}
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            {/* Content */}
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '2rem'
-            }}>
-              {/* Missing Required Fields Warning */}
-              {missingRequiredFields.length > 0 && (
-                <div style={{
-                  backgroundColor: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '8px',
-                  padding: '1rem 1.25rem',
-                  marginBottom: '1.5rem'
-                }}>
-                  <p style={{
-                    color: '#991b1b',
-                    fontWeight: 600,
-                    fontSize: '0.875rem',
-                    margin: '0 0 0.5rem 0'
-                  }}>
-                    The following required fields must be filled out before exporting:
-                  </p>
-                  <ul style={{
-                    margin: 0,
-                    paddingLeft: '1.25rem',
-                    color: '#b91c1c',
-                    fontSize: '0.875rem'
-                  }}>
-                    {missingRequiredFields.map((field, idx) => (
-                      <li key={field.id || idx}>
-                        {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {/* Cover Image */}
-              {previewCoverImage && (
-                <div style={{
-                  marginBottom: '2rem',
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-                }}>
-                  <img 
-                    src={previewCoverImage} 
-                    alt="Cover" 
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block'
-                    }}
-                  />
-                </div>
-              )}
-              
-              {/* Rendered Markdown */}
-              <div 
-                className="markdown-preview"
-                style={{
-                  fontSize: '1rem',
-                  lineHeight: '1.75',
-                  color: 'var(--gray-800)'
-                }}
-                dangerouslySetInnerHTML={{
-                  __html: marked.parse(previewMarkdown || '', {
-                    breaks: true,
-                    gfm: true
-                  })
-                }}
-              />
-              <style>{`
-                .markdown-preview h1 {
-                  font-size: 2rem;
-                  font-weight: 700;
-                  margin: 1.5rem 0 1rem;
-                  color: var(--gray-900);
-                }
-                .markdown-preview h2 {
-                  font-size: 1.5rem;
-                  font-weight: 700;
-                  margin: 1.25rem 0 0.75rem;
-                  color: var(--gray-900);
-                }
-                .markdown-preview h3 {
-                  font-size: 1.25rem;
-                  font-weight: 600;
-                  margin: 1rem 0 0.5rem;
-                  color: #3b82f6;
-                }
-                .markdown-preview h4 {
-                  font-size: 1.125rem;
-                  font-weight: 600;
-                  margin: 0.875rem 0 0.5rem;
-                  color: var(--gray-900);
-                }
-                .markdown-preview p {
-                  margin: 1rem 0;
-                }
-                .markdown-preview ul, .markdown-preview ol {
-                  margin: 0.75rem 0;
-                  padding-left: 1.5rem;
-                }
-                .markdown-preview li {
-                  margin: 0.25rem 0;
-                }
-                .markdown-preview strong {
-                  font-weight: 600;
-                }
-                .markdown-preview code {
-                  background-color: #f3f4f6;
-                  padding: 0.125rem 0.375rem;
-                  border-radius: 0.25rem;
-                  font-family: monospace;
-                  font-size: 0.875em;
-                }
-                .markdown-preview pre {
-                  background-color: #f3f4f6;
-                  padding: 1rem;
-                  border-radius: 0.5rem;
-                  overflow-x: auto;
-                  margin: 1rem 0;
-                }
-                .markdown-preview pre code {
-                  background: none;
-                  padding: 0;
-                }
-                .markdown-preview blockquote {
-                  border-left: 4px solid #e5e7eb;
-                  padding-left: 1rem;
-                  margin: 1rem 0;
-                  color: var(--gray-600);
-                }
-              `}</style>
-            </div>
-            
-            {/* Footer */}
-            <div style={{
-              padding: '1.5rem 2rem',
-              borderTop: '1px solid var(--gray-200)',
-              display: 'flex',
-              justifyContent: 'flex-end'
-            }}>
-              <button
-                onClick={() => setShowPreviewModal(false)}
-                style={{
-                  padding: '0.625rem 1.5rem',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                  color: '#fff',
-                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {showPreviewModal && (
+        <PreviewModal
+          markdown={previewMarkdown}
+          coverImage={previewCoverImage}
+          missingRequiredFields={missingRequiredFields}
+          onClose={() => setShowPreviewModal(false)}
+        />
       )}
       </>
+      )}
+
+      {/* Duplicate Content ID — Hard Block */}
+      {duplicateContentIdWarning && (
+        <ConfirmModal
+          title="Duplicate Content ID"
+          message={`Content ID "${duplicateContentIdWarning.contentId}" is already used by another lesson ("${duplicateContentIdWarning.template_name || 'Unknown'}"). Every lesson must have a unique Content ID to prevent cover image overwrites and export conflicts. Please change the Content ID and try saving again.`}
+          confirmText="OK"
+          cancelText={null}
+          dangerous
+          onConfirm={() => setDuplicateContentIdWarning(null)}
+          onCancel={() => setDuplicateContentIdWarning(null)}
+        />
       )}
 
       {/* Pre-Form Modal */}

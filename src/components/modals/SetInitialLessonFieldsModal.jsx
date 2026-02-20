@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
 import TipTapEditor from '../core/TipTapEditor';
 
 export default function SetInitialLessonFieldsModal({ visible, onClose, onSave, fields = [], initialValues = {} }) {
+  const toast = useToast();
   const [fieldValues, setFieldValues] = useState({});
 
   useEffect(() => {
@@ -19,7 +21,7 @@ export default function SetInitialLessonFieldsModal({ visible, onClose, onSave, 
     const missingFields = designerFields.filter(f => f.required && !fieldValues[f.id]);
     
     if (missingFields.length > 0) {
-      alert(`Please fill in all required fields: ${missingFields.map(f => f.name).join(', ')}`);
+      toast.warning(`Please fill in all required fields: ${missingFields.map(f => f.name).join(', ')}`);
       return;
     }
     

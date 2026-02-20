@@ -23,7 +23,7 @@ function templateNameToCamelCase(name) {
 // Generate import statement
 function generateImportStatement(templateName) {
   const camelCaseName = templateNameToCamelCase(templateName);
-  return `import { generateMarkdown as generate${camelCaseName.charAt(0).toUpperCase() + camelCaseName.slice(1)}Markdown } from '../../lib/markdown-export/${camelCaseName}MarkdownExport';`;
+  return `import { generateMarkdown as generate${camelCaseName.charAt(0).toUpperCase() + camelCaseName.slice(1)}Markdown } from '../../export/templates/${camelCaseName}MarkdownExport';`;
 }
 
 // Generate map entry

@@ -1,4 +1,10 @@
 # Smart Lesson Builder v2 (Vite + React + Supabase)
+//no need to explain your thinking in great detail, just provide the completed code. thanks!
+
+Always refer to this document when working on the Smart Lesson Builder codebase. It outlines architecture, conventions, and key patterns to ensure consistency across the project.
+
+
+Always take the time to confirm that changes you make do not break or revert existing functionality. Test thoroughly, especially for complex features like AI generation and lesson exporting.
 
 ## Scope and entry points
 - Primary app lives in src/; a legacy/alternate app exists in slb-3.3/ (avoid cross-editing unless requested).
@@ -19,11 +25,11 @@
 - Client heartbeat runs every 30s and releases on unload in [src/components/pages/CreateNewLesson.jsx](src/components/pages/CreateNewLesson.jsx).
 
 ## AI generation conventions
-- AI calls are centralized in [src/lib/aiClient.js](src/lib/aiClient.js) (Claude/OpenAI/Gemini). Requires Vite env keys: `VITE_ANTHROPIC_API_KEY`, `VITE_OPENAI_API_KEY`, `VITE_GOOGLE_API_KEY`.
-- Prompts use structured sections (`=== SYSTEM INSTRUCTIONS ===`, `=== TASK ===`, `=== FORMAT REQUIREMENTS ===`, `=== CONTEXT ===`) built by `buildFullPrompt()` in [src/lib/promptBuilder.js](src/lib/promptBuilder.js).
+- AI calls are proxied through server-side Vercel functions in `api/ai/`; the browser client is [src/services/aiClient.js](src/services/aiClient.js). Server env keys (no `VITE_` prefix): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`.
+- Prompts use structured sections (`=== SYSTEM INSTRUCTIONS ===`, `=== TASK ===`, `=== FORMAT REQUIREMENTS ===`, `=== CONTEXT ===`) built by `buildFullPrompt()` in [src/ai/promptBuilder.js](src/ai/promptBuilder.js).
 
 ## Export pipeline
-- Markdown exports are per-template functions under src/lib/markdown-export; helper generators live in [src/lib/generateMarkdownExportFile.js](src/lib/generateMarkdownExportFile.js).
+- Markdown exports are per-template functions under `src/export/templates/`; helper generators live in [src/export/generateMarkdownExportFile.js](src/export/generateMarkdownExportFile.js).
 - Create/bind export mappings in [src/components/pages/CreateNewLesson.jsx](src/components/pages/CreateNewLesson.jsx).
 
 ## Developer workflows

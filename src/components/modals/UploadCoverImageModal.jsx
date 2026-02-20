@@ -1,22 +1,24 @@
 import React from 'react';
 import { X, Download, ExternalLink } from 'lucide-react';
 import JSZip from 'jszip';
+import { useToast } from '../../hooks/useToast';
 
 export default function UploadCoverImageModal({ 
   contentId,
   coverImageUrl,
   onClose
 }) {
+  const toast = useToast();
   const s3BucketUrl = 'https://us-east-1.console.aws.amazon.com/s3/buckets/thinkcerca-prod?prefix=lessons%2F&region=us-east-1&tab=objects';
 
   const handleDownloadImage = async () => {
     if (!contentId) {
-      alert('Content ID is required to download the cover image');
+      toast.warning('Content ID is required to download the cover image');
       return;
     }
 
     if (!coverImageUrl) {
-      alert('No cover image found. Please generate or upload a cover image first.');
+      toast.warning('No cover image found. Please generate or upload a cover image first.');
       return;
     }
 
@@ -50,7 +52,7 @@ export default function UploadCoverImageModal({
       URL.revokeObjectURL(link.href);
     } catch (error) {
       console.error('Error downloading cover image:', error);
-      alert('Failed to download cover image. Please try again.');
+      toast.error('Failed to download cover image. Please try again.');
     }
   };
 
