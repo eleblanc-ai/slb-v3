@@ -161,6 +161,11 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     ? glossedPassage.replace(/<\/?em>/gi, '') 
     : glossedPassage;
   markdown += `${cleanedPassage}\n\n`;
+
+    // Read
+  markdown += `#Read\n`;
+  markdown += `${getFieldValue('Read')}\n\n`;
+  
   markdown += `#Lexile Level\n`;
   markdown += `${getFieldValue('Lexile Level')}\n\n`;
   
