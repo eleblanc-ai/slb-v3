@@ -26,9 +26,12 @@ export function isEmptyValue(value) {
  * @param {Object} field - The AI-enabled field to check context for
  * @param {Array} allFields - All template fields
  * @param {Object} fieldValues - Current field values keyed by field ID
+ * @param {Object} [options]
+ * @param {boolean} [options.skipAIEnabled=true] - Skip AI-enabled context fields
+ *   (useful for "Generate All" where they'll be generated in order)
  * @returns {Array} Array of missing field descriptors: { id, name, section }
  */
-export function validateContextFieldsForField(field, allFields, fieldValues) {
+export function validateContextFieldsForField(field, allFields, fieldValues, { skipAIEnabled = true } = {}) {
   const missing = [];
   const contextFieldIds = field.ai_context_field_ids || [];
 
@@ -36,8 +39,8 @@ export function validateContextFieldsForField(field, allFields, fieldValues) {
     const contextField = allFields.find(f => f.id === contextFieldId);
     if (!contextField) continue;
 
-    // AI-enabled fields may be blank before generation — skip them
-    if (contextField.aiEnabled) continue;
+    // AI-enabled fields may be blank before generation — skip them in batch flows
+    if (skipAIEnabled && contextField.aiEnabled) continue;
 
     const value = fieldValues[contextFieldId];
     if (isEmptyValue(value)) {

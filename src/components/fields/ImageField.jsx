@@ -15,6 +15,7 @@ export default function ImageField({
   hasGenerated,
   isMissing,
   staleContextNames,
+  onDismissStale,
   hideRequiredAsterisk,
   onUploadImage
 }) {
@@ -122,6 +123,7 @@ export default function ImageField({
       hasGenerated={hasGenerated}
       isMissing={isMissing}
       staleContextNames={staleContextNames}
+      onDismissStale={onDismissStale}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.75rem 0' }}>

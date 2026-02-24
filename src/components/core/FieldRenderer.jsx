@@ -41,6 +41,7 @@ export default function FieldRenderer({
   isGenerating = false,
   hasGenerated = false,
   staleContextNames = [],
+  onDismissStale,
   onGenerateIndividualMCQ,
   defaultStandardFramework,
   onUploadImage,
@@ -59,7 +60,7 @@ export default function FieldRenderer({
   const contextProps = {};
   if (isUsedAsContext !== undefined) contextProps.isUsedAsContext = isUsedAsContext;
 
-  const common = { field, onChange, isMissing, staleContextNames, ...editProps, ...contextProps, ...aiProps };
+  const common = { field, onChange, isMissing, staleContextNames, onDismissStale, ...editProps, ...contextProps, ...aiProps };
 
   if (field.type === 'text') {
     return <TextField {...common} value={value || ''} />;
@@ -120,6 +121,7 @@ export default function FieldRenderer({
         onAIConfig={onAIConfig}
         isMissing={isMissing}
         staleContextNames={staleContextNames}
+        onDismissStale={onDismissStale}
         {...contextProps}
         {...editProps}
         isGenerating={isGenerating}

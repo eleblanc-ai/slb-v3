@@ -1,7 +1,7 @@
 import React from 'react';
 import BaseField from './BaseField';
 
-export default function DropdownField({ field, value, onChange, onEdit, onDelete, onAIConfig, onGenerateAI, isGenerating, hasGenerated, isMissing, staleContextNames, hideRequiredAsterisk }) {
+export default function DropdownField({ field, value, onChange, onEdit, onDelete, onAIConfig, onGenerateAI, isGenerating, hasGenerated, isMissing, staleContextNames, onDismissStale, hideRequiredAsterisk }) {
   // Ensure options is an array; some DB rows may store JSON or comma-separated strings
   let parsedOptions = [];
   if (Array.isArray(field.options)) {
@@ -28,6 +28,7 @@ export default function DropdownField({ field, value, onChange, onEdit, onDelete
       hasGenerated={hasGenerated}
       isMissing={isMissing}
       staleContextNames={staleContextNames}
+      onDismissStale={onDismissStale}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>

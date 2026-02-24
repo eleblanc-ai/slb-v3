@@ -24,6 +24,7 @@ import { useToast } from '../../hooks/useToast';
 export default function ExportModal({
   markdown,
   missingRequiredFields,
+  staleFields = [],
   templateName,
   fields,
   fieldValues,
@@ -34,6 +35,7 @@ export default function ExportModal({
   const contentId = contentIdField ? fieldValues[contentIdField.id] : null;
   const filename = contentId ? `${contentId}.md` : `${templateName || 'lesson'}-export.md`;
   const hasMissing = missingRequiredFields.length > 0;
+  const hasStale = staleFields.length > 0;
 
   const handleDownload = () => {
     if (hasMissing) return;
@@ -84,6 +86,39 @@ export default function ExportModal({
               {missingRequiredFields.map((field, idx) => (
                 <li key={field.id || idx}>
                   {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Stale Context Fields Warning */}
+        {hasStale && (
+          <div style={{
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            marginBottom: '1rem',
+          }}>
+            <p style={{
+              color: '#92400e',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              margin: '0 0 0.5rem 0',
+            }}>
+              The following fields have outdated context and may need to be regenerated:
+            </p>
+            <ul style={{
+              margin: 0,
+              paddingLeft: '1.25rem',
+              color: '#b45309',
+              fontSize: '0.875rem',
+            }}>
+              {staleFields.map((field, idx) => (
+                <li key={field.id || idx}>
+                  {field.name} <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({field.section})</span>
+                  <span style={{ color: '#d97706', fontSize: '0.75rem' }}> — changed: {field.changedContextNames.join(', ')}</span>
                 </li>
               ))}
             </ul>

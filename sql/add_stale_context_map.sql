@@ -5,3 +5,11 @@
 
 ALTER TABLE lessons
 ADD COLUMN IF NOT EXISTS stale_context_map JSONB DEFAULT '{}';
+
+-- Add context_snapshot_map column to lessons table.
+-- Stores a hash of each context field's value at the time the dependent
+-- AI field was last generated. Used to detect when edits are reverted.
+-- Shape: { [aiFieldId]: { [contextFieldId]: number (hash) } }
+
+ALTER TABLE lessons
+ADD COLUMN IF NOT EXISTS context_snapshot_map JSONB DEFAULT '{}';

@@ -20,6 +20,7 @@ export default function AssignStandardsField({
   hasGenerated,
   isMissing,
   staleContextNames,
+  onDismissStale,
   hideRequiredAsterisk
 }) {
   const toast = useToast();
@@ -298,6 +299,7 @@ export default function AssignStandardsField({
       hasGenerated={hasGenerated}
       isMissing={isMissing}
       staleContextNames={staleContextNames}
+      onDismissStale={onDismissStale}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

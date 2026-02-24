@@ -111,6 +111,7 @@ export default function CreateNewLesson() {
   const [previewMarkdown, setPreviewMarkdown] = useState('');
   const [previewCoverImage, setPreviewCoverImage] = useState(null);
   const [missingRequiredFields, setMissingRequiredFields] = useState([]);
+  const [staleFieldsForModal, setStaleFieldsForModal] = useState([]);
   const [preFormCompleted, setPreFormCompleted] = useState(false);
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
   const [duplicateContentIdWarning, setDuplicateContentIdWarning] = useState(null);
@@ -125,6 +126,22 @@ export default function CreateNewLesson() {
   const [staleContextMap, setStaleContextMap] = useState({});
   const staleContextMapRef = useRef({});
 
+  // Snapshot of context field value hashes at the time each AI field was last generated.
+  // Shape: { [aiFieldId]: { [contextFieldId]: number (hash) } }
+  // Used to detect when edits are reverted back to the original values.
+  const contextSnapshotRef = useRef({});
+
+  // Simple hash for comparing field values without storing full content
+  const hashValue = (val) => {
+    const str = typeof val === 'string' ? val : JSON.stringify(val ?? '');
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) - h) + str.charCodeAt(i);
+      h |= 0;
+    }
+    return h;
+  };
+
   const updateStaleContextMap = (updater) => {
     const next = typeof updater === 'function'
       ? updater(staleContextMapRef.current)
@@ -136,15 +153,28 @@ export default function CreateNewLesson() {
   // Handler: called when user edits a field value via the UI.
   // Updates fieldValues AND pushes staleness to any AI-enabled field
   // that uses the changed field as context.
+  // If the edit reverts a context field back to its value at generation time,
+  // the downstream field is no longer stale.
   // Skipped during initial load — staleness is only tracked on manual edits.
   const handleFieldChanged = (changedFieldId, newValue) => {
     setFieldValues(prev => ({ ...prev, [changedFieldId]: newValue }));
+
+    // Clear red highlight on this field once it has a value
+    if (highlightedMissingFields.has(changedFieldId) && !isEmptyValue(newValue)) {
+      setHighlightedMissingFields(prev => {
+        const next = new Set(prev);
+        next.delete(changedFieldId);
+        return next;
+      });
+    }
 
     // Don't run stale detection during initial load
     if (!loadingCompleteRef.current) return;
 
     const changedField = fields.find(f => f.id === changedFieldId);
     if (!changedField) return;
+
+    const newHash = hashValue(newValue);
 
     const dependentFields = fields.filter(f =>
       f.aiEnabled &&
@@ -157,12 +187,50 @@ export default function CreateNewLesson() {
       updateStaleContextMap(prevMap => {
         const next = { ...prevMap };
         for (const dep of dependentFields) {
-          const existing = new Set(next[dep.id] || []);
-          existing.add(changedField.name);
-          next[dep.id] = [...existing];
+          const snapshot = contextSnapshotRef.current[dep.id];
+          const snapshotHash = snapshot?.[changedFieldId];
+
+          if (snapshotHash !== undefined && newHash === snapshotHash) {
+            // Value reverted to what it was at generation time — remove this field from stale list
+            const existing = new Set(next[dep.id] || []);
+            existing.delete(changedField.name);
+            if (existing.size === 0) {
+              delete next[dep.id];
+            } else {
+              next[dep.id] = [...existing];
+            }
+          } else {
+            // Value differs from generation snapshot — mark as stale
+            const existing = new Set(next[dep.id] || []);
+            existing.add(changedField.name);
+            next[dep.id] = [...existing];
+          }
         }
         return next;
       });
+    }
+  };
+
+  // Dismiss stale indicator for a field: clears its stale entry and
+  // re-snapshots current context values as the new baseline.
+  const handleDismissStale = (fieldId) => {
+    const field = fields.find(f => f.id === fieldId);
+    if (!field) return;
+
+    // Clear stale entry
+    updateStaleContextMap(prev => {
+      const next = { ...prev };
+      delete next[fieldId];
+      return next;
+    });
+
+    // Re-snapshot current context values so future comparisons use the new baseline
+    if (field.ai_context_field_ids?.length > 0) {
+      const snapshot = {};
+      for (const ctxId of field.ai_context_field_ids) {
+        snapshot[ctxId] = hashValue(fieldValues[ctxId]);
+      }
+      contextSnapshotRef.current = { ...contextSnapshotRef.current, [fieldId]: snapshot };
     }
   };
 
@@ -246,6 +314,24 @@ export default function CreateNewLesson() {
     return getMissingRequiredFields(fields, valuesToCheck);
   };
 
+  // Build a list of fields with stale context for display in preview/export modals
+  const getStaleFieldsList = () => {
+    const currentMap = staleContextMapRef.current;
+    const stale = [];
+    for (const [fieldId, changedNames] of Object.entries(currentMap)) {
+      if (!changedNames || changedNames.length === 0) continue;
+      const field = fields.find(f => f.id === fieldId);
+      if (!field) continue;
+      stale.push({
+        id: field.id,
+        name: field.name,
+        section: field.fieldFor === 'designer' ? 'Designer' : 'Builder',
+        changedContextNames: changedNames,
+      });
+    }
+    return stale;
+  };
+
   // Handler: export lesson as markdown
   const handleExportLesson = async () => {
     // Auto-save before exporting
@@ -301,7 +387,8 @@ export default function CreateNewLesson() {
     // Check for missing required fields
     const missing = checkMissingRequiredFields(freshFieldValues);
     setMissingRequiredFields(missing);
-    
+    setStaleFieldsForModal(getStaleFieldsList());
+
     setShowExportModal(true);
   };
 
@@ -378,7 +465,8 @@ export default function CreateNewLesson() {
     // Check for missing required fields
     const missing = checkMissingRequiredFields(freshFieldValues);
     setMissingRequiredFields(missing);
-    
+    setStaleFieldsForModal(getStaleFieldsList());
+
     setShowPreviewModal(true);
   };
 
@@ -895,6 +983,15 @@ export default function CreateNewLesson() {
         }
         return next;
       });
+
+      // Snapshot context field values used for this generation
+      if (field.ai_context_field_ids?.length > 0) {
+        const snapshot = {};
+        for (const ctxId of field.ai_context_field_ids) {
+          snapshot[ctxId] = hashValue(fieldValues[ctxId]);
+        }
+        contextSnapshotRef.current = { ...contextSnapshotRef.current, [fieldId]: snapshot };
+      }
     } catch (error) {
       console.error('Error generating individual MCQ:', error);
       toast.error(`Failed to generate question: ${error.message}`);
@@ -1047,6 +1144,7 @@ export default function CreateNewLesson() {
                 designer_responses: designerResponses,
                 builder_responses: builderResponses,
                 stale_context_map: staleContextMapRef.current,
+                context_snapshot_map: contextSnapshotRef.current,
                 status: 'draft',
                 is_test: false,
                 created_at: new Date().toISOString()
@@ -1085,7 +1183,8 @@ export default function CreateNewLesson() {
           designer_responses: designerResponses,
           builder_responses: builderResponses,
           template_name: templateData.name,
-          stale_context_map: staleContextMapRef.current
+          stale_context_map: staleContextMapRef.current,
+          context_snapshot_map: contextSnapshotRef.current
         })
         .eq('id', effectiveLessonId);
       
@@ -1108,7 +1207,7 @@ export default function CreateNewLesson() {
     try {
       setGeneratingFieldId(field.id);
 
-      const missingContext = validateContextFieldsForField(field, fields, valuesOverride || fieldValues);
+      const missingContext = validateContextFieldsForField(field, fields, valuesOverride || fieldValues, { skipAIEnabled: false });
       if (missingContext.length > 0) {
         setMissingFields(missingContext);
         setShowMissingFieldsModal(true);
@@ -1329,6 +1428,15 @@ export default function CreateNewLesson() {
           }
           return next;
         });
+
+        // Snapshot context field values used for this generation
+        if (field.ai_context_field_ids?.length > 0) {
+          const snapshot = {};
+          for (const ctxId of field.ai_context_field_ids) {
+            snapshot[ctxId] = hashValue(effectiveFieldValues[ctxId]);
+          }
+          contextSnapshotRef.current = { ...contextSnapshotRef.current, [field.id]: snapshot };
+        }
 
         // Auto-save to database after image generation
         console.log('💾 Auto-saving lesson after image generation...');
@@ -1673,6 +1781,16 @@ export default function CreateNewLesson() {
         return next;
       });
 
+      // Snapshot context field values used for this generation
+      if (field.ai_context_field_ids?.length > 0) {
+        const snapshot = {};
+        const vals = valuesOverride || fieldValues;
+        for (const ctxId of field.ai_context_field_ids) {
+          snapshot[ctxId] = hashValue(vals[ctxId]);
+        }
+        contextSnapshotRef.current = { ...contextSnapshotRef.current, [field.id]: snapshot };
+      }
+
       // Return the generated content so continueGeneration can track it
       return generatedContent;
     } catch (error) {
@@ -1908,6 +2026,11 @@ export default function CreateNewLesson() {
             updateStaleContextMap(lesson.stale_context_map);
           }
 
+          // Restore context snapshot map from Supabase
+          if (lesson.context_snapshot_map && typeof lesson.context_snapshot_map === 'object') {
+            contextSnapshotRef.current = lesson.context_snapshot_map;
+          }
+
           // If lesson is locked, generate preview markdown for display
           if (!lockResult.success) {
             const templateNameToFunctionMap = {
@@ -2024,6 +2147,7 @@ export default function CreateNewLesson() {
             designer_responses: designerResponses,
             builder_responses: builderResponses,
             stale_context_map: staleContextMapRef.current,
+            context_snapshot_map: contextSnapshotRef.current,
             status: 'draft',
             is_test: false,
             created_at: new Date().toISOString()
@@ -2054,6 +2178,7 @@ export default function CreateNewLesson() {
             builder_responses: builderResponses,
             template_name: templateData.name,
             stale_context_map: staleContextMapRef.current,
+            context_snapshot_map: contextSnapshotRef.current,
             updated_by: session?.user?.id,
             updated_at: new Date().toISOString()
           })
@@ -2405,6 +2530,7 @@ export default function CreateNewLesson() {
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
               staleContextMap={staleContextMap}
+              onDismissStale={handleDismissStale}
               onUploadImage={handleUploadImage}
             />
 
@@ -2428,6 +2554,7 @@ export default function CreateNewLesson() {
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
               staleContextMap={staleContextMap}
+              onDismissStale={handleDismissStale}
               onUploadImage={handleUploadImage}
             />
             </div>
@@ -2460,7 +2587,7 @@ export default function CreateNewLesson() {
 
       <MissingFieldsModal
         visible={showMissingFieldsModal}
-        onClose={() => setShowMissingFieldsModal(false)}
+        onClose={() => { setShowMissingFieldsModal(false); setHighlightedMissingFields(new Set()); }}
         missingFields={missingFields}
       />
 
@@ -2495,6 +2622,7 @@ export default function CreateNewLesson() {
         <ExportModal
           markdown={exportMarkdown}
           missingRequiredFields={missingRequiredFields}
+          staleFields={staleFieldsForModal}
           templateName={templateData?.name}
           fields={fields}
           fieldValues={fieldValues}
@@ -2508,6 +2636,7 @@ export default function CreateNewLesson() {
           markdown={previewMarkdown}
           coverImage={previewCoverImage}
           missingRequiredFields={missingRequiredFields}
+          staleFields={staleFieldsForModal}
           onClose={() => setShowPreviewModal(false)}
         />
       )}

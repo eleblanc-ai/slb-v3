@@ -7,9 +7,9 @@ import { sanitizeHTML } from '../../lib/sanitize';
  * Handles common field functionality: title, type badge, required/AI badges, edit/delete actions, helper text
  * Also handles AI generation controls when field is AI-enabled
  */
-export default function BaseField({ 
-  field, 
-  onEdit, 
+export default function BaseField({
+  field,
+  onEdit,
   onDelete,
   onGenerateAI,
   onAIConfig,
@@ -17,9 +17,10 @@ export default function BaseField({
   hasGenerated = false,
   isMissing = false,
   staleContextNames = [],
+  onDismissStale,
   customGenerateLabel,
   hideRequiredAsterisk = false,
-  children 
+  children
 }) {
   const isStale = staleContextNames.length > 0;
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
@@ -170,26 +171,120 @@ export default function BaseField({
                 Required for AI Generation
               </span>
             )}
-            
-            {/* Stale / Outdated Badge with tooltip */}
+
+            {/* Stale / Outdated Badge with tooltip and dismiss */}
             {isStale && (
               <span
-                title={`Changed: ${staleContextNames.join(', ')}`}
                 style={{
-                  padding: '0.25rem 0.75rem',
+                  padding: '0.25rem 0.5rem 0.25rem 0.75rem',
                   backgroundColor: '#fffbeb',
                   color: '#d97706',
                   border: '1px solid #fde68a',
                   borderRadius: '9999px',
                   fontSize: '0.75rem',
                   fontWeight: 600,
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.25rem',
+                  gap: '0.375rem',
                   cursor: 'default'
-                }}>
-                <AlertTriangle size={12} />
-                Context Changed
+                }}
+              >
+                {/* Text/icon zone — own tooltip */}
+                <span
+                  style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+                  onMouseEnter={(e) => {
+                    const tip = e.currentTarget.querySelector('[data-stale-tip]');
+                    if (tip) tip.style.visibility = 'visible';
+                  }}
+                  onMouseLeave={(e) => {
+                    const tip = e.currentTarget.querySelector('[data-stale-tip]');
+                    if (tip) tip.style.visibility = 'hidden';
+                  }}
+                >
+                  <AlertTriangle size={12} />
+                  Context Changed
+                  <span
+                    data-stale-tip=""
+                    style={{
+                      visibility: 'hidden',
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      marginBottom: '6px',
+                      padding: '0.375rem 0.625rem',
+                      backgroundColor: '#1e293b',
+                      color: '#fff',
+                      fontSize: '0.6875rem',
+                      fontWeight: 500,
+                      borderRadius: '6px',
+                      whiteSpace: 'nowrap',
+                      zIndex: 50,
+                      pointerEvents: 'none',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                    }}
+                  >
+                    Changed: {staleContextNames.join(', ')}
+                  </span>
+                </span>
+                {/* Dismiss button — own tooltip */}
+                {onDismissStale && (
+                  <span
+                    style={{ position: 'relative', display: 'inline-flex' }}
+                    onMouseEnter={(e) => {
+                      const tip = e.currentTarget.querySelector('[data-dismiss-tip]');
+                      if (tip) tip.style.visibility = 'visible';
+                    }}
+                    onMouseLeave={(e) => {
+                      const tip = e.currentTarget.querySelector('[data-dismiss-tip]');
+                      if (tip) tip.style.visibility = 'hidden';
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onDismissStale(); }}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #fca5a5',
+                        borderRadius: '9999px',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        padding: '0.125rem 0.375rem',
+                        fontSize: '0.625rem',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        transition: 'all 0.15s'
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fee2e2'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
+                      ✕
+                    </button>
+                    <span
+                      data-dismiss-tip=""
+                      style={{
+                        visibility: 'hidden',
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        marginBottom: '6px',
+                        padding: '0.25rem 0.5rem',
+                        backgroundColor: '#1e293b',
+                        color: '#fff',
+                        fontSize: '0.6875rem',
+                        fontWeight: 500,
+                        borderRadius: '6px',
+                        whiteSpace: 'nowrap',
+                        zIndex: 51,
+                        pointerEvents: 'none',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                      }}
+                    >
+                      Dismiss
+                    </span>
+                  </span>
+                )}
               </span>
             )}
           </div>

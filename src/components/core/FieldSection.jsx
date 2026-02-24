@@ -55,6 +55,7 @@ export default function FieldSection({
   defaultStandardFramework,
   isFieldUsedAsContext,
   staleContextMap,
+  onDismissStale,
   onEditField,
   onDeleteField,
   onAddField,
@@ -182,6 +183,7 @@ export default function FieldSection({
                       onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                       defaultStandardFramework={defaultStandardFramework}
                       staleContextNames={staleContextMap?.[field.id] || []}
+                      onDismissStale={onDismissStale ? () => onDismissStale(field.id) : undefined}
                       onUploadImage={onUploadImage}
                     />
                   </SortableField>
@@ -220,6 +222,7 @@ export default function FieldSection({
                 onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                 defaultStandardFramework={defaultStandardFramework}
                 staleContextNames={staleContextMap?.[field.id] || []}
+                onDismissStale={onDismissStale ? () => onDismissStale(field.id) : undefined}
                 onUploadImage={onUploadImage}
               />
             );

@@ -4,11 +4,11 @@ import TipTapEditor from '../core/TipTapEditor';
 /**
  * RichTextField - Renders a rich text editor field
  */
-export default function RichTextField({ 
-  field, 
-  value, 
-  onChange, 
-  onEdit, 
+export default function RichTextField({
+  field,
+  value,
+  onChange,
+  onEdit,
   onDelete,
   onGenerateAI,
   onAIConfig,
@@ -16,12 +16,13 @@ export default function RichTextField({
   hasGenerated,
   isMissing,
   staleContextNames,
+  onDismissStale,
   hideRequiredAsterisk
 }) {
   return (
-    <BaseField 
-      field={field} 
-      onEdit={onEdit} 
+    <BaseField
+      field={field}
+      onEdit={onEdit}
       onDelete={onDelete}
       onGenerateAI={onGenerateAI}
       onAIConfig={onAIConfig}
@@ -29,6 +30,7 @@ export default function RichTextField({
       hasGenerated={hasGenerated}
       isMissing={isMissing}
       staleContextNames={staleContextNames}
+      onDismissStale={onDismissStale}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>

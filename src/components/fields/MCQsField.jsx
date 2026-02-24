@@ -79,6 +79,7 @@ export default function MCQsField({
   isGenerating = false,
   isMissing,
   staleContextNames,
+  onDismissStale,
   defaultStandardFramework = 'CCSS',
 }) {
   const [activeTab, setActiveTab] = useState(0);
@@ -210,6 +211,7 @@ export default function MCQsField({
       isGenerating={isGenerating}
       isMissing={isMissing}
       staleContextNames={staleContextNames}
+      onDismissStale={onDismissStale}
     >
       <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
         {/* Tabs */}
