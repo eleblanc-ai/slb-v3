@@ -48,9 +48,9 @@ export default function CreateNewLesson() {
   
   // Helper function to check if a field is used as context by any AI-enabled field
   const isFieldUsedAsContext = (fieldId) => {
-    return fields.some(f => 
-      f.aiEnabled && 
-      f.ai_context_field_ids && 
+    return fields.some(f =>
+      f.aiEnabled &&
+      f.ai_context_field_ids &&
       f.ai_context_field_ids.includes(fieldId)
     );
   };
@@ -88,15 +88,21 @@ export default function CreateNewLesson() {
   const autoSaveTimeoutRef = useRef(null);
   const autoCreateLessonPromiseRef = useRef(null);
   const generationCancelledRef = useRef(false);
+  const handleGenerateLessonRef = useRef(null);
+  const loadingCompleteRef = useRef(false);
   const [showExportModal, setShowExportModal] = useState(false);
 
   const handlePreFormClose = async () => {
     setShowPreFormModal(false);
     setPreFormCompleted(true);
-    // Trigger generate button animation
-    setPulseGenerateButton(true);
 
     await autoSaveLesson(fieldValues);
+
+    // Automatically kick off full lesson generation
+    // Use setTimeout to let state settle after modal close + save
+    setTimeout(() => {
+      handleGenerateLessonRef.current?.();
+    }, 300);
   };
   const [exportMarkdown, setExportMarkdown] = useState('');
   const [showUploadCoverImageModal, setShowUploadCoverImageModal] = useState(false);
@@ -109,7 +115,57 @@ export default function CreateNewLesson() {
   const [pulseGenerateButton, setPulseGenerateButton] = useState(false);
   const [duplicateContentIdWarning, setDuplicateContentIdWarning] = useState(null);
   const generateButtonRef = useRef(null);
-  
+
+  // Track which AI fields have stale context. Push-model: updated when field values change.
+  // Shape: { [aiFieldId]: string[] (names of changed context fields) }
+  // Persisted to Supabase so it survives page reloads.
+  //
+  // We use a ref as the synchronous source of truth (so saves always get
+  // the latest value even inside async callbacks) and state to drive renders.
+  const [staleContextMap, setStaleContextMap] = useState({});
+  const staleContextMapRef = useRef({});
+
+  const updateStaleContextMap = (updater) => {
+    const next = typeof updater === 'function'
+      ? updater(staleContextMapRef.current)
+      : updater;
+    staleContextMapRef.current = next;
+    setStaleContextMap(next);
+  };
+
+  // Handler: called when user edits a field value via the UI.
+  // Updates fieldValues AND pushes staleness to any AI-enabled field
+  // that uses the changed field as context.
+  // Skipped during initial load — staleness is only tracked on manual edits.
+  const handleFieldChanged = (changedFieldId, newValue) => {
+    setFieldValues(prev => ({ ...prev, [changedFieldId]: newValue }));
+
+    // Don't run stale detection during initial load
+    if (!loadingCompleteRef.current) return;
+
+    const changedField = fields.find(f => f.id === changedFieldId);
+    if (!changedField) return;
+
+    const dependentFields = fields.filter(f =>
+      f.aiEnabled &&
+      f.id !== changedFieldId &&
+      f.ai_context_field_ids?.includes(changedFieldId) &&
+      !isEmptyValue(fieldValues[f.id])
+    );
+
+    if (dependentFields.length > 0) {
+      updateStaleContextMap(prevMap => {
+        const next = { ...prevMap };
+        for (const dep of dependentFields) {
+          const existing = new Set(next[dep.id] || []);
+          existing.add(changedField.name);
+          next[dep.id] = [...existing];
+        }
+        return next;
+      });
+    }
+  };
+
   // Lesson lock hook
   const { isLessonLocked, lockOwner, lockOwnerName, acquireLessonLock, releaseLessonLock, refreshLessonLock } = useLessonLock(lessonId, session, profile);
 
@@ -826,6 +882,19 @@ export default function CreateNewLesson() {
       }));
       
       setHasGeneratedMap(prev => ({ ...prev, [fieldId]: true }));
+      // Clear this field's stale status and mark downstream fields as stale
+      updateStaleContextMap(prev => {
+        const next = { ...prev };
+        delete next[fieldId];
+        for (const f of fields) {
+          if (f.aiEnabled && f.id !== fieldId && f.ai_context_field_ids?.includes(fieldId) && !isEmptyValue(fieldValues[f.id])) {
+            const existing = new Set(next[f.id] || []);
+            existing.add(field.name);
+            next[f.id] = [...existing];
+          }
+        }
+        return next;
+      });
     } catch (error) {
       console.error('Error generating individual MCQ:', error);
       toast.error(`Failed to generate question: ${error.message}`);
@@ -880,6 +949,9 @@ export default function CreateNewLesson() {
     // Generate all fields
     await continueGeneration();
   };
+
+  // Keep ref in sync so handlePreFormClose can call it
+  handleGenerateLessonRef.current = handleGenerateLesson;
 
   const handleStopGeneration = () => {
     generationCancelledRef.current = true;
@@ -974,6 +1046,7 @@ export default function CreateNewLesson() {
                 created_by: session?.user?.id,
                 designer_responses: designerResponses,
                 builder_responses: builderResponses,
+                stale_context_map: staleContextMapRef.current,
                 status: 'draft',
                 is_test: false,
                 created_at: new Date().toISOString()
@@ -1011,7 +1084,8 @@ export default function CreateNewLesson() {
         .update({
           designer_responses: designerResponses,
           builder_responses: builderResponses,
-          template_name: templateData.name
+          template_name: templateData.name,
+          stale_context_map: staleContextMapRef.current
         })
         .eq('id', effectiveLessonId);
       
@@ -1083,8 +1157,8 @@ export default function CreateNewLesson() {
           fieldAIConfig = fieldData;
         }
         
-        // Read field values from localStorage
-        const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+        // Use valuesOverride if provided (e.g. during generate-all), fall back to localStorage
+        const effectiveFieldValues = valuesOverride || JSON.parse(localStorage.getItem('fieldValues') || '{}');
         
         // Build prompt using the AI config
         const aiConfig = {
@@ -1094,12 +1168,12 @@ export default function CreateNewLesson() {
           contextInstructions: fieldAIConfig.ai_context_instructions || '',
           selectedFieldIds: fieldAIConfig.ai_context_field_ids || [],
           allFields: fields,
-          fieldValues: storedFieldValues
+          fieldValues: effectiveFieldValues
         };
 
         // For images, we want a cleaner prompt focused on visual description
         // If the user provided a description, use that as the primary prompt
-        const currentFieldValue = storedFieldValues[field.id];
+        const currentFieldValue = effectiveFieldValues[field.id];
         let imagePrompt = '';
         
         if (currentFieldValue && currentFieldValue.description && currentFieldValue.description.trim()) {
@@ -1116,7 +1190,7 @@ export default function CreateNewLesson() {
           let contextDetails = [];
           fieldAIConfig.ai_context_field_ids.forEach(id => {
             const contextField = fields.find(f => f.id === id);
-            const val = storedFieldValues[id];
+            const val = effectiveFieldValues[id];
             if (contextField && val) {
               const displayVal = typeof val === 'string' ? val : (val.text || val.value || JSON.stringify(val));
               // Strip HTML for the image generator
@@ -1242,14 +1316,27 @@ export default function CreateNewLesson() {
           return newValues;
         });
         setHasGeneratedMap(prev => ({ ...prev, [field.id]: true }));
-        
+        // Clear this field's stale status and mark downstream fields as stale
+        updateStaleContextMap(prev => {
+          const next = { ...prev };
+          delete next[field.id];
+          for (const f of fields) {
+            if (f.aiEnabled && f.id !== field.id && f.ai_context_field_ids?.includes(field.id) && !isEmptyValue(fieldValues[f.id])) {
+              const existing = new Set(next[f.id] || []);
+              existing.add(field.name);
+              next[f.id] = [...existing];
+            }
+          }
+          return next;
+        });
+
         // Auto-save to database after image generation
         console.log('💾 Auto-saving lesson after image generation...');
         if (lessonId) {
           const designerFields = fields.filter(f => f.fieldFor === 'designer');
           const builderFields = fields.filter(f => f.fieldFor === 'builder');
           
-          const updatedFieldValues = { ...storedFieldValues, [field.id]: imageFieldValue };
+          const updatedFieldValues = { ...effectiveFieldValues, [field.id]: imageFieldValue };
           
           const designResponses = {};
           designerFields.forEach(f => {
@@ -1288,7 +1375,7 @@ export default function CreateNewLesson() {
         
         console.log('✅ Image generation complete');
         setGeneratingFieldId(null);
-        return;
+        return imageFieldValue;
       }
       
       let fieldAIConfig = null;
@@ -1572,7 +1659,20 @@ export default function CreateNewLesson() {
       // Update the field value
       setFieldValues(prev => ({ ...prev, [field.id]: generatedContent }));
       setHasGeneratedMap(prev => ({ ...prev, [field.id]: true }));
-      
+      // Clear this field's stale status and mark downstream fields as stale
+      updateStaleContextMap(prev => {
+        const next = { ...prev };
+        delete next[field.id];
+        for (const f of fields) {
+          if (f.aiEnabled && f.id !== field.id && f.ai_context_field_ids?.includes(field.id) && !isEmptyValue(fieldValues[f.id])) {
+            const existing = new Set(next[f.id] || []);
+            existing.add(field.name);
+            next[f.id] = [...existing];
+          }
+        }
+        return next;
+      });
+
       // Return the generated content so continueGeneration can track it
       return generatedContent;
     } catch (error) {
@@ -1802,7 +1902,12 @@ export default function CreateNewLesson() {
           });
           console.log('📦 Final loadedValues:', loadedValues);
           setFieldValues(loadedValues);
-          
+
+          // Restore stale context map from Supabase
+          if (lesson.stale_context_map && typeof lesson.stale_context_map === 'object') {
+            updateStaleContextMap(lesson.stale_context_map);
+          }
+
           // If lesson is locked, generate preview markdown for display
           if (!lockResult.success) {
             const templateNameToFunctionMap = {
@@ -1838,6 +1943,10 @@ export default function CreateNewLesson() {
       toast.error('Failed to load lesson template. Please try again.');
     } finally {
       setLoading(false);
+      // Allow stale detection now that initial load is complete.
+      // Use a short delay so React can finish rendering loaded field values
+      // without any component onChange callbacks triggering stale detection.
+      setTimeout(() => { loadingCompleteRef.current = true; }, 500);
     }
   };
 
@@ -1914,18 +2023,19 @@ export default function CreateNewLesson() {
             created_by: session?.user?.id,
             designer_responses: designerResponses,
             builder_responses: builderResponses,
+            stale_context_map: staleContextMapRef.current,
             status: 'draft',
             is_test: false,
             created_at: new Date().toISOString()
           })
           .select()
           .single();
-        
+
         if (insertError) {
           console.error('❌ Insert error:', insertError);
           throw insertError;
         }
-        
+
         console.log('✅ NEW LESSON CREATED:', newLesson.id);
         setCurrentLessonId(newLesson.id);
         
@@ -1943,6 +2053,7 @@ export default function CreateNewLesson() {
             designer_responses: designerResponses,
             builder_responses: builderResponses,
             template_name: templateData.name,
+            stale_context_map: staleContextMapRef.current,
             updated_by: session?.user?.id,
             updated_at: new Date().toISOString()
           })
@@ -2281,6 +2392,7 @@ export default function CreateNewLesson() {
               fields={fields}
               fieldValues={fieldValues}
               setFieldValues={setFieldValues}
+              onFieldChanged={handleFieldChanged}
               layoutMode={layoutMode}
               setLayoutMode={setLayoutMode}
               showControls={layoutMode === 'stacked'}
@@ -2292,6 +2404,7 @@ export default function CreateNewLesson() {
               handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
+              staleContextMap={staleContextMap}
               onUploadImage={handleUploadImage}
             />
 
@@ -2302,6 +2415,7 @@ export default function CreateNewLesson() {
               fields={fields}
               fieldValues={fieldValues}
               setFieldValues={setFieldValues}
+              onFieldChanged={handleFieldChanged}
               layoutMode={layoutMode}
               setLayoutMode={setLayoutMode}
               showControls={layoutMode === 'side-by-side'}
@@ -2313,6 +2427,7 @@ export default function CreateNewLesson() {
               handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
+              staleContextMap={staleContextMap}
               onUploadImage={handleUploadImage}
             />
             </div>

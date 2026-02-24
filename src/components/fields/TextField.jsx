@@ -13,6 +13,8 @@ export default function TextField({
   onAIConfig,
   isGenerating,
   hasGenerated,
+  isMissing,
+  staleContextNames,
   hideRequiredAsterisk
 }) {
   return (
@@ -24,6 +26,8 @@ export default function TextField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      isMissing={isMissing}
+      staleContextNames={staleContextNames}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>

@@ -15,7 +15,8 @@ import { gradientButton, liftOnHover } from '../../styles/shared';
  *  - fieldType          – 'designer' | 'builder'
  *  - fields             – all fields array
  *  - fieldValues        – current values object
- *  - setFieldValues     – state setter
+ *  - setFieldValues     – state setter (used for non-user changes & fallback)
+ *  - onFieldChanged     – (fieldId, value) => void  (lesson mode: updates value + stale detection)
  *  - sensors            – DnD sensors
  *  - handleDragEnd      – (event, fieldType) => void
  *  - layoutMode         – 'stacked' | 'side-by-side'
@@ -32,7 +33,6 @@ import { gradientButton, liftOnHover } from '../../styles/shared';
  *  - onEditField        – (field) => void  (template mode only, optional)
  *  - onDeleteField      – (fieldId) => void  (template mode only, optional)
  *  - onAddField         – () => void  (template mode only, optional)
- *  - onUploadImage      – (field, file, existingUrl) => Promise  (image upload handler)
  */
 export default function FieldSection({
   sectionLabel,
@@ -40,6 +40,7 @@ export default function FieldSection({
   fields,
   fieldValues,
   setFieldValues,
+  onFieldChanged,
   sensors,
   handleDragEnd,
   layoutMode,
@@ -53,12 +54,23 @@ export default function FieldSection({
   handleGenerateIndividualMCQ,
   defaultStandardFramework,
   isFieldUsedAsContext,
+  staleContextMap,
   onEditField,
   onDeleteField,
   onAddField,
   onUploadImage,
 }) {
   const sectionFields = fields.filter((f) => f.fieldFor === fieldType);
+
+  // Use onFieldChanged (which includes stale detection) when available,
+  // otherwise fall back to raw setFieldValues (template mode).
+  const makeOnChange = (fieldId) => (value) => {
+    if (onFieldChanged) {
+      onFieldChanged(fieldId, value);
+    } else {
+      setFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+    }
+  };
 
   return (
     <div style={{ minWidth: 0 }}>
@@ -158,9 +170,7 @@ export default function FieldSection({
                     <FieldRenderer
                       field={field}
                       value={fieldValues[field.id]}
-                      onChange={(value) =>
-                        setFieldValues((prev) => ({ ...prev, [field.id]: value }))
-                      }
+                      onChange={makeOnChange(field.id)}
                       isMissing={isMissing}
                       isUsedAsContext={usedAsCtx}
                       onEdit={onEditField}
@@ -171,6 +181,7 @@ export default function FieldSection({
                       hasGenerated={!!hasGeneratedMap[field.id]}
                       onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                       defaultStandardFramework={defaultStandardFramework}
+                      staleContextNames={staleContextMap?.[field.id] || []}
                       onUploadImage={onUploadImage}
                     />
                   </SortableField>
@@ -197,9 +208,7 @@ export default function FieldSection({
                 key={field.id}
                 field={field}
                 value={fieldValues[field.id]}
-                onChange={(value) =>
-                  setFieldValues((prev) => ({ ...prev, [field.id]: value }))
-                }
+                onChange={makeOnChange(field.id)}
                 isMissing={isMissing}
                 isUsedAsContext={usedAsCtx}
                 onEdit={onEditField}
@@ -210,6 +219,7 @@ export default function FieldSection({
                 hasGenerated={!!hasGeneratedMap[field.id]}
                 onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                 defaultStandardFramework={defaultStandardFramework}
+                staleContextNames={staleContextMap?.[field.id] || []}
                 onUploadImage={onUploadImage}
               />
             );

@@ -18,6 +18,8 @@ export default function AssignStandardsField({
   onAIConfig,
   isGenerating,
   hasGenerated,
+  isMissing,
+  staleContextNames,
   hideRequiredAsterisk
 }) {
   const toast = useToast();
@@ -294,6 +296,8 @@ export default function AssignStandardsField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      isMissing={isMissing}
+      staleContextNames={staleContextNames}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

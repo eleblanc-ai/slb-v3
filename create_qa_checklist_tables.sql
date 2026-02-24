@@ -236,25 +236,16 @@ BEGIN
     (s_id, 2, 'Gemini-first with DALL-E fallback', 'Check console logs during image generation.', '"Attempting image generation with Gemini 3 Pro Image..." then either success or "Using DALL-E" fallback.'),
     (s_id, 3, 'Passage summary for image prompts', 'Include a reading passage in context fields. Generate an image.', 'Image prompt incorporates a GPT-3.5 summary of the passage (check console logs).'),
     (s_id, 4, 'Alt text generation', 'Generate an image and check the alt text field.', 'Alt text is auto-generated via GPT-4o Vision. Describes the educational content.'),
-    (s_id, 5, 'Supabase storage path (lesson ID)', 'Generate an image and check Supabase storage bucket.', 'File stored at {templateName}/{lessonId}.png — not Content ID.'),
-    (s_id, 6, 'Uses browser SDK', 'Open DevTools Network tab. Generate an image.', 'Request goes to generativelanguage.googleapis.com (Gemini) or api.openai.com (DALL-E). No /api/ai/ requests.'),
-    (s_id, 7, 'View full-size image link', 'Generate or upload an image and look below the preview.', 'A "View full-size image" link opens the image in a new tab (without cache-bust param).'),
-    (s_id, 8, 'Upload user image (JPEG)', 'Click "Upload Image (JPEG)" and select a .jpg file.', 'Image uploads, appears in the field, alt text auto-generates, model shows "user-upload".'),
-    (s_id, 9, 'Upload rejects non-JPEG', 'Click "Upload Image (JPEG)" and select a PNG or GIF file.', 'Toast error "Please select a JPEG/JPG image file." — no upload occurs.'),
-    (s_id, 10, 'Upload replaces existing image', 'Generate an image with AI, then upload a JPEG over it.', 'Old image is deleted from storage, new image replaces it, URL updates.'),
-    (s_id, 11, 'Upload disabled while generating', 'Start AI generation and observe the upload button.', 'Upload button is disabled/greyed out during generation.'),
-    (s_id, 12, 'Upload auto-saves lesson', 'Upload an image, then reload the page.', 'Uploaded image and alt text persist after reload.'),
-    (s_id, 13, 'Re-generate after upload', 'Upload an image, then click "Regenerate" with AI.', 'Old uploaded image is replaced by new AI-generated image in storage.');
+    (s_id, 5, 'Supabase storage upload', 'Generate an image and check Supabase storage.', 'Image uploaded to lesson-images bucket. URL stored in field values.'),
+    (s_id, 6, 'Uses browser SDK', 'Open DevTools Network tab. Generate an image.', 'Request goes to generativelanguage.googleapis.com (Gemini) or api.openai.com (DALL-E). No /api/ai/ requests.');
 
   -- 11 · Preview & Export
   INSERT INTO public.qa_checklist_sections (sort_order, title) VALUES (11, '11 · Preview & Export') RETURNING id INTO s_id;
   INSERT INTO public.qa_checklist_items (section_id, sort_order, label, action, expect) VALUES
     (s_id, 1, 'Preview lesson', 'Click "Preview Lesson" (Eye icon).', 'PreviewModal renders markdown as HTML. Cover image displayed if available.'),
-    (s_id, 2, 'Preview — field names are blue', 'Preview a lesson with a passage that has sub-headers.', 'Field names (e.g. "Passage", "Read") render in blue; passage sub-headers render in black.'),
-    (s_id, 3, 'Preview — glossary words bold + blue', 'Preview a lesson with *asterisk* words in the passage.', 'Words render bold and in the same blue as field names.'),
-    (s_id, 4, 'Export markdown', 'Click "Export Lesson Content" (Download icon).', 'ExportModal shows markdown preview. "Download" saves as {ContentID}.md. "Copy to Clipboard" works.'),
-    (s_id, 5, 'Export with missing fields', 'Export before filling all required fields.', 'Warning shown. Download and Copy buttons disabled.'),
-    (s_id, 6, 'Auto-save before export', 'Make unsaved changes, then click Export.', 'Lesson auto-saves before the export modal opens.');
+    (s_id, 2, 'Export markdown', 'Click "Export Lesson Content" (Download icon).', 'ExportModal shows markdown preview. "Download" saves as {ContentID}.md. "Copy to Clipboard" works.'),
+    (s_id, 3, 'Export with missing fields', 'Export before filling all required fields.', 'Warning shown. Download and Copy buttons disabled.'),
+    (s_id, 4, 'Auto-save before export', 'Make unsaved changes, then click Export.', 'Lesson auto-saves before the export modal opens.');
 
   -- 12 · Upload Cover Image Modal
   INSERT INTO public.qa_checklist_sections (sort_order, title) VALUES (12, '12 · Upload Cover Image Modal') RETURNING id INTO s_id;

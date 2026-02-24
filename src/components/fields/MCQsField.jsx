@@ -77,6 +77,8 @@ export default function MCQsField({
   onEdit,
   onDelete,
   isGenerating = false,
+  isMissing,
+  staleContextNames,
   defaultStandardFramework = 'CCSS',
 }) {
   const [activeTab, setActiveTab] = useState(0);
@@ -206,6 +208,8 @@ export default function MCQsField({
       onGenerateAI={onAIGenerate}
       customGenerateLabel="Generate All 5 Questions"
       isGenerating={isGenerating}
+      isMissing={isMissing}
+      staleContextNames={staleContextNames}
     >
       <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
         {/* Tabs */}

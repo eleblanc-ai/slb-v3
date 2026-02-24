@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit2, Trash2, ChevronDown, Sparkles, Settings } from 'lucide-react';
+import { Edit2, Trash2, ChevronDown, Sparkles, Settings, AlertTriangle } from 'lucide-react';
 import { sanitizeHTML } from '../../lib/sanitize';
 
 /**
@@ -16,11 +16,12 @@ export default function BaseField({
   isGenerating = false,
   hasGenerated = false,
   isMissing = false,
+  staleContextNames = [],
   customGenerateLabel,
-  isUsedAsContext = false,
   hideRequiredAsterisk = false,
   children 
 }) {
+  const isStale = staleContextNames.length > 0;
   const [isHelperTextOpen, setIsHelperTextOpen] = useState(false);
   const getTypeLabel = (type) => {
     const typeLabels = {
@@ -40,12 +41,12 @@ export default function BaseField({
     <div
       style={{
         padding: '1.5rem',
-        border: isMissing ? '2px solid #ef4444' : '2px solid var(--gray-200)',
+        border: isMissing ? '2px solid #ef4444' : isStale ? '2px solid #fbbf24' : '2px solid var(--gray-200)',
         borderRadius: '12px',
-        backgroundColor: isMissing ? '#fef2f2' : '#fff',
+        backgroundColor: isMissing ? '#fef2f2' : isStale ? '#fffdf5' : '#fff',
         transition: 'all 0.2s',
         position: 'relative',
-        boxShadow: isMissing ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none'
+        boxShadow: isMissing ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : isStale ? '0 0 0 3px rgba(251, 191, 36, 0.1)' : 'none'
       }}
     >
       {/* Action Buttons - top right, absolute - only show in template editing mode */}
@@ -170,20 +171,25 @@ export default function BaseField({
               </span>
             )}
             
-            {/* Used as Context Badge */}
-            {isUsedAsContext && (
-              <span style={{
-                padding: '0.25rem 0.75rem',
-                backgroundColor: '#fef3c7',
-                color: '#92400e',
-                borderRadius: '9999px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.25rem'
-              }}>
-                📎 Context Field
+            {/* Stale / Outdated Badge with tooltip */}
+            {isStale && (
+              <span
+                title={`Changed: ${staleContextNames.join(', ')}`}
+                style={{
+                  padding: '0.25rem 0.75rem',
+                  backgroundColor: '#fffbeb',
+                  color: '#d97706',
+                  border: '1px solid #fde68a',
+                  borderRadius: '9999px',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  cursor: 'default'
+                }}>
+                <AlertTriangle size={12} />
+                Context Changed
               </span>
             )}
           </div>

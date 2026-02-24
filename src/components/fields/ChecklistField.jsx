@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BaseField from './BaseField';
 
-export default function ChecklistField({ field, value, onChange, onEdit, onDelete, onAIConfig, onGenerateAI, isGenerating, hasGenerated, hideRequiredAsterisk }) {
+export default function ChecklistField({ field, value, onChange, onEdit, onDelete, onAIConfig, onGenerateAI, isGenerating, hasGenerated, isMissing, staleContextNames, hideRequiredAsterisk }) {
   const [error, setError] = useState('');
   
   // Debug logging
@@ -80,6 +80,8 @@ export default function ChecklistField({ field, value, onChange, onEdit, onDelet
       onGenerateAI={onGenerateAI}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      isMissing={isMissing}
+      staleContextNames={staleContextNames}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>

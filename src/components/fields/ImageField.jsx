@@ -3,17 +3,18 @@ import { Upload } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import BaseField from './BaseField';
 
-export default function ImageField({ 
-  field, 
-  value, 
-  onChange, 
-  onEdit, 
-  onDelete, 
-  onAIConfig, 
-  onGenerateAI, 
-  isGenerating, 
+export default function ImageField({
+  field,
+  value,
+  onChange,
+  onEdit,
+  onDelete,
+  onAIConfig,
+  onGenerateAI,
+  isGenerating,
   hasGenerated,
   isMissing,
+  staleContextNames,
   hideRequiredAsterisk,
   onUploadImage
 }) {
@@ -111,15 +112,16 @@ export default function ImageField({
   };
 
   return (
-    <BaseField 
+    <BaseField
       field={field}
-      onEdit={onEdit} 
+      onEdit={onEdit}
       onDelete={onDelete}
       onAIConfig={onAIConfig}
       onGenerateAI={onGenerateAI}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
       isMissing={isMissing}
+      staleContextNames={staleContextNames}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.75rem 0' }}>

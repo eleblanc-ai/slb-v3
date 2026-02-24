@@ -14,6 +14,8 @@ export default function RichTextField({
   onAIConfig,
   isGenerating,
   hasGenerated,
+  isMissing,
+  staleContextNames,
   hideRequiredAsterisk
 }) {
   return (
@@ -25,6 +27,8 @@ export default function RichTextField({
       onAIConfig={onAIConfig}
       isGenerating={isGenerating}
       hasGenerated={hasGenerated}
+      isMissing={isMissing}
+      staleContextNames={staleContextNames}
       hideRequiredAsterisk={hideRequiredAsterisk}
     >
       <div style={{ marginTop: '0.75rem' }}>

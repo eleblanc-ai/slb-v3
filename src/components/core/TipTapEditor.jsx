@@ -78,7 +78,7 @@ export default function TipTapEditor({
   useEffect(() => {
     if (editor && content && editor.getHTML() !== content) {
       const htmlContent = convertNewlinesToHTML(content);
-      editor.commands.setContent(htmlContent);
+      editor.commands.setContent(htmlContent, { emitUpdate: false });
     }
   }, [content, editor]);
 
