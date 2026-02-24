@@ -310,11 +310,11 @@ export default function CreateNewLesson() {
     // Remove Additional Notes section from preview
     markdown = markdown.replace(/#Additional Notes\s*\n[\s\S]*?(?=\n#|\n*$)/g, '');
     
-    // Convert single # to ### for h3 headings
-    markdown = markdown.replace(/^#([^#\s])/gm, '### $1');
+    // Convert single # field-name headers to classed h3 (blue styling via CSS)
+    markdown = markdown.replace(/^#([^#\s].*)$/gm, '<h3 class="field-name">$1</h3>');
     
-    // Convert *word* to bold blue spans (but not **word** which is already bold)
-    markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span style="font-weight: 600; color: #3b82f6;">$1</span>');
+    // Convert *word* to glossary-word spans (bold + blue via CSS class)
+    markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span class="glossary-word">$1</span>');
     
     setPreviewMarkdown(markdown);
     setPreviewCoverImage(imageUrl);
@@ -324,6 +324,118 @@ export default function CreateNewLesson() {
     setMissingRequiredFields(missing);
     
     setShowPreviewModal(true);
+  };
+
+  // Handler: upload user-provided image for an image field
+  const handleUploadImage = async (field, file, existingUrl) => {
+    if (!lessonId) {
+      throw new Error('Lesson must be saved before uploading an image.');
+    }
+
+    const templateFolder = templateData?.name || 'unknown-template';
+    const fileName = `${templateFolder}/${lessonId}.png`;
+
+    // If there's an existing image in storage, delete it first
+    if (existingUrl && existingUrl.includes('lesson-images')) {
+      console.log('🗑️ Deleting existing image before upload...');
+      await supabase.storage.from('lesson-images').remove([fileName]);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Convert JPEG file to base64 data URL for alt text generation
+    const fileReader = new FileReader();
+    const dataUrl = await new Promise((resolve, reject) => {
+      fileReader.onload = () => resolve(fileReader.result);
+      fileReader.onerror = reject;
+      fileReader.readAsDataURL(file);
+    });
+
+    // Upload file to Supabase Storage as PNG
+    console.log('☁️ Uploading user image:', fileName);
+    const { error: uploadError } = await supabase.storage
+      .from('lesson-images')
+      .upload(fileName, file, {
+        contentType: file.type,
+        cacheControl: '0',
+        upsert: true
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload image: ${uploadError.message}`);
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('lesson-images')
+      .getPublicUrl(fileName);
+    const cacheBustedUrl = `${publicUrl}?t=${Date.now()}`;
+    console.log('✅ Image uploaded to:', cacheBustedUrl);
+
+    // Generate alt text
+    let generatedAltText = '';
+    try {
+      console.log('📝 Generating alt text for uploaded image...');
+      generatedAltText = await generateAltText(dataUrl);
+      console.log('✅ Alt text generated:', generatedAltText);
+    } catch (err) {
+      console.warn('Alt text generation failed, continuing without it:', err);
+    }
+
+    // Build updated field value
+    const imageFieldValue = {
+      url: cacheBustedUrl,
+      altText: generatedAltText,
+      imageModel: 'user-upload',
+      altTextModel: generatedAltText ? 'gpt-4o' : '',
+      description: fieldValues[field.id]?.description || ''
+    };
+
+    // Update state
+    setFieldValues(prev => ({ ...prev, [field.id]: imageFieldValue }));
+    setHasGeneratedMap(prev => ({ ...prev, [field.id]: true }));
+
+    // Auto-save
+    if (lessonId) {
+      const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+      const updatedFieldValues = { ...storedFieldValues, [field.id]: imageFieldValue };
+
+      const designerFields = fields.filter(f => f.fieldFor === 'designer');
+      const builderFields = fields.filter(f => f.fieldFor === 'builder');
+
+      const designResponses = {};
+      designerFields.forEach(f => {
+        const value = updatedFieldValues[f.id];
+        if (f.type === 'checklist') {
+          designResponses[f.name] = Array.isArray(value) ? value : [];
+        } else if (f.type === 'image') {
+          designResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        } else {
+          designResponses[f.name] = value || f.placeholder || '';
+        }
+      });
+
+      const lessonResponses = {};
+      builderFields.forEach(f => {
+        const value = updatedFieldValues[f.id];
+        if (f.type === 'checklist') {
+          lessonResponses[f.name] = Array.isArray(value) ? value : [];
+        } else if (f.type === 'image') {
+          lessonResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        } else {
+          lessonResponses[f.name] = value || f.placeholder || '';
+        }
+      });
+
+      await supabase
+        .from('lessons')
+        .update({
+          designer_responses: designResponses,
+          builder_responses: lessonResponses
+        })
+        .eq('id', lessonId);
+
+      console.log('✅ Lesson auto-saved after image upload');
+    }
   };
 
   // Handler: save AI config - implements snapshot system for lesson-specific configs
@@ -1058,36 +1170,12 @@ export default function CreateNewLesson() {
         // Upload to Supabase Storage
         console.log('☁️ Uploading image to Supabase Storage...');
         
-        // Find Content ID field in designer responses
-        const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
-        const rawContentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
-        
-        if (!rawContentId) {
-          throw new Error('Content ID field not found. Please fill in the Content ID field first.');
-        }
-
-        // Sanitize the Content ID for use as a storage filename:
-        // Strip HTML, keep only alphanumeric/underscore/hyphen/dot, truncate to 120 chars
-        const contentId = rawContentId
-          .replace(/<[^>]*>/g, '')
-          .replace(/[^a-zA-Z0-9_\-\.]/g, '_')
-          .replace(/_+/g, '_')
-          .replace(/^_|_$/g, '')
-          .substring(0, 120);
-
-        if (!contentId) {
-          throw new Error('Content ID is empty after sanitization. Please enter a valid Content ID.');
+        if (!lessonId) {
+          throw new Error('Lesson must be saved before generating an image. Please save the lesson first.');
         }
         
-        // Get template name
-        const { data: templateData } = await supabase
-          .from('lesson_templates')
-          .select('name')
-          .eq('id', templateId)
-          .single();
-        
-        const templateName = templateData?.name || 'unknown-template';
-        const fileName = `${templateName}/${contentId}.png`;
+        const templateFolder = templateData?.name || 'unknown-template';
+        const fileName = `${templateFolder}/${lessonId}.png`;
         
         // Convert base64 to blob
         const base64Data = imageDataUrl.split(',')[1];
@@ -1736,8 +1824,8 @@ export default function CreateNewLesson() {
               
               // Clean up markdown for preview
               markdown = markdown.replace(/#Additional Notes\s*\n[\s\S]*?(?=\n#|\n*$)/g, '');
-              markdown = markdown.replace(/^#([^#\s])/gm, '### $1');
-              markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span style="font-weight: 600; color: #3b82f6;">$1</span>');
+              markdown = markdown.replace(/^#([^#\s].*)$/gm, '<h3 class="field-name">$1</h3>');
+              markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span class="glossary-word">$1</span>');
               
               setPreviewMarkdown(markdown);
               setPreviewCoverImage(imageUrl);
@@ -2204,6 +2292,7 @@ export default function CreateNewLesson() {
               handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
+              onUploadImage={handleUploadImage}
             />
 
               {/* Builder Fields Section */}
@@ -2224,6 +2313,7 @@ export default function CreateNewLesson() {
               handleGenerateIndividualMCQ={handleGenerateIndividualMCQ}
               defaultStandardFramework={templateData?.default_standard_framework || 'CCSS'}
               isFieldUsedAsContext={isFieldUsedAsContext}
+              onUploadImage={handleUploadImage}
             />
             </div>
         </div>

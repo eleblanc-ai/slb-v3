@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Upload } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import BaseField from './BaseField';
 
@@ -13,9 +14,12 @@ export default function ImageField({
   isGenerating, 
   hasGenerated,
   isMissing,
-  hideRequiredAsterisk
+  hideRequiredAsterisk,
+  onUploadImage
 }) {
   const toast = useToast();
+  const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [imageDescription, setImageDescription] = useState(value?.description || '');
   const [aiGeneratedUrl, setAiGeneratedUrl] = useState(value?.url || '');
   const [altText, setAltText] = useState(value?.altText || '');
@@ -75,6 +79,37 @@ export default function ImageField({
     }
   };
 
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type (JPEG/JPG only)
+    if (!file.type.match(/^image\/jpe?g$/)) {
+      toast.error('Please select a JPEG/JPG image file.');
+      e.target.value = '';
+      return;
+    }
+
+    if (!onUploadImage) {
+      toast.error('Image upload is not available.');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Check if there's an existing image URL to delete
+      const existingUrl = aiGeneratedUrl || '';
+      await onUploadImage(field, file, existingUrl);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast.error(error.message || 'Failed to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <BaseField 
       field={field}
@@ -119,6 +154,51 @@ export default function ImageField({
               lineHeight: '1.5'
             }}
           />
+        </div>
+
+        {/* Upload Image Button */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jpg,.jpeg,image/jpeg"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading || isGenerating}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.375rem',
+              padding: '0.5rem 0.875rem',
+              border: '1px solid var(--gray-300)',
+              borderRadius: '8px',
+              backgroundColor: isUploading ? 'var(--gray-100)' : '#fff',
+              color: isUploading ? 'var(--gray-400)' : 'var(--gray-700)',
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              cursor: isUploading || isGenerating ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => {
+              if (!isUploading && !isGenerating) {
+                e.currentTarget.style.backgroundColor = 'var(--gray-50)';
+                e.currentTarget.style.borderColor = 'var(--gray-400)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!isUploading && !isGenerating) {
+                e.currentTarget.style.backgroundColor = '#fff';
+                e.currentTarget.style.borderColor = 'var(--gray-300)';
+              }
+            }}
+          >
+            <Upload size={14} />
+            {isUploading ? 'Uploading...' : 'Upload Image (JPEG)'}
+          </button>
         </div>
         
         {/* Generated Image Display */}
@@ -180,9 +260,25 @@ export default function ImageField({
                 objectFit: 'contain',
                 border: '2px solid var(--gray-200)',
                 borderRadius: '6px',
-                marginBottom: '0.75rem'
+                marginBottom: '0.5rem'
               }} 
             />
+            
+            <a
+              href={aiGeneratedUrl.split('?')[0]}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block',
+                fontSize: '0.75rem',
+                color: '#3b82f6',
+                marginBottom: '0.75rem',
+                textDecoration: 'underline',
+                cursor: 'pointer'
+              }}
+            >
+              View full-size image ↗
+            </a>
             
             <div style={{ 
               display: 'flex', 

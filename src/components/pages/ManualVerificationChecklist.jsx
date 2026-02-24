@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
   Check, ChevronDown, ChevronRight, RotateCcw, ClipboardList,
@@ -35,6 +35,7 @@ export default function ManualVerificationChecklist() {
   const [sections, setSections] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState(null);
+  const scrollRestoreRef = useRef(null);
 
   const loadChecklist = useCallback(async () => {
     setDataLoading(true);
@@ -67,6 +68,15 @@ export default function ManualVerificationChecklist() {
   }, []);
 
   useEffect(() => { loadChecklist(); }, [loadChecklist]);
+
+  // Restore scroll position after sections update from a CRUD operation
+  useEffect(() => {
+    if (scrollRestoreRef.current !== null) {
+      const y = scrollRestoreRef.current;
+      scrollRestoreRef.current = null;
+      requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+  }, [sections]);
 
   const totalItems = useMemo(() => sections.reduce((s, sec) => s + sec.items.length, 0), [sections]);
 
@@ -128,6 +138,18 @@ export default function ManualVerificationChecklist() {
   const [saving, setSaving] = useState(false);
   const [dragState, setDragState] = useState({ type: null, id: null, sectionId: null, overId: null });
 
+  // Renumber all sections sequentially in the DB
+  const renumberSections = async () => {
+    const { data, error } = await supabase
+      .from('qa_checklist_sections')
+      .select('id')
+      .order('sort_order');
+    if (error || !data) return;
+    await Promise.all(data.map((s, i) =>
+      supabase.from('qa_checklist_sections').update({ sort_order: i + 1 }).eq('id', s.id)
+    ));
+  };
+
   // Section CRUD
   const handleSaveSection = async () => {
     if (!editingSection?.title?.trim()) return;
@@ -145,6 +167,8 @@ export default function ManualVerificationChecklist() {
         if (error) throw error;
       }
       setEditingSection(null);
+      await renumberSections();
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     } catch (err) {
       alert('Error saving section: ' + err.message);
@@ -157,6 +181,8 @@ export default function ManualVerificationChecklist() {
     try {
       const { error } = await supabase.from('qa_checklist_sections').delete().eq('id', secId);
       if (error) throw error;
+      await renumberSections();
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     } catch (err) {
       alert('Error deleting section: ' + err.message);
@@ -192,6 +218,7 @@ export default function ManualVerificationChecklist() {
         if (error) throw error;
       }
       setEditingItem(null);
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     } catch (err) {
       alert('Error saving item: ' + err.message);
@@ -204,6 +231,7 @@ export default function ManualVerificationChecklist() {
     try {
       const { error } = await supabase.from('qa_checklist_items').delete().eq('id', itemId);
       if (error) throw error;
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     } catch (err) {
       alert('Error deleting item: ' + err.message);
@@ -247,6 +275,7 @@ export default function ManualVerificationChecklist() {
       ));
     } catch (err) {
       console.error('Reorder sections failed:', err);
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     }
   };
@@ -275,6 +304,7 @@ export default function ManualVerificationChecklist() {
       ));
     } catch (err) {
       console.error('Reorder items failed:', err);
+      scrollRestoreRef.current = window.scrollY;
       await loadChecklist();
     }
   };
@@ -381,75 +411,90 @@ export default function ManualVerificationChecklist() {
           </div>
         </div>
 
-        {/* Section/item editor modal */}
+        {/* Section editor modal */}
         {editingSection && (
-          <div style={st.editorCard}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
-              {editingSection.id ? 'Edit Section' : 'New Section'}
-            </div>
-            <label style={st.fieldLabel}>Title</label>
-            <input
-              value={editingSection.title}
-              onChange={e => setEditingSection(p => ({ ...p, title: e.target.value }))}
-              placeholder='e.g. "20 · New Feature Area"'
-              style={st.input}
-              autoFocus
-            />
-            <label style={st.fieldLabel}>Sort Order</label>
-            <input
-              type="number"
-              value={editingSection.sort_order}
-              onChange={e => setEditingSection(p => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))}
-              style={{ ...st.input, width: 80 }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button onClick={handleSaveSection} disabled={saving} style={st.saveBtn}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button onClick={() => setEditingSection(null)} style={st.cancelBtn}>Cancel</button>
+          <div style={st.modalBackdrop} onClick={() => setEditingSection(null)}>
+            <div style={st.modalContent} onClick={e => e.stopPropagation()}>
+              <div style={st.modalHeader}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>
+                  {editingSection.id ? 'Edit Section' : 'New Section'}
+                </span>
+                <button onClick={() => setEditingSection(null)} style={st.modalClose}><X size={16} /></button>
+              </div>
+              <div style={st.modalBody}>
+                <label style={st.fieldLabel}>Title</label>
+                <input
+                  value={editingSection.title}
+                  onChange={e => setEditingSection(p => ({ ...p, title: e.target.value }))}
+                  placeholder='e.g. "20 · New Feature Area"'
+                  style={st.input}
+                  autoFocus
+                />
+                <label style={st.fieldLabel}>Sort Order</label>
+                <input
+                  type="number"
+                  value={editingSection.sort_order}
+                  onChange={e => setEditingSection(p => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))}
+                  style={{ ...st.input, width: 80 }}
+                />
+              </div>
+              <div style={st.modalFooter}>
+                <button onClick={handleSaveSection} disabled={saving} style={st.saveBtn}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button onClick={() => setEditingSection(null)} style={st.cancelBtn}>Cancel</button>
+              </div>
             </div>
           </div>
         )}
 
+        {/* Item editor modal */}
         {editingItem && (
-          <div style={st.editorCard}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
-              {editingItem.id ? 'Edit Item' : 'New Item'}
-            </div>
-            <label style={st.fieldLabel}>Label</label>
-            <input
-              value={editingItem.label}
-              onChange={e => setEditingItem(p => ({ ...p, label: e.target.value }))}
-              placeholder="Test case name"
-              style={st.input}
-              autoFocus
-            />
-            <label style={st.fieldLabel}>Action (Do)</label>
-            <textarea
-              value={editingItem.action}
-              onChange={e => setEditingItem(p => ({ ...p, action: e.target.value }))}
-              placeholder="Steps the tester should perform"
-              style={{ ...st.input, minHeight: 60 }}
-            />
-            <label style={st.fieldLabel}>Expected Result</label>
-            <textarea
-              value={editingItem.expect}
-              onChange={e => setEditingItem(p => ({ ...p, expect: e.target.value }))}
-              placeholder="What should happen"
-              style={{ ...st.input, minHeight: 60 }}
-            />
-            <label style={st.fieldLabel}>Sort Order</label>
-            <input
-              type="number"
-              value={editingItem.sort_order}
-              onChange={e => setEditingItem(p => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))}
-              style={{ ...st.input, width: 80 }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button onClick={handleSaveItem} disabled={saving} style={st.saveBtn}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button onClick={() => setEditingItem(null)} style={st.cancelBtn}>Cancel</button>
+          <div style={st.modalBackdrop} onClick={() => setEditingItem(null)}>
+            <div style={st.modalContent} onClick={e => e.stopPropagation()}>
+              <div style={st.modalHeader}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>
+                  {editingItem.id ? 'Edit Item' : 'New Item'}
+                </span>
+                <button onClick={() => setEditingItem(null)} style={st.modalClose}><X size={16} /></button>
+              </div>
+              <div style={st.modalBody}>
+                <label style={st.fieldLabel}>Label</label>
+                <input
+                  value={editingItem.label}
+                  onChange={e => setEditingItem(p => ({ ...p, label: e.target.value }))}
+                  placeholder="Test case name"
+                  style={st.input}
+                  autoFocus
+                />
+                <label style={st.fieldLabel}>Action (Do)</label>
+                <textarea
+                  value={editingItem.action}
+                  onChange={e => setEditingItem(p => ({ ...p, action: e.target.value }))}
+                  placeholder="Steps the tester should perform"
+                  style={{ ...st.input, minHeight: 60 }}
+                />
+                <label style={st.fieldLabel}>Expected Result</label>
+                <textarea
+                  value={editingItem.expect}
+                  onChange={e => setEditingItem(p => ({ ...p, expect: e.target.value }))}
+                  placeholder="What should happen"
+                  style={{ ...st.input, minHeight: 60 }}
+                />
+                <label style={st.fieldLabel}>Sort Order</label>
+                <input
+                  type="number"
+                  value={editingItem.sort_order}
+                  onChange={e => setEditingItem(p => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))}
+                  style={{ ...st.input, width: 80 }}
+                />
+              </div>
+              <div style={st.modalFooter}>
+                <button onClick={handleSaveItem} disabled={saving} style={st.saveBtn}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button onClick={() => setEditingItem(null)} style={st.cancelBtn}>Cancel</button>
+              </div>
             </div>
           </div>
         )}
@@ -804,7 +849,12 @@ const st = {
   // Admin manage view
   addBtn: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', border: 'none', background: '#16a34a', fontSize: 12, fontWeight: 600, color: '#fff', cursor: 'pointer' },
   cancelBtn: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, fontWeight: 500, color: '#64748b', cursor: 'pointer' },
-  editorCard: { padding: 16, marginBottom: 16, border: '1px solid #e2e8f0', background: '#fefce8' },
+  modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalContent: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
+  modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #e2e8f0', background: '#fefce8' },
+  modalBody: { padding: '12px 16px' },
+  modalFooter: { display: 'flex', gap: 6, padding: '12px 16px', borderTop: '1px solid #e2e8f0', background: '#fafafa' },
+  modalClose: { background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#64748b', display: 'flex', alignItems: 'center' },
   fieldLabel: { display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 8, marginBottom: 4 },
   input: { display: 'block', width: '100%', padding: '6px 10px', border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, color: '#1e293b', fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box' },
   manageSectionBlock: { marginBottom: 2, border: '1px solid #e2e8f0', borderRadius: 4, overflow: 'hidden', background: '#fff' },

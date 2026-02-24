@@ -32,6 +32,7 @@ import { gradientButton, liftOnHover } from '../../styles/shared';
  *  - onEditField        – (field) => void  (template mode only, optional)
  *  - onDeleteField      – (fieldId) => void  (template mode only, optional)
  *  - onAddField         – () => void  (template mode only, optional)
+ *  - onUploadImage      – (field, file, existingUrl) => Promise  (image upload handler)
  */
 export default function FieldSection({
   sectionLabel,
@@ -55,6 +56,7 @@ export default function FieldSection({
   onEditField,
   onDeleteField,
   onAddField,
+  onUploadImage,
 }) {
   const sectionFields = fields.filter((f) => f.fieldFor === fieldType);
 
@@ -169,6 +171,7 @@ export default function FieldSection({
                       hasGenerated={!!hasGeneratedMap[field.id]}
                       onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                       defaultStandardFramework={defaultStandardFramework}
+                      onUploadImage={onUploadImage}
                     />
                   </SortableField>
                 );
@@ -207,6 +210,7 @@ export default function FieldSection({
                 hasGenerated={!!hasGeneratedMap[field.id]}
                 onGenerateIndividualMCQ={handleGenerateIndividualMCQ}
                 defaultStandardFramework={defaultStandardFramework}
+                onUploadImage={onUploadImage}
               />
             );
           })}

@@ -26,6 +26,7 @@ import BaseField from '../fields/BaseField';
  *  - hasGenerated     – whether this field has been generated
  *  - onGenerateIndividualMCQ – individual MCQ generation handler (MCQs only)
  *  - defaultStandardFramework – e.g. 'CCSS' (MCQs only)
+ *  - onUploadImage     – upload handler for image fields
  */
 export default function FieldRenderer({
   field,
@@ -41,6 +42,7 @@ export default function FieldRenderer({
   hasGenerated = false,
   onGenerateIndividualMCQ,
   defaultStandardFramework,
+  onUploadImage,
 }) {
   // Build shared AI props only if the field is AI-enabled
   const aiProps = field.aiEnabled
@@ -83,6 +85,7 @@ export default function FieldRenderer({
       <ImageField
         {...common}
         value={value || { description: '', url: '', altText: '', imageModel: '', altTextModel: '' }}
+        onUploadImage={onUploadImage}
       />
     );
   }

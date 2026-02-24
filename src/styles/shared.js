@@ -367,6 +367,13 @@ export const markdownPreviewCSS = `
     font-size: 1.25rem;
     font-weight: 600;
     margin: 1rem 0 0.5rem;
+    color: var(--gray-900);
+  }
+  .markdown-preview h3.field-name {
+    color: #3b82f6;
+  }
+  .markdown-preview .glossary-word {
+    font-weight: 600;
     color: #3b82f6;
   }
   .markdown-preview h4 {

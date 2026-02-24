@@ -622,6 +622,118 @@ export default function CreateNewLessonType() {
     }
   };
 
+  // Handler: upload user-provided image for an image field
+  const handleUploadImage = async (field, file, existingUrl) => {
+    if (!testLessonId) {
+      throw new Error('Test lesson must be saved before uploading an image.');
+    }
+
+    const templateFolder = lessonTypeData?.name || 'unknown-template';
+    const fileName = `${templateFolder}/${testLessonId}.png`;
+
+    // If there's an existing image in storage, delete it first
+    if (existingUrl && existingUrl.includes('lesson-images')) {
+      console.log('🗑️ Deleting existing image before upload...');
+      await supabase.storage.from('lesson-images').remove([fileName]);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Convert file to base64 data URL for alt text generation
+    const fileReader = new FileReader();
+    const dataUrl = await new Promise((resolve, reject) => {
+      fileReader.onload = () => resolve(fileReader.result);
+      fileReader.onerror = reject;
+      fileReader.readAsDataURL(file);
+    });
+
+    // Upload file to Supabase Storage
+    console.log('☁️ Uploading user image:', fileName);
+    const { error: uploadError } = await supabase.storage
+      .from('lesson-images')
+      .upload(fileName, file, {
+        contentType: file.type,
+        cacheControl: '0',
+        upsert: true
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload image: ${uploadError.message}`);
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('lesson-images')
+      .getPublicUrl(fileName);
+    const cacheBustedUrl = `${publicUrl}?t=${Date.now()}`;
+    console.log('✅ Image uploaded to:', cacheBustedUrl);
+
+    // Generate alt text
+    let generatedAltText = '';
+    try {
+      console.log('📝 Generating alt text for uploaded image...');
+      generatedAltText = await generateAltText(dataUrl);
+      console.log('✅ Alt text generated:', generatedAltText);
+    } catch (err) {
+      console.warn('Alt text generation failed, continuing without it:', err);
+    }
+
+    // Build updated field value
+    const imageFieldValue = {
+      url: cacheBustedUrl,
+      altText: generatedAltText,
+      imageModel: 'user-upload',
+      altTextModel: generatedAltText ? 'gpt-4o' : '',
+      description: fieldValues[field.id]?.description || ''
+    };
+
+    // Update state
+    setFieldValues(prev => ({ ...prev, [field.id]: imageFieldValue }));
+    setHasGeneratedMap(prev => ({ ...prev, [field.id]: true }));
+
+    // Auto-save
+    if (testLessonId) {
+      const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
+      const updatedFieldValues = { ...storedFieldValues, [field.id]: imageFieldValue };
+
+      const designerFields = fields.filter(f => f.fieldFor === 'designer');
+      const builderFields = fields.filter(f => f.fieldFor === 'builder');
+
+      const designResponses = {};
+      designerFields.forEach(f => {
+        const value = updatedFieldValues[f.id];
+        if (f.type === 'checklist') {
+          designResponses[f.name] = Array.isArray(value) ? value : [];
+        } else if (f.type === 'image') {
+          designResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        } else {
+          designResponses[f.name] = value || f.placeholder || '';
+        }
+      });
+
+      const lessonResponses = {};
+      builderFields.forEach(f => {
+        const value = updatedFieldValues[f.id];
+        if (f.type === 'checklist') {
+          lessonResponses[f.name] = Array.isArray(value) ? value : [];
+        } else if (f.type === 'image') {
+          lessonResponses[f.name] = value || { url: '', altText: '', description: '', imageModel: '', altTextModel: '' };
+        } else {
+          lessonResponses[f.name] = value || f.placeholder || '';
+        }
+      });
+
+      await supabase
+        .from('lessons')
+        .update({
+          designer_responses: designResponses,
+          builder_responses: lessonResponses
+        })
+        .eq('id', testLessonId);
+
+      console.log('✅ Test lesson auto-saved after image upload');
+    }
+  };
+
   // Handler: trigger AI generation
   const handleGenerateAI = async (field, valuesOverride = null) => {
     userHasInteractedRef.current = true;
@@ -724,31 +836,12 @@ export default function CreateNewLessonType() {
         // Upload to Supabase Storage
         console.log('☁️ Uploading image to Supabase Storage...');
         
-        // Find Content ID field in designer responses
-        const contentIdField = fields.find(f => f.name === 'Content ID' && f.fieldFor === 'designer');
-        const rawContentId = contentIdField ? storedFieldValues[contentIdField.id] : null;
-        
-        if (!rawContentId) {
-          throw new Error('Content ID field not found. Please fill in the Content ID field first.');
+        if (!testLessonId) {
+          throw new Error('Test lesson must be saved before generating an image. Please save first.');
         }
         
-        // Sanitize Content ID for use as a storage filename
-        // (AI-generated values may contain HTML, spaces, or long text)
-        const contentId = rawContentId
-          .replace(/<[^>]*>/g, '')          // strip HTML tags
-          .replace(/&[^;]+;/g, '')          // strip HTML entities
-          .replace(/[^a-zA-Z0-9_\-\.]/g, '_') // keep only safe chars
-          .replace(/_+/g, '_')              // collapse multiple underscores
-          .replace(/^_|_$/g, '')            // trim leading/trailing underscores
-          .substring(0, 120);               // limit length
-        
-        if (!contentId) {
-          throw new Error('Content ID is empty after sanitization. Please provide a valid Content ID.');
-        }
-        
-        // Get template name
-        const templateName = lessonTypeData?.name || 'unknown-template';
-        const fileName = `${templateName}/${contentId}.png`;
+        const templateFolder = lessonTypeData?.name || 'unknown-template';
+        const fileName = `${templateFolder}/${testLessonId}.png`;
         
         // Convert base64 to blob
         const base64Data = imageDataUrl.split(',')[1];
@@ -1707,6 +1800,7 @@ export default function CreateNewLessonType() {
               onEditField={handleEditField}
               onDeleteField={handleDeleteField}
               onAddField={openAddFieldModal}
+              onUploadImage={handleUploadImage}
             />
 
             {/* Builder Fields Section */}
@@ -1731,6 +1825,7 @@ export default function CreateNewLessonType() {
               onEditField={handleEditField}
               onDeleteField={handleDeleteField}
               onAddField={openAddFieldModal}
+              onUploadImage={handleUploadImage}
             />
           </div>
         </div>

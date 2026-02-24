@@ -202,10 +202,38 @@ This document outlines expected behaviors to verify by interacting with the app 
 - **Passage summary for images**
   - Action: Include a passage in context and generate image.
   - Expect: Image prompt includes a GPT‑3.5 summary.
-- **Upload to Supabase**
-  - Action: Confirm image is uploaded and URL is stored.
+- **Upload to Supabase (lesson ID path)**
+  - Action: Generate an image and check the Supabase Storage bucket.
+  - Expect: File is stored at `{templateName}/{lessonId}.png` (not Content ID).
+- **View full-size image link**
+  - Action: Generate or upload an image and look below the preview.
+  - Expect: A "View full-size image ↗" link opens the image in a new tab.
+- **Upload user image (JPEG)**
+  - Action: Click "Upload Image (JPEG)" and select a `.jpg` file.
+  - Expect: Image uploads, appears in the field, alt text auto-generates, model shows "user-upload".
+- **Upload rejects non-JPEG**
+  - Action: Click "Upload Image (JPEG)" and select a PNG or GIF file.
+  - Expect: Toast error "Please select a JPEG/JPG image file." — no upload occurs.
+- **Upload replaces existing image**
+  - Action: Generate an image with AI, then upload a JPEG over it.
+  - Expect: Old image is deleted from storage, new image replaces it, URL updates.
+- **Upload disabled while generating**
+  - Action: Start AI generation and observe the upload button.
+  - Expect: Upload button is disabled/greyed out during generation.
+- **Upload auto-saves lesson**
+  - Action: Upload an image, then reload the page.
+  - Expect: Uploaded image and alt text persist after reload.
+- **Re-generate after upload**
+  - Action: Upload an image, then click "Regenerate" with AI.
+  - Expect: Old uploaded image is replaced by new AI-generated image in storage.
 
 ## 11) Preview & Export
+- **Preview – field names are blue**
+  - Action: Preview a lesson with a passage that has sub-headers.
+  - Expect: Field names (e.g. "Passage", "Read") render in blue; passage sub-headers render in black.
+- **Preview – glossary words bold + blue**
+  - Action: Preview a lesson with `*asterisk*` words in the passage.
+  - Expect: Words render bold and in the same blue as field names.
 - **Preview lesson**
   - Action: Preview the lesson.
   - Expect: Markdown renders correctly and cover image displays if available.
