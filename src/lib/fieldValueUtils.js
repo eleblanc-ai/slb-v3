@@ -39,6 +39,9 @@ export function validateContextFieldsForField(field, allFields, fieldValues, { s
     const contextField = allFields.find(f => f.id === contextFieldId);
     if (!contextField) continue;
 
+    // Don't block a field from generating because of itself
+    if (contextFieldId === field.id) continue;
+
     // AI-enabled fields may be blank before generation — skip them in batch flows
     if (skipAIEnabled && contextField.aiEnabled) continue;
 

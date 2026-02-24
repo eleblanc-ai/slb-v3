@@ -15,4 +15,5 @@ export const ALLOWED_EMAILS = [
   'lorenzo.motta@thinkcerca.com',
   'allison.labadie@thinkcerca.com',
   'martin.manitto@thinkcerca.com',
+  'afalcon@thinkcerca.com'
 ];
