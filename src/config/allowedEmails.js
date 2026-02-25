@@ -11,7 +11,7 @@ export const ALLOWED_EMAILS = [
   'maximilian@thinkcerca.com',
   'susan.buntrock@thinkcerca.com',
   'boxing.li@thinkcerca.com',
-  'florencia@thinkcerca.com ',
+  'florencia@thinkcerca.com',
   'lorenzo.motta@thinkcerca.com',
   'allison.labadie@thinkcerca.com',
   'martin.manitto@thinkcerca.com',
