@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Type, FileText, ChevronRight, ListOrdered, CheckSquare, Image, BookOpen, HelpCircle } from 'lucide-react';
+import { X, Type, FileText, ChevronRight, ListOrdered, CheckSquare, Image, BookOpen, HelpCircle, Heading } from 'lucide-react';
 import TipTapEditor from '../core/TipTapEditor';
 import { APP_CONFIG } from '../../config';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
@@ -59,6 +59,12 @@ const fieldTypes = [
     label: 'MCQs (AI)',
     description: 'AI-generated multiple choice questions',
     icon: HelpCircle,
+  },
+  {
+    type: 'section_header',
+    label: 'Section Header',
+    description: 'A visual header to break up form sections',
+    icon: Heading,
   },
 ];
 

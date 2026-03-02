@@ -33,7 +33,8 @@ export default function BaseField({
       dropdown: 'Dropdown',
       checklist: 'Checklist',
       image: 'Image',
-      assign_standards: 'Assign Standards'
+      assign_standards: 'Assign Standards',
+      section_header: 'Section Header'
     };
     return typeLabels[type] || type;
   };

@@ -5,6 +5,7 @@ import ChecklistField from '../fields/ChecklistField';
 import ImageField from '../fields/ImageField';
 import AssignStandardsField from '../fields/AssignStandardsField';
 import MCQsField from '../fields/MCQsField';
+import SectionHeaderField from '../fields/SectionHeaderField';
 import BaseField from '../fields/BaseField';
 
 /**
@@ -61,6 +62,10 @@ export default function FieldRenderer({
   if (isUsedAsContext !== undefined) contextProps.isUsedAsContext = isUsedAsContext;
 
   const common = { field, onChange, isMissing, staleContextNames, onDismissStale, ...editProps, ...contextProps, ...aiProps };
+
+  if (field.type === 'section_header') {
+    return <SectionHeaderField field={field} onEdit={onEdit} onDelete={onDelete} />;
+  }
 
   if (field.type === 'text') {
     return <TextField {...common} value={value || ''} />;
