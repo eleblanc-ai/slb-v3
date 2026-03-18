@@ -443,6 +443,108 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 )}
               </div>
 
+              {/* Type Switcher - only in edit mode for text <-> rich_text */}
+              {isEditMode && (selectedType === 'text' || selectedType === 'rich_text') && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    marginBottom: '0.75rem',
+                    color: 'var(--gray-700)'
+                  }}>
+                    Field Type
+                  </label>
+                  <div style={{
+                    display: 'flex',
+                    gap: '1rem'
+                  }}>
+                    <label style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '1rem',
+                      border: `2px solid ${selectedType === 'text' ? 'var(--primary)' : 'var(--gray-200)'}`,
+                      borderRadius: '8px',
+                      backgroundColor: selectedType === 'text' ? '#eff6ff' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}>
+                      <input
+                        type="radio"
+                        name="fieldType"
+                        value="text"
+                        checked={selectedType === 'text'}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <div>
+                        <div style={{
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          color: 'var(--gray-900)'
+                        }}>
+                          Text Field
+                        </div>
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--gray-600)',
+                          marginTop: '0.125rem'
+                        }}>
+                          Single line or paragraph
+                        </div>
+                      </div>
+                    </label>
+                    <label style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '1rem',
+                      border: `2px solid ${selectedType === 'rich_text' ? 'var(--primary)' : 'var(--gray-200)'}`,
+                      borderRadius: '8px',
+                      backgroundColor: selectedType === 'rich_text' ? '#eff6ff' : '#fff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}>
+                      <input
+                        type="radio"
+                        name="fieldType"
+                        value="rich_text"
+                        checked={selectedType === 'rich_text'}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <div>
+                        <div style={{
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          color: 'var(--gray-900)'
+                        }}>
+                          Rich Text
+                        </div>
+                        <div style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--gray-600)',
+                          marginTop: '0.125rem'
+                        }}>
+                          Formatted text with styling
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {/* Placeholder Text - only for text and rich_text */}
               {(selectedType === 'text' || selectedType === 'rich_text') && (
                 <div style={{ marginBottom: '1.5rem' }}>

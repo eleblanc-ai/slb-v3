@@ -40,6 +40,9 @@ import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../export/templates/additionalreadingpracticeMarkdownExport';
 import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../export/templates/additionalreadingpracticefloridaMarkdownExport';
+import { generateMarkdown as generateNarrativeLessonPleasedontuseyetMarkdown } from '../../export/templates/narrativelessonpleasedontuseyetMarkdownExport';
+import { generateMarkdown as generateAppliedLessonPleasedontuseyetMarkdown } from '../../export/templates/appliedlessonpleasedontuseyetMarkdownExport';
+
 export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
   const { session, profile } = useOutletContext() || {};
@@ -369,7 +372,10 @@ export default function CreateNewLesson() {
     // Template names should be converted to camelCase for function lookup
     const templateNameToFunctionMap = {
       'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
+      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
+      'Narrative Lesson (Please don\'t use yet 😊)': generateNarrativeLessonPleasedontuseyetMarkdown,
+      'Applied Lesson (Please don\'t use yet 😊)': generateAppliedLessonPleasedontuseyetMarkdown,
+
       // Future templates will be added here manually
     };
     
