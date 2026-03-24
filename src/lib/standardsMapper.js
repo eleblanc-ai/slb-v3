@@ -871,15 +871,51 @@ Example response: CCSS.RI.3.1; TEKS.ELAR.3.6(B); BEST.ELA.3.R.2.2; BLOOM.2.5; 3.
 
 /**
  * Look up a standard by its code and return the full object with statement.
+ * Tries exact match first, then partial match if not found.
  * @param {string} code - Standard code (any framework)
- * @returns {Promise<{initiativeName: string, fullCode: string, statement: string}>}
+ * @returns {Promise<{initiativeName: string, fullCode: string, statement: string, notFound?: boolean}>}
  */
 export async function lookupStandardByCode(code) {
   const framework = detectFramework(code) || '';
   const statement = await getStandardStatement(code);
-  return {
-    initiativeName: framework,
-    fullCode: code,
-    statement: statement || '',
-  };
+
+  // Exact match found
+  if (statement) {
+    return { initiativeName: framework, fullCode: code, statement };
+  }
+
+  // Try partial match
+  const data = await loadMOACData();
+  const codeLower = code.toLowerCase();
+
+  // Search ccssCode and mappedCode for a partial match (includes handles missing prefixes)
+  const partial = data.find(row => {
+    const ccss = row.ccssCode.toLowerCase();
+    const mapped = row.mappedCode.toLowerCase();
+    return (
+      ccss.includes(codeLower) || codeLower.includes(ccss) ||
+      mapped.includes(codeLower) || codeLower.includes(mapped)
+    );
+  });
+
+  if (partial) {
+    // Determine which side matched
+    const ccssMatch = partial.ccssCode.toLowerCase().includes(codeLower) ||
+                      codeLower.includes(partial.ccssCode.toLowerCase());
+    if (framework === 'CCSS' || (!framework && ccssMatch)) {
+      return {
+        initiativeName: 'CCSS',
+        fullCode: partial.ccssCode,
+        statement: partial.ccssStatement,
+      };
+    }
+    return {
+      initiativeName: partial.mappedFramework,
+      fullCode: partial.mappedCode,
+      statement: partial.mappedStatement,
+    };
+  }
+
+  // Nothing found
+  return { initiativeName: framework, fullCode: code, statement: '', notFound: true };
 }

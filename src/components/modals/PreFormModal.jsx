@@ -67,10 +67,10 @@ export default function PreFormModal({
       const text = evt.target.result;
       const parsed = parseMarkdownImport(text);
       const fieldsForImport = allFields.length > 0 ? allFields : fields;
-      const { values, count } = await applyImportToFields(parsed, fieldsForImport);
+      const { values, count, notFoundStandards, missingFields } = await applyImportToFields(parsed, fieldsForImport);
 
-      if (count === 0) {
-        setImportMessage('No matching fields found in the uploaded file.');
+      if (count === 0 && notFoundStandards.length === 0 && missingFields.length === 0) {
+        setImportMessage({ text: 'No matching fields found in the uploaded file.', type: 'error' });
         return;
       }
 
@@ -84,8 +84,15 @@ export default function PreFormModal({
         onImport(values);
       }
 
-      setImportMessage(`Imported ${count} field${count !== 1 ? 's' : ''} successfully.`);
-      setTimeout(() => setImportMessage(null), 4000);
+      // Build feedback message
+      const parts = [];
+      if (count > 0) parts.push(`Imported ${count} field${count !== 1 ? 's' : ''}.`);
+      if (notFoundStandards.length > 0) parts.push(`Standards not found: ${notFoundStandards.join(', ')}`);
+      if (missingFields.length > 0) parts.push(`Not in import: ${missingFields.join(', ')}`);
+
+      const hasWarnings = notFoundStandards.length > 0 || missingFields.length > 0;
+      setImportMessage({ text: parts.join(' '), type: hasWarnings ? 'warning' : 'success' });
+      setTimeout(() => setImportMessage(null), hasWarnings ? 8000 : 4000);
     };
     reader.readAsText(file);
 
@@ -384,10 +391,12 @@ export default function PreFormModal({
             {importMessage && (
               <span style={{
                 fontSize: '0.8125rem',
-                color: importMessage.includes('No matching') ? '#dc2626' : '#059669',
-                fontWeight: 500
+                color: importMessage.type === 'error' ? '#dc2626' : importMessage.type === 'warning' ? '#d97706' : '#059669',
+                fontWeight: 500,
+                maxWidth: '400px',
+                lineHeight: '1.4'
               }}>
-                {importMessage}
+                {importMessage.text}
               </span>
             )}
           </div>

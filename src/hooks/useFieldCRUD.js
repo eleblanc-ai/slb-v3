@@ -16,6 +16,7 @@ export default function useFieldCRUD({
   templateId,
   fields,
   setFields,
+  setFieldValues,
   session,
   toast,
   includeFieldConfig = false,
@@ -67,6 +68,8 @@ export default function useFieldCRUD({
         const fieldConfig = buildFieldConfig(fieldData);
         if (fieldConfig !== undefined) updateData.field_config = fieldConfig;
 
+        console.log('💾 Saving field (edit):', { fieldId: fieldData.id, fieldConfig, updateData });
+
         const { error } = await supabase
           .from('lesson_template_fields')
           .update(updateData)
@@ -74,6 +77,11 @@ export default function useFieldCRUD({
 
         if (error) throw error;
         setFields(fields.map((f) => (f.id === fieldData.id ? fieldData : f)));
+
+        // Apply default text to fieldValues so it shows in the editor
+        if (setFieldValues && fieldData.type === 'rich_text' && fieldData.defaultText) {
+          setFieldValues(prev => ({ ...prev, [fieldData.id]: fieldData.defaultText }));
+        }
       } else {
         const insertData = {
           lesson_template_id: templateId,
@@ -92,6 +100,8 @@ export default function useFieldCRUD({
         const fieldConfig = buildFieldConfig(fieldData);
         if (fieldConfig !== undefined) insertData.field_config = fieldConfig;
 
+        console.log('💾 Saving field (new):', { fieldConfig, insertData });
+
         const { data: newField, error } = await supabase
           .from('lesson_template_fields')
           .insert(insertData)
@@ -100,6 +110,11 @@ export default function useFieldCRUD({
 
         if (error) throw error;
         setFields([...fields, { ...fieldData, id: newField.id }]);
+
+        // Apply default text to fieldValues so it shows in the editor
+        if (setFieldValues && fieldData.type === 'rich_text' && fieldData.defaultText) {
+          setFieldValues(prev => ({ ...prev, [newField.id]: fieldData.defaultText }));
+        }
       }
 
       // Update the lesson template's updated_at timestamp

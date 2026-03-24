@@ -186,7 +186,7 @@ export default function BrowseLessonTemplates() {
         .from('lesson_templates')
         .insert({
           name: cloneName.trim(),
-          category: templateToClone.category,
+          category: cloneState ? 'State-specific' : 'Core ELA',
           state: cloneState || null,
           created_by: session.user.id,
           updated_by: session.user.id

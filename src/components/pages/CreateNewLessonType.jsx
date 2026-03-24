@@ -91,6 +91,7 @@ export default function CreateNewLessonType() {
     templateId: lessonTypeData?.id,
     fields,
     setFields,
+    setFieldValues,
     session,
     toast,
     includeFieldConfig: true,
@@ -1000,7 +1001,15 @@ export default function CreateNewLessonType() {
         if (vocabStandards.length > 0) {
           console.log('📚 Vocab standards added to MCQ prompts (sequential):', vocabStandards);
         }
-        
+
+        // Resolve main idea standards
+        const mainIdeaStandards = defaultStandardFramework === 'CCSS'
+          ? await getCcssMainIdeaStandardsForGrade(gradeLevels)
+          : await getMappedMainIdeaStandardsForGrade(gradeLevels, defaultStandardFramework);
+        if (mainIdeaStandards.length > 0) {
+          console.log('📚 Main Idea standards added to MCQ prompts (sequential):', mainIdeaStandards);
+        }
+
         // Build context text from configured context fields (e.g., reading passage)
         let contextText = '';
         if (fieldData.ai_context_field_ids && fieldData.ai_context_field_ids.length > 0) {
@@ -1095,17 +1104,31 @@ export default function CreateNewLessonType() {
             fieldValues: storedFieldValues
           };
 
-          if (vocabStandards.length > 0) {
-            questionAIConfig.extraContextBlocks = [
-              {
-                title: 'Grade-Specific Vocabulary Standards (CCSS)',
-                content: vocabStandards.join('; ')
-              }
-            ];
+          // Check per-question standards flags
+          const questionConfig = questionPromptsConfig?.[questionKey];
+          const includeVocab = questionConfig?.includeVocabStandards || false;
+          const includeMainIdea = questionConfig?.includeMainIdeaStandards || false;
+
+          const extraContextBlocks = [];
+
+          if (includeVocab && vocabStandards.length > 0) {
+            extraContextBlocks.push({
+              title: `Grade-Specific Vocabulary Standards (${defaultStandardFramework})`,
+              content: vocabStandards.join('; ')
+            });
+            console.log(`📚 Vocab standards added to question ${i + 1}:`, vocabStandards);
           }
 
-          if (vocabStandards.length > 0) {
-            questionAIConfig.prompt += `\n\nALIGN THIS QUESTION TO THESE VOCABULARY STANDARDS:\n${vocabStandards.join('; ')}\n\nEnsure the question aligns to these standards.`;
+          if (includeMainIdea && mainIdeaStandards.length > 0) {
+            extraContextBlocks.push({
+              title: `Grade-Specific Main Idea Standards (${defaultStandardFramework})`,
+              content: mainIdeaStandards.join('; ')
+            });
+            console.log(`📚 Main Idea standards added to question ${i + 1}:`, mainIdeaStandards);
+          }
+
+          if (extraContextBlocks.length > 0) {
+            questionAIConfig.extraContextBlocks = extraContextBlocks;
           }
           
           const questionFullPrompt = buildFullPrompt(questionAIConfig);
@@ -1300,7 +1323,18 @@ export default function CreateNewLessonType() {
       });
       
       setFields(mappedFields);
-      
+
+      // Apply default text for rich_text fields so they appear in the editors
+      const defaults = {};
+      mappedFields.forEach(field => {
+        if (field.type === 'rich_text' && field.defaultText) {
+          defaults[field.id] = field.defaultText;
+        }
+      });
+      if (Object.keys(defaults).length > 0) {
+        setFieldValues(prev => ({ ...defaults, ...prev }));
+      }
+
       // Only auto-load test lesson if testLessonIdParam is explicitly provided
       // This ensures fresh start when creating new templates or opening templates without test lessons
       let existingLesson = null;

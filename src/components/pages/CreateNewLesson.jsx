@@ -1591,7 +1591,15 @@ export default function CreateNewLesson() {
         if (vocabStandards.length > 0) {
           console.log('📚 Vocab standards added to MCQ prompts (sequential):', vocabStandards);
         }
-        
+
+        // Resolve main idea standards
+        const mainIdeaStandards = defaultFramework === 'CCSS'
+          ? await getCcssMainIdeaStandardsForGrade(gradeLevels)
+          : await getMappedMainIdeaStandardsForGrade(gradeLevels, defaultFramework);
+        if (mainIdeaStandards.length > 0) {
+          console.log('📚 Main Idea standards added to MCQ prompts (sequential):', mainIdeaStandards);
+        }
+
         // Build context text from configured context fields (e.g., reading passage)
         let contextText = '';
         if (fieldAIConfig.ai_context_field_ids && fieldAIConfig.ai_context_field_ids.length > 0) {
@@ -1686,17 +1694,31 @@ export default function CreateNewLesson() {
             fieldValues: storedFieldValues
           };
 
-          if (vocabStandards.length > 0) {
-            questionAIConfig.extraContextBlocks = [
-              {
-                title: 'Grade-Specific Vocabulary Standards (CCSS)',
-                content: vocabStandards.join('; ')
-              }
-            ];
+          // Check per-question standards flags
+          const questionConfig = questionPromptsConfig?.[questionKey];
+          const includeVocab = questionConfig?.includeVocabStandards || false;
+          const includeMainIdea = questionConfig?.includeMainIdeaStandards || false;
+
+          const extraContextBlocks = [];
+
+          if (includeVocab && vocabStandards.length > 0) {
+            extraContextBlocks.push({
+              title: `Grade-Specific Vocabulary Standards (${defaultFramework})`,
+              content: vocabStandards.join('; ')
+            });
+            console.log(`📚 Vocab standards added to question ${i + 1}:`, vocabStandards);
           }
 
-          if (vocabStandards.length > 0) {
-            questionAIConfig.prompt += `\n\nALIGN THIS QUESTION TO THESE VOCABULARY STANDARDS:\n${vocabStandards.join('; ')}\n\nEnsure the question aligns to these standards.`;
+          if (includeMainIdea && mainIdeaStandards.length > 0) {
+            extraContextBlocks.push({
+              title: `Grade-Specific Main Idea Standards (${defaultFramework})`,
+              content: mainIdeaStandards.join('; ')
+            });
+            console.log(`📚 Main Idea standards added to question ${i + 1}:`, mainIdeaStandards);
+          }
+
+          if (extraContextBlocks.length > 0) {
+            questionAIConfig.extraContextBlocks = extraContextBlocks;
           }
           
           const questionFullPrompt = buildFullPrompt(questionAIConfig);
@@ -1949,6 +1971,7 @@ export default function CreateNewLesson() {
             defaults[field.id] = field.defaultText;
           }
         });
+        console.log('📋 Default text values to apply:', defaults);
         if (Object.keys(defaults).length > 0) {
           setFieldValues(prev => ({ ...defaults, ...prev }));
         }

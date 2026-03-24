@@ -183,11 +183,12 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       return;
     }
 
-    console.log('📝 Submitting field:', { 
-      isEditMode, 
-      fieldId: field?.id, 
-      framework, 
-      selectedType 
+    console.log('📝 Submitting field:', {
+      isEditMode,
+      fieldId: field?.id,
+      framework,
+      selectedType,
+      defaultText: selectedType === 'rich_text' ? defaultText : '(n/a)'
     });
 
     const fieldData = {

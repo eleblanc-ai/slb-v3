@@ -72,7 +72,8 @@ export function generateMarkdown(templateData, fields, fieldValues) {
               .replace(/<br\s*\/?>/gi, '\n')
               .replace(/<[^>]*>/g, '')
               .replace(/\n\s*\n+/g, '\n')
-              .trim();
+              .trim()
+              .replace(/^(\d+)\./gm, '$1\\.');  // Escape numbered list markers for markdown
           }
           return q;
         })

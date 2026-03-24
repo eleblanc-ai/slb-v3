@@ -13,6 +13,11 @@ const SKIP_TYPES = new Set([
   'vocabulary_words',
 ]);
 
+// Field name aliases: import header name → actual field name
+const FIELD_NAME_ALIASES = {
+  'Title': 'Selection',
+};
+
 /**
  * Parse a markdown string with `#Field Name` headers into a map.
  * Returns { "Field Name": "raw value string", ... }
@@ -92,17 +97,28 @@ export function generateFormatTemplate(fields, templateName) {
  *
  * @param {Object} parsedData  — from parseMarkdownImport()
  * @param {Array}  fields      — full field list with id, name, type
- * @returns {{ values: Object, count: number }}
+ * @returns {{ values: Object, count: number, notFoundStandards: string[], missingFields: string[] }}
  */
 export async function applyImportToFields(parsedData, fields) {
   const values = {};
   let count = 0;
+  const notFoundStandards = [];
+  const missingFields = [];
 
   for (const field of fields) {
     if (!field.importable) continue;
     if (SKIP_TYPES.has(field.type)) continue;
 
-    const raw = parsedData[field.name];
+    const raw = parsedData[field.name]
+      ?? parsedData[Object.keys(FIELD_NAME_ALIASES).find(alias => FIELD_NAME_ALIASES[alias] === field.name)]
+      ?? undefined;
+
+    // Track required-for-generation fields that had no matching header
+    if ((raw === undefined || raw === '') && field.requiredForGeneration) {
+      missingFields.push(field.name);
+      continue;
+    }
+
     if (raw === undefined || raw === '') continue;
 
     let converted;
@@ -145,9 +161,19 @@ export async function applyImportToFields(parsedData, fields) {
           .split(/[;\n]/)
           .map(code => code.trim())
           .filter(Boolean);
-        converted = await Promise.all(
+        const results = await Promise.all(
           codes.map(code => lookupStandardByCode(code))
         );
+        // Separate found from not-found
+        const found = [];
+        for (const result of results) {
+          if (result.notFound) {
+            notFoundStandards.push(result.fullCode);
+          } else {
+            found.push(result);
+          }
+        }
+        converted = found;
         break;
       }
 
@@ -159,5 +185,5 @@ export async function applyImportToFields(parsedData, fields) {
     count++;
   }
 
-  return { values, count };
+  return { values, count, notFoundStandards, missingFields };
 }
