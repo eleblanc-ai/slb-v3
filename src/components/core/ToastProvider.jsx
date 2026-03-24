@@ -27,7 +27,7 @@ export default function ToastProvider({ children }) {
 
   const toast = {
     success: (msg, dur) => addToast(msg, 'success', dur),
-    error: (msg, dur) => addToast(msg, 'error', dur ?? 6000),
+    error: (msg, dur) => addToast(msg, 'error', dur ?? 0),
     warning: (msg, dur) => addToast(msg, 'warning', dur),
     info: (msg, dur) => addToast(msg, 'info', dur),
   };

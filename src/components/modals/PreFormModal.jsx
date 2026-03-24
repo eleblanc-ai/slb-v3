@@ -1,5 +1,6 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, X, Upload, FileDown } from 'lucide-react';
+import { parseMarkdownImport, applyImportToFields, generateFormatTemplate } from '../../import/markdownImporter';
 import TextField from '../fields/TextField';
 import RichTextField from '../fields/RichTextField';
 import DropdownField from '../fields/DropdownField';
@@ -11,12 +12,16 @@ import { APP_CONFIG } from '../../config';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 
-export default function PreFormModal({ 
+export default function PreFormModal({
   visible,
   onClose,
+  onCancel,
   fields = [],
   fieldValues = {},
-  onFieldChange
+  onFieldChange,
+  onImport,
+  templateName,
+  allFields = [],
 }) {
   if (!visible) return null;
 
@@ -37,6 +42,56 @@ export default function PreFormModal({
     }
     return true;
   });
+
+  const [importMessage, setImportMessage] = React.useState(null);
+  const fileInputRef = React.useRef(null);
+
+  const handleDownloadFormat = () => {
+    const fieldsForFormat = allFields.length > 0 ? allFields : fields;
+    const template = generateFormatTemplate(fieldsForFormat, templateName || 'Lesson');
+    const blob = new Blob([template], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(templateName || 'lesson').replace(/[^a-zA-Z0-9]/g, '-')}-import-format.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const text = evt.target.result;
+      const parsed = parseMarkdownImport(text);
+      const fieldsForImport = allFields.length > 0 ? allFields : fields;
+      const { values, count } = await applyImportToFields(parsed, fieldsForImport);
+
+      if (count === 0) {
+        setImportMessage('No matching fields found in the uploaded file.');
+        return;
+      }
+
+      // Set values via onFieldChange for preform fields (so UI updates)
+      Object.entries(values).forEach(([fieldId, value]) => {
+        onFieldChange(fieldId, value);
+      });
+
+      // Also call onImport for non-preform fields
+      if (onImport) {
+        onImport(values);
+      }
+
+      setImportMessage(`Imported ${count} field${count !== 1 ? 's' : ''} successfully.`);
+      setTimeout(() => setImportMessage(null), 4000);
+    };
+    reader.readAsText(file);
+
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  };
 
   // Render fields helper function
   const renderFields = (fieldsToRender) => {
@@ -211,6 +266,34 @@ export default function PreFormModal({
                 Fill in these fields so AI can generate your lesson content
               </p>
             </div>
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  color: 'var(--gray-500)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--gray-100)';
+                  e.currentTarget.style.color = 'var(--gray-900)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--gray-500)';
+                }}
+                title="Close"
+              >
+                <X size={24} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -228,9 +311,86 @@ export default function PreFormModal({
           padding: '1.5rem',
           borderTop: '1px solid var(--gray-200)',
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           gap: '1rem'
         }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md,.txt"
+              style={{ display: 'none' }}
+              onChange={handleFileSelected}
+            />
+            <button
+              onClick={handleDownloadFormat}
+              style={{
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'transparent',
+                color: 'var(--gray-600)',
+                border: '1px solid var(--gray-300)',
+                borderRadius: '6px',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.color = 'var(--primary)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = 'var(--gray-300)';
+                e.currentTarget.style.color = 'var(--gray-600)';
+              }}
+              title="Download a format template for this lesson type"
+            >
+              <FileDown size={15} />
+              Download Format
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: '0.5rem 0.75rem',
+                backgroundColor: 'transparent',
+                color: 'var(--gray-600)',
+                border: '1px solid var(--gray-300)',
+                borderRadius: '6px',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = 'var(--primary)';
+                e.currentTarget.style.color = 'var(--primary)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = 'var(--gray-300)';
+                e.currentTarget.style.color = 'var(--gray-600)';
+              }}
+              title="Import field values from a markdown file"
+            >
+              <Upload size={15} />
+              Import
+            </button>
+            {importMessage && (
+              <span style={{
+                fontSize: '0.8125rem',
+                color: importMessage.includes('No matching') ? '#dc2626' : '#059669',
+                fontWeight: 500
+              }}>
+                {importMessage}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             disabled={!allRequiredFieldsFilled}

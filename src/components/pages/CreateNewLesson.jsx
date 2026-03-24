@@ -40,8 +40,9 @@ import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
 import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../export/templates/additionalreadingpracticeMarkdownExport';
 import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../export/templates/additionalreadingpracticefloridaMarkdownExport';
-import { generateMarkdown as generateNarrativeLessonPleasedontuseyetMarkdown } from '../../export/templates/narrativelessonpleasedontuseyetMarkdownExport';
-import { generateMarkdown as generateAppliedLessonPleasedontuseyetMarkdown } from '../../export/templates/appliedlessonpleasedontuseyetMarkdownExport';
+import { generateMarkdown as generateNarrativeLessonFloridaMarkdown } from '../../export/templates/narrativelessonfloridaMarkdownExport';
+import { generateMarkdown as generateAppliedLessonFloridaMarkdown } from '../../export/templates/appliedlessonfloridaMarkdownExport';
+import { generateMarkdown as generateAppliedLessonMarkdown } from '../../export/templates/appliedlessonMarkdownExport';
 
 export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
@@ -373,8 +374,10 @@ export default function CreateNewLesson() {
     const templateNameToFunctionMap = {
       'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
       'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
-      'Narrative Lesson (Please don\'t use yet 😊)': generateNarrativeLessonPleasedontuseyetMarkdown,
-      'Applied Lesson (Please don\'t use yet 😊)': generateAppliedLessonPleasedontuseyetMarkdown,
+      'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
+      'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
+      'Applied Lesson': generateAppliedLessonMarkdown,
+
 
       // Future templates will be added here manually
     };
@@ -435,11 +438,11 @@ export default function CreateNewLesson() {
     // Map template name to markdown export function
     const templateNameToFunctionMap = {
       'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
-    };
-    
-    const generateFunction = templateNameToFunctionMap[templateData?.name];
-    
+      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
+      'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
+      'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
+    };    const generateFunction = templateNameToFunctionMap[templateData?.name];
+
     if (!generateFunction) {
       toast.error(`No preview available for template "${templateData?.name}".`);
       return;
@@ -461,7 +464,10 @@ export default function CreateNewLesson() {
     
     // Convert single # field-name headers to classed h3 (blue styling via CSS)
     markdown = markdown.replace(/^#([^#\s].*)$/gm, '<h3 class="field-name">$1</h3>');
-    
+
+    // Convert **bold** to <strong> before glossary word processing
+    markdown = markdown.replace(/\*\*([^\*\n]+?)\*\*/g, '<strong>$1</strong>');
+
     // Convert *word* to glossary-word spans (bold + blue via CSS class)
     markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span class="glossary-word">$1</span>');
     
@@ -482,7 +488,7 @@ export default function CreateNewLesson() {
       throw new Error('Lesson must be saved before uploading an image.');
     }
 
-    const templateFolder = templateData?.name || 'unknown-template';
+    const templateFolder = (templateData?.name || 'unknown-template').replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `${templateFolder}/${lessonId}.png`;
 
     // If there's an existing image in storage, delete it first
@@ -1353,9 +1359,9 @@ export default function CreateNewLesson() {
           throw new Error('Lesson must be saved before generating an image. Please save the lesson first.');
         }
         
-        const templateFolder = templateData?.name || 'unknown-template';
+        const templateFolder = (templateData?.name || 'unknown-template').replace(/[^a-zA-Z0-9_-]/g, '_');
         const fileName = `${templateFolder}/${lessonId}.png`;
-        
+
         // Convert base64 to blob
         const base64Data = imageDataUrl.split(',')[1];
         const byteCharacters = atob(base64Data);
@@ -1901,6 +1907,7 @@ export default function CreateNewLesson() {
           required: field.required,
           aiEnabled: field.ai_enabled,
           requiredForGeneration: field.required_for_generation,
+          importable: field.importable,
           fieldFor: field.field_for || 'designer',
           ai_prompt: field.ai_prompt,
           ai_question_prompts: field.ai_question_prompts,
@@ -1921,6 +1928,7 @@ export default function CreateNewLesson() {
           if (field.field_config.min_selections !== undefined) mappedField.min_selections = field.field_config.min_selections;
           if (field.field_config.max_selections !== undefined) mappedField.max_selections = field.field_config.max_selections;
           if (field.field_config.framework) mappedField.framework = field.field_config.framework;
+          if (field.field_config.defaultText) mappedField.defaultText = field.field_config.defaultText;
         }
         
         return mappedField;
@@ -1932,7 +1940,20 @@ export default function CreateNewLesson() {
       );
       
       setFields(mappedFields);
-      
+
+      // Apply default text for rich_text fields on new lessons
+      if (!lessonId) {
+        const defaults = {};
+        mappedFields.forEach(field => {
+          if (field.type === 'rich_text' && field.defaultText) {
+            defaults[field.id] = field.defaultText;
+          }
+        });
+        if (Object.keys(defaults).length > 0) {
+          setFieldValues(prev => ({ ...defaults, ...prev }));
+        }
+      }
+
       // ⭐ REQUIRED FOR GENERATION ⭐
       const requiredForGen = mappedFields.filter(f => f.requiredForGeneration === true);
       if (requiredForGen.length > 0) {
@@ -2041,7 +2062,9 @@ export default function CreateNewLesson() {
           if (!lockResult.success) {
             const templateNameToFunctionMap = {
               'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-              'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown
+              'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
+              'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
+              'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
             };
             
             const generateFunction = templateNameToFunctionMap[templateData?.name];
@@ -2666,11 +2689,17 @@ export default function CreateNewLesson() {
       <PreFormModal
         visible={showPreFormModal}
         onClose={handlePreFormClose}
+        onCancel={() => navigate('/browse-lesson-templates?mode=create')}
         fields={fields}
         fieldValues={fieldValues}
         onFieldChange={(fieldId, value) => {
           setFieldValues(prev => ({ ...prev, [fieldId]: value }));
         }}
+        onImport={(importedValues) => {
+          setFieldValues(prev => ({ ...prev, ...importedValues }));
+        }}
+        templateName={templateData?.name}
+        allFields={fields}
       />
     </div>
     </>

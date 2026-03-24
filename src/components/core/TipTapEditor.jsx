@@ -76,8 +76,8 @@ export default function TipTapEditor({
 
   // Update editor content when external content changes (e.g., from AI generation)
   useEffect(() => {
-    if (editor && content && editor.getHTML() !== content) {
-      const htmlContent = convertNewlinesToHTML(content);
+    if (editor && content !== undefined && content !== null && editor.getHTML() !== content) {
+      const htmlContent = content ? convertNewlinesToHTML(content) : '';
       editor.commands.setContent(htmlContent, { emitUpdate: false });
     }
   }, [content, editor]);

@@ -628,7 +628,7 @@ export default function CreateNewLessonType() {
       throw new Error('Test lesson must be saved before uploading an image.');
     }
 
-    const templateFolder = lessonTypeData?.name || 'unknown-template';
+    const templateFolder = (lessonTypeData?.name || 'unknown-template').replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `${templateFolder}/${testLessonId}.png`;
 
     // If there's an existing image in storage, delete it first
@@ -840,7 +840,7 @@ export default function CreateNewLessonType() {
           throw new Error('Test lesson must be saved before generating an image. Please save first.');
         }
         
-        const templateFolder = lessonTypeData?.name || 'unknown-template';
+        const templateFolder = (lessonTypeData?.name || 'unknown-template').replace(/[^a-zA-Z0-9_-]/g, '_');
         const fileName = `${templateFolder}/${testLessonId}.png`;
         
         // Convert base64 to blob
@@ -1271,6 +1271,7 @@ export default function CreateNewLessonType() {
           required: field.required,
           aiEnabled: field.ai_enabled,
           requiredForGeneration: field.required_for_generation,
+          importable: field.importable,
           fieldFor: field.field_for || 'designer',
           ai_prompt: field.ai_prompt,
           ai_question_prompts: field.ai_question_prompts,
@@ -1292,6 +1293,7 @@ export default function CreateNewLessonType() {
           } else if (mappedField.type === 'assign_standards' && templateDefaultFramework) {
             mappedField.framework = templateDefaultFramework;
           }
+          if (field.field_config.defaultText) mappedField.defaultText = field.field_config.defaultText;
         }
         
         return mappedField;
@@ -1513,7 +1515,8 @@ export default function CreateNewLessonType() {
           placeholder: f.placeholder_text,
           helperText: f.helper_text,
           required: f.required,
-          aiEnabled: f.ai_enabled
+          aiEnabled: f.ai_enabled,
+          defaultText: f.field_config?.defaultText,
         })));
       }
     } catch (error) {
@@ -1708,6 +1711,49 @@ export default function CreateNewLessonType() {
                 ))}
               </select>
             </div>
+
+            {/* Template Status Toggle */}
+            {lessonTypeData?.id && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 0.75rem',
+                background: '#fff',
+                border: '1px solid var(--gray-200)',
+                borderRadius: '8px'
+              }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--gray-600)' }}>Status</span>
+                <select
+                  value={lessonTypeData?.status || 'active'}
+                  onChange={async (e) => {
+                    const newStatus = e.target.value;
+                    try {
+                      const { error } = await supabase
+                        .from('lesson_templates')
+                        .update({ status: newStatus, updated_at: new Date().toISOString() })
+                        .eq('id', lessonTypeData.id);
+                      if (error) throw error;
+                      setLessonTypeData(prev => ({ ...prev, status: newStatus }));
+                      toast.success(`Template status set to ${newStatus === 'active' ? 'Active' : 'In Progress'}`);
+                    } catch (err) {
+                      console.error('Error updating template status:', err);
+                      toast.error('Failed to update template status.');
+                    }
+                  }}
+                  style={{
+                    padding: '0.35rem 0.5rem',
+                    border: '1px solid var(--gray-300)',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    backgroundColor: '#fff'
+                  }}
+                >
+                  <option value="active">Active</option>
+                  <option value="in_progress">In Progress</option>
+                </select>
+              </div>
+            )}
 
             <button
               onClick={handleGenerateLesson}

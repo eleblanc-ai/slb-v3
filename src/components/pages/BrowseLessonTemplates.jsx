@@ -85,7 +85,14 @@ export default function BrowseLessonTemplates() {
       }));
 
       console.log('Fetched lesson templates:', templatesWithProfiles);
-      setLessonTypes(templatesWithProfiles || []);
+
+      // Filter out in_progress templates for non-admins
+      const isAdmin = profile?.role === 'admin';
+      const visibleTemplates = isAdmin
+        ? templatesWithProfiles
+        : templatesWithProfiles?.filter(t => t.status !== 'in_progress');
+
+      setLessonTypes(visibleTemplates || []);
     } catch (error) {
       console.error('Error in fetchLessonTypes:', error);
     } finally {
@@ -219,7 +226,8 @@ export default function BrowseLessonTemplates() {
           ai_system_instructions: field.ai_system_instructions,
           ai_context_instructions: field.ai_context_instructions,
           ai_format_requirements: field.ai_format_requirements,
-          field_config: field.field_config
+          field_config: field.field_config,
+          importable: field.importable
         }));
 
         const { data: newFields, error: insertFieldsError } = await supabase
@@ -575,7 +583,7 @@ export default function BrowseLessonTemplates() {
                           </h3>
 
                           {/* Category badge */}
-                          <div style={{ marginBottom: '1rem' }}>
+                          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <span style={{
                               display: 'inline-block',
                               padding: '0.25rem 0.75rem',
@@ -587,6 +595,19 @@ export default function BrowseLessonTemplates() {
                             }}>
                               {lessonType.category}
                             </span>
+                            {profile?.role === 'admin' && lessonType.status === 'in_progress' && (
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '0.25rem 0.75rem',
+                                backgroundColor: '#fef3c7',
+                                color: '#92400e',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600
+                              }}>
+                                In Progress
+                              </span>
+                            )}
                           </div>
 
                           {/* Footer */}
@@ -814,7 +835,7 @@ export default function BrowseLessonTemplates() {
                   </h3>
 
                   {/* State badge or Category badge */}
-                  <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <span style={{
                       display: 'inline-block',
                       padding: '0.25rem 0.75rem',
@@ -826,6 +847,19 @@ export default function BrowseLessonTemplates() {
                     }}>
                       {stateName || lessonType.category}
                     </span>
+                    {profile?.role === 'admin' && lessonType.status === 'in_progress' && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '0.25rem 0.75rem',
+                        backgroundColor: '#fef3c7',
+                        color: '#92400e',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: 600
+                      }}>
+                        In Progress
+                      </span>
+                    )}
                   </div>
 
                   {/* Footer */}

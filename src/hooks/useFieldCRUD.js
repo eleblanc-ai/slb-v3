@@ -42,6 +42,7 @@ export default function useFieldCRUD({
     if (fieldData.min_selections !== undefined) cfg.min_selections = fieldData.min_selections;
     if (fieldData.max_selections !== undefined) cfg.max_selections = fieldData.max_selections;
     if (fieldData.framework) cfg.framework = fieldData.framework;
+    if (fieldData.defaultText) cfg.defaultText = fieldData.defaultText;
     return Object.keys(cfg).length > 0 ? cfg : null;
   };
 
@@ -60,6 +61,7 @@ export default function useFieldCRUD({
           ai_enabled: fieldData.aiEnabled,
           required_for_generation: fieldData.requiredForGeneration,
           field_for: fieldData.fieldFor,
+          importable: fieldData.importable,
         };
 
         const fieldConfig = buildFieldConfig(fieldData);
@@ -83,6 +85,7 @@ export default function useFieldCRUD({
           ai_enabled: fieldData.aiEnabled,
           required_for_generation: fieldData.requiredForGeneration,
           field_for: fieldData.fieldFor,
+          importable: fieldData.importable,
           field_order: fields.length,
         };
 

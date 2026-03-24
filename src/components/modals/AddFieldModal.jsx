@@ -84,9 +84,11 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
   const [fieldName, setFieldName] = useState(field?.name || '');
   const [placeholderText, setPlaceholderText] = useState(field?.placeholder || '');
   const [helperText, setHelperText] = useState(field?.helperText || '');
+  const [defaultText, setDefaultText] = useState(field?.defaultText || '');
   const [required, setRequired] = useState(field?.required || false);
   const [aiEnabled, setAiEnabled] = useState(field?.aiEnabled || false);
   const [requiredForGeneration, setRequiredForGeneration] = useState(field?.requiredForGeneration || false);
+  const [importable, setImportable] = useState(field?.importable || false);
   const [fieldFor, setFieldFor] = useState(field?.fieldFor || 'designer');
   const [fieldNameError, setFieldNameError] = useState('');
   const [dropdownOptions, setDropdownOptions] = useState(field?.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
@@ -109,9 +111,11 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setFieldName(field.name);
       setPlaceholderText(field.placeholder || '');
       setHelperText(field.helperText || '');
+      setDefaultText(field.defaultText || '');
       setRequired(field.required || false);
       setAiEnabled(field.aiEnabled || false);
       setRequiredForGeneration(field.requiredForGeneration || false);
+      setImportable(field.importable || false);
       setFieldFor(field.fieldFor || 'designer');
       setDropdownOptions(field.options ? (Array.isArray(field.options) ? field.options.join(', ') : field.options) : '');
       setMinSelections(field.min_selections ? String(field.min_selections) : '');
@@ -131,6 +135,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setFieldName('');
       setPlaceholderText('');
       setHelperText('');
+      setDefaultText('');
       setRequired(false);
       setAiEnabled(false);
       setRequiredForGeneration(false);
@@ -166,6 +171,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       setRequired(false);
       setAiEnabled(false);
       setRequiredForGeneration(false);
+      setImportable(false);
       setFieldFor('designer');
     }
     onClose();
@@ -190,9 +196,11 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       name: fieldName,
       placeholder: placeholderText,
       helperText: helperText,
+      defaultText: selectedType === 'rich_text' ? defaultText : undefined,
       required: required,
       aiEnabled: (selectedType === 'mcqs' || selectedType === 'image') ? true : aiEnabled, // Auto-enable AI for MCQs and images
       requiredForGeneration: requiredForGeneration,
+      importable: importable,
       fieldFor: fieldFor,
     };
 
@@ -258,14 +266,14 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       }}>
         {/* Header */}
         <div style={{
-          padding: '1.5rem',
+          padding: '1rem 1.25rem',
           borderBottom: '1px solid var(--gray-200)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
           <h2 style={{
-            fontSize: '1.5rem',
+            fontSize: '1.25rem',
             fontWeight: 700,
             color: 'var(--gray-900)',
             margin: 0
@@ -302,7 +310,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
         </div>
 
         {/* Content */}
-        <div style={{ padding: '1.5rem' }}>
+        <div style={{ padding: '1.25rem' }}>
           {step === 'selectType' ? (
             // Step 1: Select Field Type
             <div style={{
@@ -393,12 +401,12 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
               handleSubmit();
             }}>
               {/* Field Name */}
-              <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 600,
-                  marginBottom: '0.5rem',
+                  marginBottom: '0.375rem',
                   color: 'var(--gray-700)'
                 }}>
                   Field Name <span style={{ color: '#ef4444' }}>*</span>
@@ -414,10 +422,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   autoFocus
                   style={{
                     width: '100%',
-                    padding: '0.75rem 1rem',
+                    padding: '0.5rem 0.75rem',
                     border: `2px solid ${fieldNameError ? '#ef4444' : 'var(--gray-200)'}`,
-                    borderRadius: '8px',
-                    fontSize: '1rem',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
                     boxSizing: 'border-box',
                     transition: 'all 0.2s',
                     outline: 'none'
@@ -445,28 +453,28 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
 
               {/* Type Switcher - only in edit mode for text <-> rich_text */}
               {isEditMode && (selectedType === 'text' || selectedType === 'rich_text') && (
-                <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ marginBottom: '1rem' }}>
                   <label style={{
                     display: 'block',
-                    fontSize: '0.875rem',
+                    fontSize: '0.8125rem',
                     fontWeight: 600,
-                    marginBottom: '0.75rem',
+                    marginBottom: '0.5rem',
                     color: 'var(--gray-700)'
                   }}>
                     Field Type
                   </label>
                   <div style={{
                     display: 'flex',
-                    gap: '1rem'
+                    gap: '0.75rem'
                   }}>
                     <label style={{
                       flex: 1,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '1rem',
+                      gap: '0.5rem',
+                      padding: '0.625rem 0.75rem',
                       border: `2px solid ${selectedType === 'text' ? 'var(--primary)' : 'var(--gray-200)'}`,
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       backgroundColor: selectedType === 'text' ? '#eff6ff' : '#fff',
                       cursor: 'pointer',
                       transition: 'all 0.2s'
@@ -478,25 +486,18 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                         checked={selectedType === 'text'}
                         onChange={(e) => setSelectedType(e.target.value)}
                         style={{
-                          width: '18px',
-                          height: '18px',
+                          width: '16px',
+                          height: '16px',
                           cursor: 'pointer'
                         }}
                       />
                       <div>
                         <div style={{
                           fontWeight: 600,
-                          fontSize: '0.875rem',
+                          fontSize: '0.8125rem',
                           color: 'var(--gray-900)'
                         }}>
                           Text Field
-                        </div>
-                        <div style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--gray-600)',
-                          marginTop: '0.125rem'
-                        }}>
-                          Single line or paragraph
                         </div>
                       </div>
                     </label>
@@ -504,10 +505,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       flex: 1,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '1rem',
+                      gap: '0.5rem',
+                      padding: '0.625rem 0.75rem',
                       border: `2px solid ${selectedType === 'rich_text' ? 'var(--primary)' : 'var(--gray-200)'}`,
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       backgroundColor: selectedType === 'rich_text' ? '#eff6ff' : '#fff',
                       cursor: 'pointer',
                       transition: 'all 0.2s'
@@ -519,25 +520,18 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                         checked={selectedType === 'rich_text'}
                         onChange={(e) => setSelectedType(e.target.value)}
                         style={{
-                          width: '18px',
-                          height: '18px',
+                          width: '16px',
+                          height: '16px',
                           cursor: 'pointer'
                         }}
                       />
                       <div>
                         <div style={{
                           fontWeight: 600,
-                          fontSize: '0.875rem',
+                          fontSize: '0.8125rem',
                           color: 'var(--gray-900)'
                         }}>
                           Rich Text
-                        </div>
-                        <div style={{
-                          fontSize: '0.75rem',
-                          color: 'var(--gray-600)',
-                          marginTop: '0.125rem'
-                        }}>
-                          Formatted text with styling
                         </div>
                       </div>
                     </label>
@@ -547,12 +541,12 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
 
               {/* Placeholder Text - only for text and rich_text */}
               {(selectedType === 'text' || selectedType === 'rich_text') && (
-                <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ marginBottom: '1rem' }}>
                   <label style={{
                     display: 'block',
-                    fontSize: '0.875rem',
+                    fontSize: '0.8125rem',
                     fontWeight: 600,
-                    marginBottom: '0.5rem',
+                    marginBottom: '0.375rem',
                     color: 'var(--gray-700)'
                   }}>
                     Placeholder Text
@@ -564,10 +558,10 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     placeholder="e.g., Enter the learning objective..."
                     style={{
                       width: '100%',
-                      padding: '0.75rem 1rem',
+                      padding: '0.5rem 0.75rem',
                       border: '2px solid var(--gray-200)',
-                      borderRadius: '8px',
-                      fontSize: '1rem',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
                       boxSizing: 'border-box',
                       transition: 'all 0.2s',
                       outline: 'none'
@@ -585,12 +579,12 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
               )}
 
               {/* Helper Text */}
-              <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 600,
-                  marginBottom: '0.5rem',
+                  marginBottom: '0.375rem',
                   color: 'var(--gray-700)'
                 }}>
                   Helper Text
@@ -599,16 +593,45 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   content={helperText}
                   onChange={setHelperText}
                   placeholder="Enter helper text with formatting..."
+                  minHeight="40px"
                 />
               </div>
 
-              {/* Dropdown/Checklist Options */}
-              {(selectedType === 'dropdown' || selectedType === 'checklist') && (
-                <div style={{ marginBottom: '1.5rem' }}>
+              {/* Default Text - only for rich_text */}
+              {selectedType === 'rich_text' && (
+                <div style={{ marginBottom: '1rem' }}>
                   <label style={{
                     display: 'block',
-                    marginBottom: '0.5rem',
-                    fontSize: '0.875rem',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    marginBottom: '0.375rem',
+                    color: 'var(--gray-700)'
+                  }}>
+                    Default Text
+                  </label>
+                  <p style={{
+                    fontSize: '0.6875rem',
+                    color: 'var(--gray-500)',
+                    margin: '0 0 0.375rem 0'
+                  }}>
+                    Pre-populated content when a new lesson is created
+                  </p>
+                  <TipTapEditor
+                    content={defaultText}
+                    onChange={setDefaultText}
+                    placeholder="Enter default text for this field..."
+                    minHeight="40px"
+                  />
+                </div>
+              )}
+
+              {/* Dropdown/Checklist Options */}
+              {(selectedType === 'dropdown' || selectedType === 'checklist') && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.375rem',
+                    fontSize: '0.8125rem',
                     fontWeight: 600,
                     color: 'var(--gray-700)'
                   }}>
@@ -621,7 +644,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     placeholder="Option 1, Option 2, Option 3"
                     style={{
                       width: '100%',
-                      padding: '0.625rem',
+                      padding: '0.5rem 0.75rem',
                       border: '1px solid var(--gray-300)',
                       borderRadius: '6px',
                       fontSize: '0.875rem'
@@ -632,12 +655,12 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
 
               {/* Min/Max Selections for Checklist */}
               {selectedType === 'checklist' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
                   <div>
                     <label style={{
                       display: 'block',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem',
+                      marginBottom: '0.375rem',
+                      fontSize: '0.8125rem',
                       fontWeight: 600,
                       color: 'var(--gray-700)'
                     }}>
@@ -651,7 +674,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       placeholder="0 (optional)"
                       style={{
                         width: '100%',
-                        padding: '0.625rem',
+                        padding: '0.5rem 0.75rem',
                         border: '1px solid var(--gray-300)',
                         borderRadius: '6px',
                         fontSize: '0.875rem'
@@ -661,8 +684,8 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   <div>
                     <label style={{
                       display: 'block',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem',
+                      marginBottom: '0.375rem',
+                      fontSize: '0.8125rem',
                       fontWeight: 600,
                       color: 'var(--gray-700)'
                     }}>
@@ -676,7 +699,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       placeholder="0 (unlimited)"
                       style={{
                         width: '100%',
-                        padding: '0.625rem',
+                        padding: '0.5rem 0.75rem',
                         border: '1px solid var(--gray-300)',
                         borderRadius: '6px',
                         fontSize: '0.875rem'
@@ -687,89 +710,85 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
               )}
               {/* Assign Standards Settings */}
               {selectedType === 'assign_standards' && (
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '0.5rem',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    color: 'var(--gray-700)'
-                  }}>
-                    Standards Framework
-                  </label>
-                  <select
-                    value={framework}
-                    onChange={(e) => {
-                      console.log('🎯 Framework changed in assign_standards field:', e.target.value);
-                      setFramework(e.target.value);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '0.625rem',
-                      border: '1px solid var(--gray-300)',
-                      borderRadius: '6px',
-                      fontSize: '0.875rem',
-                      backgroundColor: '#fff',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <option value="CCSS">CCSS</option>
-                    <option value="BLOOM">BLOOM</option>
-                    <option value="TEKS">TEKS</option>
-                    <option value="BEST">B.E.S.T.</option>
-                    <option value="GSE">GSE</option>
-                  </select>
-                  <p style={{
-                    marginTop: '0.5rem',
-                    fontSize: '0.75rem',
-                    color: '#6b7280'
-                  }}>
-                    Select which framework standards to use for this field. Available: CCSS, BLOOM, TEKS, B.E.S.T., GSE.
-                  </p>
-
-                  <div style={{ marginTop: '1rem' }}>
-                    <label style={{
-                      display: 'block',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      color: 'var(--gray-700)'
-                    }}>
-                      Max Standards (leave blank for default 10)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={maxStandardsInput}
-                      onChange={(e) => setMaxStandardsInput(e.target.value)}
-                      placeholder="10"
-                      style={{
-                        width: '100%',
-                        padding: '0.625rem',
-                        border: '1px solid var(--gray-300)',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem'
-                      }}
-                    />
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        marginBottom: '0.375rem',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--gray-700)'
+                      }}>
+                        Standards Framework
+                      </label>
+                      <select
+                        value={framework}
+                        onChange={(e) => {
+                          console.log('🎯 Framework changed in assign_standards field:', e.target.value);
+                          setFramework(e.target.value);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem 0.75rem',
+                          border: '1px solid var(--gray-300)',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          backgroundColor: '#fff',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="CCSS">CCSS</option>
+                        <option value="BLOOM">BLOOM</option>
+                        <option value="TEKS">TEKS</option>
+                        <option value="BEST">B.E.S.T.</option>
+                        <option value="GSE">GSE</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        marginBottom: '0.375rem',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--gray-700)'
+                      }}>
+                        Max Standards (blank = 10)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={maxStandardsInput}
+                        onChange={(e) => setMaxStandardsInput(e.target.value)}
+                        placeholder="10"
+                        style={{
+                          width: '100%',
+                          padding: '0.5rem 0.75rem',
+                          border: '1px solid var(--gray-300)',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem'
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
               {/* Grade Band Selector Info */}
               {selectedType === 'grade_band_selector' && (
                 <div style={{
-                  marginBottom: '1.5rem',
-                  padding: '0.75rem',
+                  marginBottom: '1rem',
+                  padding: '0.5rem 0.75rem',
                   backgroundColor: '#f9fafb',
                   border: '1px solid #e5e7eb',
                   borderRadius: '6px',
-                  fontSize: '0.8125rem',
+                  fontSize: '0.75rem',
                   color: '#6b7280'
                 }}>
-                  Grade ranges loaded from: <code style={{ 
-                    backgroundColor: '#e5e7eb', 
-                    padding: '0.125rem 0.375rem', 
+                  Grade ranges loaded from: <code style={{
+                    backgroundColor: '#e5e7eb',
+                    padding: '0.125rem 0.375rem',
                     borderRadius: '3px',
-                    fontSize: '0.75rem',
+                    fontSize: '0.6875rem',
                     fontFamily: 'monospace'
                   }}>src/config/gradeRangeOptions.json</code>
                 </div>
@@ -778,19 +797,19 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
               {/* Theme Selector Info */}
               {selectedType === 'theme_selector' && (
                 <div style={{
-                  marginBottom: '1.5rem',
-                  padding: '0.75rem',
+                  marginBottom: '1rem',
+                  padding: '0.5rem 0.75rem',
                   backgroundColor: '#f9fafb',
                   border: '1px solid #e5e7eb',
                   borderRadius: '6px',
-                  fontSize: '0.8125rem',
+                  fontSize: '0.75rem',
                   color: '#6b7280'
                 }}>
-                  Themes loaded from: <code style={{ 
-                    backgroundColor: '#e5e7eb', 
-                    padding: '0.125rem 0.375rem', 
+                  Themes loaded from: <code style={{
+                    backgroundColor: '#e5e7eb',
+                    padding: '0.125rem 0.375rem',
                     borderRadius: '3px',
-                    fontSize: '0.75rem',
+                    fontSize: '0.6875rem',
                     fontFamily: 'monospace'
                   }}>src/config/themeSelectorOptions.json</code>
                 </div>
@@ -799,11 +818,11 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
               {/* MCQs Framework Selection */}
               {selectedType === 'mcqs' && (
                 <>
-                  <div style={{ marginBottom: '1.5rem' }}>
+                  <div style={{ marginBottom: '1rem' }}>
                     <label style={{
                       display: 'block',
-                      marginBottom: '0.5rem',
-                      fontSize: '0.875rem',
+                      marginBottom: '0.375rem',
+                      fontSize: '0.8125rem',
                       fontWeight: 600,
                       color: 'var(--gray-700)'
                     }}>
@@ -817,7 +836,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       }}
                       style={{
                         width: '100%',
-                        padding: '0.625rem',
+                        padding: '0.5rem 0.75rem',
                         border: '1px solid var(--gray-300)',
                         borderRadius: '6px',
                         fontSize: '0.875rem',
@@ -831,42 +850,35 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       <option value="BEST">B.E.S.T.</option>
                       <option value="GSE">GSE</option>
                     </select>
-                    <p style={{
-                      marginTop: '0.5rem',
-                      fontSize: '0.75rem',
-                      color: '#6b7280'
-                    }}>
-                      Select which framework standards to use for MCQ generation.
-                    </p>
                   </div>
-                  
+
                   <div style={{
-                    marginBottom: '1.5rem',
-                    padding: '1rem',
+                    marginBottom: '1rem',
+                    padding: '0.625rem 0.75rem',
                     background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
                     border: '1px solid #bfdbfe',
-                    borderRadius: '8px',
-                    fontSize: '0.875rem',
+                    borderRadius: '6px',
+                    fontSize: '0.8125rem',
                     color: '#1e40af'
                   }}>
-                    <strong>Note:</strong> This field generates 5 multiple choice questions. Each question can be individually regenerated with specific standards selected during the lesson creation process.
+                    <strong>Note:</strong> Generates 5 MCQs. Each can be individually regenerated with specific standards.
                   </div>
                 </>
               )}
 
               {/* Checkboxes */}
-              <div style={{ 
-                marginBottom: '1.5rem',
+              <div style={{
+                marginBottom: '1rem',
                 display: 'flex',
-                gap: '2rem',
+                gap: '1.25rem',
                 flexWrap: 'wrap'
               }}>
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
+                  gap: '0.375rem',
                   cursor: 'pointer',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 600,
                   color: 'var(--gray-700)'
                 }}>
@@ -875,20 +887,20 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     checked={required}
                     onChange={(e) => setRequired(e.target.checked)}
                     style={{
-                      width: '18px',
-                      height: '18px',
+                      width: '16px',
+                      height: '16px',
                       cursor: 'pointer'
                     }}
                   />
-                  Required Field
+                  Required
                 </label>
                 {selectedType !== 'grade_band_selector' && selectedType !== 'theme_selector' && selectedType !== 'mcqs' && (
                   <label style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
+                    gap: '0.375rem',
                     cursor: 'pointer',
-                    fontSize: '0.875rem',
+                    fontSize: '0.8125rem',
                     fontWeight: 600,
                     color: 'var(--gray-700)'
                   }}>
@@ -897,33 +909,33 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       checked={aiEnabled}
                       onChange={(e) => setAiEnabled(e.target.checked)}
                       style={{
-                        width: '18px',
-                        height: '18px',
+                        width: '16px',
+                        height: '16px',
                         cursor: 'pointer'
                       }}
                     />
-                    AI-Enabled Field
+                    AI-Enabled
                   </label>
                 )}
                 {selectedType === 'mcqs' && (
                   <div style={{
-                    padding: '0.5rem 0.75rem',
+                    padding: '0.25rem 0.5rem',
                     background: '#f0fdf4',
                     border: '1px solid #86efac',
-                    borderRadius: '6px',
-                    fontSize: '0.8125rem',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
                     fontWeight: 600,
                     color: '#166534'
                   }}>
-                    ✓ AI-Enabled by default
+                    AI-Enabled by default
                   </div>
                 )}
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
+                  gap: '0.375rem',
                   cursor: 'pointer',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 600,
                   color: 'var(--gray-700)'
                 }}>
@@ -932,38 +944,61 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     checked={requiredForGeneration}
                     onChange={(e) => setRequiredForGeneration(e.target.checked)}
                     style={{
-                      width: '18px',
-                      height: '18px',
+                      width: '16px',
+                      height: '16px',
                       cursor: 'pointer'
                     }}
                   />
-                  Required for default generation
+                  Req'd for generation
                 </label>
+                {selectedType !== 'section_header' && (
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.375rem',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    color: 'var(--gray-700)'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={importable}
+                      onChange={(e) => setImportable(e.target.checked)}
+                      style={{
+                        width: '16px',
+                        height: '16px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    Importable
+                  </label>
+                )}
               </div>
 
               {/* Field For Selector */}
-              <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8125rem',
                   fontWeight: 600,
-                  marginBottom: '0.75rem',
+                  marginBottom: '0.5rem',
                   color: 'var(--gray-700)'
                 }}>
-                  Field user: <span style={{ color: '#ef4444' }}>*</span>
+                  Field user:
                 </label>
                 <div style={{
                   display: 'flex',
-                  gap: '1rem'
+                  gap: '0.75rem'
                 }}>
                   <label style={{
                     flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '1rem',
+                    gap: '0.5rem',
+                    padding: '0.5rem 0.75rem',
                     border: `2px solid ${fieldFor === 'designer' ? 'var(--primary)' : 'var(--gray-200)'}`,
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     backgroundColor: fieldFor === 'designer' ? '#eff6ff' : '#fff',
                     cursor: 'pointer',
                     transition: 'all 0.2s'
@@ -975,36 +1010,27 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       checked={fieldFor === 'designer'}
                       onChange={(e) => setFieldFor(e.target.value)}
                       style={{
-                        width: '18px',
-                        height: '18px',
+                        width: '16px',
+                        height: '16px',
                         cursor: 'pointer'
                       }}
                     />
-                    <div>
-                      <div style={{
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        color: 'var(--gray-900)'
-                      }}>
-                        Designer
-                      </div>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--gray-600)',
-                        marginTop: '0.125rem'
-                      }}>
-                        
-                      </div>
-                    </div>
+                    <span style={{
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      color: 'var(--gray-900)'
+                    }}>
+                      Designer
+                    </span>
                   </label>
                   <label style={{
                     flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.75rem',
-                    padding: '1rem',
+                    gap: '0.5rem',
+                    padding: '0.5rem 0.75rem',
                     border: `2px solid ${fieldFor === 'builder' ? 'var(--primary)' : 'var(--gray-200)'}`,
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     backgroundColor: fieldFor === 'builder' ? '#eff6ff' : '#fff',
                     cursor: 'pointer',
                     transition: 'all 0.2s'
@@ -1016,26 +1042,18 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                       checked={fieldFor === 'builder'}
                       onChange={(e) => setFieldFor(e.target.value)}
                       style={{
-                        width: '18px',
-                        height: '18px',
+                        width: '16px',
+                        height: '16px',
                         cursor: 'pointer'
                       }}
                     />
-                    <div>
-                      <div style={{
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        color: 'var(--gray-900)'
-                      }}>
-                        Builder
-                      </div>
-                      <div style={{
-                        fontSize: '0.75rem',
-                        color: 'var(--gray-600)',
-                        marginTop: '0.125rem'
-                      }}>
-                      </div>
-                    </div>
+                    <span style={{
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      color: 'var(--gray-900)'
+                    }}>
+                      Builder
+                    </span>
                   </label>
                 </div>
               </div>
@@ -1045,7 +1063,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 display: 'flex',
                 gap: '0.75rem',
                 justifyContent: 'flex-end',
-                paddingTop: '1rem',
+                paddingTop: '0.75rem',
                 borderTop: '1px solid var(--gray-200)'
               }}>
                 {!isEditMode && (
@@ -1053,13 +1071,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     type="button"
                     onClick={handleBack}
                     style={{
-                      padding: '0.75rem 1.5rem',
+                      padding: '0.5rem 1.25rem',
                       border: '2px solid var(--gray-300)',
-                      borderRadius: '8px',
+                      borderRadius: '6px',
                       backgroundColor: '#fff',
                       color: 'var(--gray-700)',
                       fontWeight: 600,
-                      fontSize: '1rem',
+                      fontSize: '0.875rem',
                       cursor: 'pointer',
                       transition: 'all 0.2s'
                     }}
@@ -1079,13 +1097,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   type="button"
                   onClick={handleClose}
                   style={{
-                    padding: '0.75rem 1.5rem',
+                    padding: '0.5rem 1.25rem',
                     border: '2px solid var(--gray-300)',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     backgroundColor: '#fff',
                     color: 'var(--gray-700)',
                     fontWeight: 600,
-                    fontSize: '1rem',
+                    fontSize: '0.875rem',
                     cursor: 'pointer',
                     transition: 'all 0.2s'
                   }}
@@ -1103,13 +1121,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 <button
                   type="submit"
                   style={{
-                    padding: '0.75rem 1.5rem',
+                    padding: '0.5rem 1.25rem',
                     border: 'none',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     color: '#fff',
                     fontWeight: 600,
-                    fontSize: '1rem',
+                    fontSize: '0.875rem',
                     cursor: 'pointer',
                     transition: 'all 0.2s'
                   }}

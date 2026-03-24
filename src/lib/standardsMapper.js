@@ -868,3 +868,18 @@ Example response: CCSS.RI.3.1; TEKS.ELAR.3.6(B); BEST.ELA.3.R.2.2; BLOOM.2.5; 3.
     return candidateStandards;
   }
 }
+
+/**
+ * Look up a standard by its code and return the full object with statement.
+ * @param {string} code - Standard code (any framework)
+ * @returns {Promise<{initiativeName: string, fullCode: string, statement: string}>}
+ */
+export async function lookupStandardByCode(code) {
+  const framework = detectFramework(code) || '';
+  const statement = await getStandardStatement(code);
+  return {
+    initiativeName: framework,
+    fullCode: code,
+    statement: statement || '',
+  };
+}
