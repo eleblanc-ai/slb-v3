@@ -14,8 +14,21 @@ const SKIP_TYPES = new Set([
 ]);
 
 // Field name aliases: import header name → actual field name
+// These cover cases where export templates use different headers than the DB field name
 const FIELD_NAME_ALIASES = {
   'Title': 'Selection',
+  'Passage': 'Glossed Passage',
+  'Just-in-Time Words': 'Glossary',
+  'Photo Link': 'Thumbnail Image',
+  'Close Reading Questions': 'Multiple Choice Questions',
+  'Primary Standard': 'Primary Standard(s)',
+  'Primary Standards': 'Primary Standard(s)',
+  'Primary Reading': 'Primary Reading Standard(s)',
+  'Primary Writing Standard': 'Primary Writing Standard(s)',
+  'Practiced Standards': 'Practice Standard(s)',
+  'Subjects': 'Subject(s)',
+  'Grade Band': 'Grade Level',
+  'Publication date': 'Publish Date',
 };
 
 /**
@@ -109,9 +122,11 @@ export async function applyImportToFields(parsedData, fields) {
     if (!field.importable) continue;
     if (SKIP_TYPES.has(field.type)) continue;
 
-    const raw = parsedData[field.name]
-      ?? parsedData[Object.keys(FIELD_NAME_ALIASES).find(alias => FIELD_NAME_ALIASES[alias] === field.name)]
-      ?? undefined;
+    // Try exact match first, then check all aliases that map to this field name
+    const aliasKey = Object.keys(FIELD_NAME_ALIASES).find(
+      alias => FIELD_NAME_ALIASES[alias] === field.name && parsedData[alias] !== undefined
+    );
+    const raw = parsedData[field.name] ?? (aliasKey ? parsedData[aliasKey] : undefined);
 
     // Track required-for-generation fields that had no matching header
     if ((raw === undefined || raw === '') && field.requiredForGeneration) {

@@ -3,7 +3,10 @@ import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom
 import { supabase } from '../../services/supabaseClient';
 import { US_STATES } from '../../config/usStates';
 import { useToast } from '../../hooks/useToast';
-import { FileText, ArrowLeft, X, Copy } from 'lucide-react';
+import { FileText, ArrowLeft, X, Copy, Upload, Download } from 'lucide-react';
+import BatchCreateModal from '../modals/BatchCreateModal';
+import BatchProgressModal from '../modals/BatchProgressModal';
+import { mapDatabaseFields } from '../../services/batchLessonEngine';
 
 export default function BrowseLessonTemplates() {
   const navigate = useNavigate();
@@ -26,6 +29,9 @@ export default function BrowseLessonTemplates() {
   const [showCloneSuccessModal, setShowCloneSuccessModal] = useState(false);
   const [clonedTemplateName, setClonedTemplateName] = useState(null);
   const [clonedTemplateState, setClonedTemplateState] = useState(null);
+  const [showBatchCreateModal, setShowBatchCreateModal] = useState(false);
+  const [showBatchProgressModal, setShowBatchProgressModal] = useState(false);
+  const [batchConfig, setBatchConfig] = useState(null);
 
   useEffect(() => {
     if (!showCloneSuccessModal) return;
@@ -314,6 +320,76 @@ export default function BrowseLessonTemplates() {
     }
   };
 
+  const handleBatchStart = (config) => {
+    setShowBatchCreateModal(false);
+    setBatchConfig(config);
+    setShowBatchProgressModal(true);
+  };
+
+  const SKIP_TYPES = ['section_header', 'image', 'mcqs', 'vocabulary_words'];
+
+  const handleDownloadTemplate = async (e, lessonType) => {
+    e.stopPropagation();
+    try {
+      const { data, error } = await supabase
+        .from('lesson_template_fields')
+        .select('*')
+        .eq('lesson_template_id', lessonType.id)
+        .order('field_order', { ascending: true });
+      if (error) throw error;
+
+      const fields = mapDatabaseFields(data);
+      let markdown = `#Template Name\n${lessonType.name}\n\n`;
+
+      for (const field of fields) {
+        if (!field.importable) continue;
+        if (SKIP_TYPES.includes(field.type)) continue;
+
+        markdown += `#${field.name}\n`;
+        switch (field.type) {
+          case 'dropdown':
+          case 'grade_band_selector':
+          case 'theme_selector':
+            if (field.options?.length > 0) {
+              markdown += `[Choose one: ${field.options.join(', ')}]\n`;
+            } else {
+              markdown += `[Enter value]\n`;
+            }
+            break;
+          case 'checklist':
+            if (field.options?.length > 0) {
+              markdown += `[One item per line. Options: ${field.options.join(', ')}]\n`;
+            } else {
+              markdown += `[One item per line]\n`;
+            }
+            break;
+          case 'assign_standards':
+            markdown += `[Standard codes separated by semicolons, e.g. CCSS.RI.7.1; CCSS.RI.7.2]\n`;
+            break;
+          case 'rich_text':
+            markdown += `[Enter text or HTML content]\n`;
+            break;
+          default:
+            markdown += `[Enter value]\n`;
+        }
+        markdown += '\n';
+      }
+
+      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${lessonType.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-template.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download template:', err);
+      toast.error('Failed to download template. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -391,6 +467,38 @@ export default function BrowseLessonTemplates() {
             }}>
               {mode === 'create' ? 'Choose a template for your lesson' : 'Continue working on your lesson templates'}
             </p>
+            {mode === 'create' && (
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <button
+                  onClick={() => setShowBatchCreateModal(true)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.375rem',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    borderRadius: '8px',
+                    padding: '0.5rem 1rem',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.25)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                  }}
+                >
+                  <Upload size={14} />
+                  Batch Create from Markdown
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -632,31 +740,59 @@ export default function BrowseLessonTemplates() {
                             </div>
                             
                             {/* Action Buttons */}
-                            <button
-                              onClick={() => mode === 'create' ? navigate(`/create-new-lesson?templateId=${lessonType.id}`) : handleSelectLessonType(lessonType)}
-                              style={{
-                                width: '100%',
-                                padding: '0.5rem 1rem',
-                                background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                                border: 'none',
-                                borderRadius: '6px',
-                                color: '#fff',
-                                fontSize: '0.875rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                                e.currentTarget.style.boxShadow = '0 4px 6px rgba(102, 126, 234, 0.3)';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0)';
-                                e.currentTarget.style.boxShadow = 'none';
-                              }}
-                            >
-                              {mode === 'create' ? 'Create Lesson' : 'Edit Template'}
-                            </button>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button
+                                onClick={() => mode === 'create' ? navigate(`/create-new-lesson?templateId=${lessonType.id}`) : handleSelectLessonType(lessonType)}
+                                style={{
+                                  flex: 1,
+                                  padding: '0.5rem 1rem',
+                                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  color: '#fff',
+                                  fontSize: '0.875rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s'
+                                }}
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(102, 126, 234, 0.3)';
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.boxShadow = 'none';
+                                }}
+                              >
+                                {mode === 'create' ? 'Create Lesson' : 'Edit Template'}
+                              </button>
+                              <button
+                                onClick={(e) => handleDownloadTemplate(e, lessonType)}
+                                title="Download Markdown Template"
+                                style={{
+                                  padding: '0.5rem 0.625rem',
+                                  background: '#f1f5f9',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '6px',
+                                  color: '#64748b',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#e2e8f0';
+                                  e.currentTarget.style.color = '#334155';
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                  e.currentTarget.style.color = '#64748b';
+                                }}
+                              >
+                                <Download size={16} />
+                              </button>
+                            </div>
                           </div>
                           </div>
                         </div>
@@ -884,31 +1020,59 @@ export default function BrowseLessonTemplates() {
                     </div>
                     
                     {/* Action Buttons */}
-                    <button
-                      onClick={() => mode === 'create' ? navigate(`/create-new-lesson?templateId=${lessonType.id}`) : handleSelectLessonType(lessonType)}
-                      style={{
-                        width: '100%',
-                        padding: '0.5rem 1rem',
-                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        color: '#fff',
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 4px 6px rgba(102, 126, 234, 0.3)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                      {mode === 'create' ? 'Create Lesson' : 'Edit Template'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => mode === 'create' ? navigate(`/create-new-lesson?templateId=${lessonType.id}`) : handleSelectLessonType(lessonType)}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 1rem',
+                          background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          fontSize: '0.875rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 4px 6px rgba(102, 126, 234, 0.3)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        {mode === 'create' ? 'Create Lesson' : 'Edit Template'}
+                      </button>
+                      <button
+                        onClick={(e) => handleDownloadTemplate(e, lessonType)}
+                        title="Download Markdown Template"
+                        style={{
+                          padding: '0.5rem 0.625rem',
+                          background: '#f1f5f9',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '6px',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = '#e2e8f0';
+                          e.currentTarget.style.color = '#334155';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f1f5f9';
+                          e.currentTarget.style.color = '#64748b';
+                        }}
+                      >
+                        <Download size={16} />
+                      </button>
+                    </div>
                   </div>
                   </div>
                 </div>
@@ -1645,6 +1809,27 @@ export function generateMarkdown(templateData, fields, fieldValues) {
         </div>
       </div>
       )}
+
+      {/* Batch Create Modal */}
+      <BatchCreateModal
+        visible={showBatchCreateModal}
+        onClose={() => setShowBatchCreateModal(false)}
+        templates={lessonTypes}
+        session={session}
+        onBatchStart={handleBatchStart}
+      />
+
+      {/* Batch Progress Modal */}
+      <BatchProgressModal
+        visible={showBatchProgressModal}
+        batchConfig={batchConfig}
+        session={session}
+        onClose={() => {
+          setShowBatchProgressModal(false);
+          setBatchConfig(null);
+          navigate('/');
+        }}
+      />
     </div>
   );
 }
