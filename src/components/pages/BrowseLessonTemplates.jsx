@@ -1827,7 +1827,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
         onClose={() => {
           setShowBatchProgressModal(false);
           setBatchConfig(null);
-          navigate('/');
+          navigate('/browse-lessons');
         }}
       />
     </div>
