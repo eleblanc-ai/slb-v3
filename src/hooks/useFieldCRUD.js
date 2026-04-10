@@ -44,6 +44,7 @@ export default function useFieldCRUD({
     if (fieldData.max_selections !== undefined) cfg.max_selections = fieldData.max_selections;
     if (fieldData.framework) cfg.framework = fieldData.framework;
     if (fieldData.defaultText) cfg.defaultText = fieldData.defaultText;
+    if (fieldData.defaultQuestionCount !== undefined) cfg.defaultQuestionCount = fieldData.defaultQuestionCount;
     return Object.keys(cfg).length > 0 ? cfg : null;
   };
 

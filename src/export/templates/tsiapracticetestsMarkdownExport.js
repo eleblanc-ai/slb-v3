@@ -1,18 +1,18 @@
 /**
- * Markdown Export for Additional Reading Practice Lesson Template
- * Custom export function for ARP content
+ * Markdown Export for TSIA Practice Tests
+ * Custom export function for TSIA Practice Tests content
  */
 
 export function generateMarkdown(templateData, fields, fieldValues) {
   let markdown = '';
-  
+
   // Helper function to find field value by name
   const getFieldValue = (fieldName) => {
     const field = fields.find(f => f.name === fieldName);
     if (!field) return '';
     return fieldValues[field.id] || '';
   };
-  
+
   // Helper function to get thumbnail URL from image field
   const getThumbnailUrl = (fieldName) => {
     const field = fields.find(f => f.name === fieldName);
@@ -20,7 +20,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     const imageData = fieldValues[field.id];
     return imageData?.url || '';
   };
-  
+
   // Helper to get array values as semicolon-separated string
   const getArrayAsSemicolonList = (fieldName) => {
     const value = getFieldValue(fieldName);
@@ -29,7 +29,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     }
     return '';
   };
-  
+
   // Helper to get standard codes from objects
   const getStandardCodes = (fieldName) => {
     const field = fields.find(f => f.name === fieldName);
@@ -46,7 +46,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     }
     return '';
   };
-  
+
   // Helper to get MCQs as formatted text
   const getMCQs = (fieldName) => {
     const field = fields.find(f => f.name === fieldName);
@@ -74,35 +74,35 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     }
     return '';
   };
-  
+
   // Content ID
   markdown += `#Content ID\n`;
   markdown += `${getFieldValue('Content ID')}\n\n`;
-  
+
   // Selection
   markdown += `#Selection\n`;
   const selection = getFieldValue('Selection');
   const selectionText = typeof selection === 'string' ? selection.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : selection;
   markdown += `${selectionText}\n\n`;
-  
+
   // Photo Link
   markdown += `#Photo Link\n`;
   markdown += `${getThumbnailUrl('Thumbnail Image')}\n\n`;
-  
+
   // Theme
   markdown += `#Theme\n`;
   markdown += `${getFieldValue('Theme')}\n\n`;
-  
+
   // CERCA Question
   markdown += `#CERCA Question\n`;
   const cercaQuestion = getFieldValue('CERCA Question');
   const cercaText = typeof cercaQuestion === 'string' ? cercaQuestion.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : cercaQuestion;
   markdown += `${cercaText}\n\n`;
-  
+
   // Grade Band
   markdown += `#Grade Band\n`;
   markdown += `${getFieldValue('Grade Band')}\n\n`;
-  
+
   // Subjects
   markdown += `#Subjects\n`;
   const subjects = getFieldValue('Subjects');
@@ -115,19 +115,19 @@ export function generateMarkdown(templateData, fields, fieldValues) {
   } else {
     markdown += `\n`;
   }
-  
+
   // Tags
   markdown += `#Tags\n`;
   markdown += `${getFieldValue('Tags')}\n\n`;
-  
+
   // Primary Standard
   markdown += `#Primary Standard\n`;
   markdown += `${getStandardCodes('Primary Standard(s)')}\n\n`;
-  
+
   // Primary Reading
   markdown += `#Primary Reading\n`;
   markdown += `${getStandardCodes('Primary Reading Standard(s)')}\n\n`;
-  
+
   // Just-in Time Words
   markdown += `#Just-in-Time Words\n`;
   const glossary = getFieldValue('Glossary');
@@ -144,42 +144,42 @@ export function generateMarkdown(templateData, fields, fieldValues) {
     glossaryText = glossary;
   }
   markdown += `${glossaryText}\n\n`;
-  
+
   // Close Reading Questions
   markdown += `#Close Reading Questions\n`;
   markdown += `${getMCQs('Multiple Choice Questions')}\n\n`;
-  
+
   // Headline
   markdown += `#Headline\n`;
   markdown += `${getFieldValue('Headline')}\n\n`;
-  
+
   // Passage
   markdown += `#Passage\n`;
   const glossedPassage = getFieldValue('Glossed Passage');
   // Strip <em> tags but keep asterisks and other content
-  const cleanedPassage = typeof glossedPassage === 'string' 
-    ? glossedPassage.replace(/<\/?em>/gi, '') 
+  const cleanedPassage = typeof glossedPassage === 'string'
+    ? glossedPassage.replace(/<\/?em>/gi, '')
     : glossedPassage;
   markdown += `${cleanedPassage}\n\n`;
 
     // Read
   markdown += `#Read\n`;
   markdown += `${getFieldValue('Read')}\n\n`;
-  
+
   markdown += `#Lexile Level\n`;
   markdown += `${getFieldValue('Lexile Level')}\n\n`;
-  
+
   // Author
   markdown += `#Author\n`;
   markdown += `${getFieldValue('Author')}\n\n`;
-  
+
   // Publisher
   markdown += `#Publisher\n`;
   markdown += `${getFieldValue('Publisher')}\n\n`;
-  
+
   // Additional Notes
   markdown += `#Additional Notes\n`;
   markdown += `\n`;
-  
+
   return markdown;
 }

@@ -65,7 +65,6 @@ export function generateMarkdown(templateData, fields, fieldValues) {
               .replace(/<[^>]*>/g, '')  // Remove remaining HTML tags
               .replace(/\n\s*\n+/g, '\n')  // Collapse multiple newlines to single
               .trim()
-              .replace(/^(\d+)\./gm, '$1\\.');  // Escape numbered list markers for markdown
           } else {
             cleanQuestion = q;
           }

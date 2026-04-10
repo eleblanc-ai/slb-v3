@@ -121,6 +121,7 @@ export default function QuestionPromptsEditor({
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
           borderBottom: '2px solid #86efac',
           marginBottom: '1rem',
           background: '#f0fdf4',
@@ -133,7 +134,8 @@ export default function QuestionPromptsEditor({
             type="button"
             onClick={() => onChangeActiveTab(index)}
             style={{
-              flex: 1,
+              flex: '0 0 auto',
+              minWidth: '60px',
               padding: '8px 12px',
               border: 'none',
               background: activeTab === index ? '#fff' : 'transparent',

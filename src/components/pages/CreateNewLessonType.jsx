@@ -1317,6 +1317,7 @@ export default function CreateNewLessonType() {
             mappedField.framework = templateDefaultFramework;
           }
           if (field.field_config.defaultText) mappedField.defaultText = field.field_config.defaultText;
+          if (field.field_config.defaultQuestionCount !== undefined) mappedField.defaultQuestionCount = field.field_config.defaultQuestionCount;
         }
         
         return mappedField;

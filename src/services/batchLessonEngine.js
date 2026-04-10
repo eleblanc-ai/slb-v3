@@ -81,6 +81,7 @@ export function mapDatabaseFields(fieldsData) {
         mapped.max_selections = field.field_config.max_selections;
       if (field.field_config.framework) mapped.framework = field.field_config.framework;
       if (field.field_config.defaultText) mapped.defaultText = field.field_config.defaultText;
+      if (field.field_config.defaultQuestionCount !== undefined) mapped.defaultQuestionCount = field.field_config.defaultQuestionCount;
     }
     return mapped;
   });

@@ -61,6 +61,12 @@ const fieldTypes = [
     icon: HelpCircle,
   },
   {
+    type: 'flex_mcq',
+    label: 'Flex MCQ',
+    description: 'Multiple choice questions — add as many as you need',
+    icon: HelpCircle,
+  },
+  {
     type: 'section_header',
     label: 'Section Header',
     description: 'A visual header to break up form sections',
@@ -98,6 +104,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     field?.max_selections ? String(field.max_selections) : ''
   );
   const [framework, setFramework] = useState(field?.framework || defaultFramework || 'CCSS');
+  const [defaultQuestionCount, setDefaultQuestionCount] = useState(field?.defaultQuestionCount || 5);
 
   console.log('📊 Initial framework state:', framework);
 
@@ -199,7 +206,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
       helperText: helperText,
       defaultText: selectedType === 'rich_text' ? defaultText : undefined,
       required: required,
-      aiEnabled: (selectedType === 'mcqs' || selectedType === 'image') ? true : aiEnabled, // Auto-enable AI for MCQs and images
+      aiEnabled: (selectedType === 'mcqs' || selectedType === 'flex_mcq' || selectedType === 'image') ? true : aiEnabled, // Auto-enable AI for MCQs and images
       requiredForGeneration: requiredForGeneration,
       importable: importable,
       fieldFor: fieldFor,
@@ -234,6 +241,13 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
     if (selectedType === 'mcqs') {
       fieldData.framework = framework;
       console.log('✅ Setting mcqs framework:', framework);
+    }
+
+    // Add framework for flex_mcq field
+    if (selectedType === 'flex_mcq') {
+      fieldData.framework = framework;
+      fieldData.defaultQuestionCount = defaultQuestionCount;
+      console.log('✅ Setting flex_mcq framework:', framework, 'defaultQuestionCount:', defaultQuestionCount);
     }
 
     console.log('📤 Final fieldData:', fieldData);
@@ -867,6 +881,81 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                 </>
               )}
 
+              {/* Flex MCQ Framework Selection */}
+              {selectedType === 'flex_mcq' && (
+                <>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.375rem',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-700)'
+                    }}>
+                      Standards Framework
+                    </label>
+                    <select
+                      value={framework}
+                      onChange={(e) => setFramework(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem',
+                        border: '1px solid var(--gray-300)',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        backgroundColor: '#fff',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="CCSS">CCSS</option>
+                      <option value="BLOOM">BLOOM</option>
+                      <option value="TEKS">TEKS</option>
+                      <option value="BEST">B.E.S.T.</option>
+                      <option value="GSE">GSE</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.375rem',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      color: 'var(--gray-700)'
+                    }}>
+                      Starting Number of Questions
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={defaultQuestionCount}
+                      onChange={(e) => setDefaultQuestionCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem',
+                        border: '1px solid var(--gray-300)',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        backgroundColor: '#fff',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{
+                    marginBottom: '1rem',
+                    padding: '0.625rem 0.75rem',
+                    background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '6px',
+                    fontSize: '0.8125rem',
+                    color: '#1e40af'
+                  }}>
+                    <strong>Note:</strong> Add as many questions as you need. Questions beyond 5 wrap to a second row of tabs.
+                  </div>
+                </>
+              )}
+
               {/* Checkboxes */}
               <div style={{
                 marginBottom: '1rem',
@@ -895,7 +984,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                   />
                   Required
                 </label>
-                {selectedType !== 'grade_band_selector' && selectedType !== 'theme_selector' && selectedType !== 'mcqs' && (
+                {selectedType !== 'grade_band_selector' && selectedType !== 'theme_selector' && selectedType !== 'mcqs' && selectedType !== 'flex_mcq' && (
                   <label style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -918,7 +1007,7 @@ export default function AddEditFieldModal({ visible, onClose, onFieldAdded, fiel
                     AI-Enabled
                   </label>
                 )}
-                {selectedType === 'mcqs' && (
+                {(selectedType === 'mcqs' || selectedType === 'flex_mcq') && (
                   <div style={{
                     padding: '0.25rem 0.5rem',
                     background: '#f0fdf4',

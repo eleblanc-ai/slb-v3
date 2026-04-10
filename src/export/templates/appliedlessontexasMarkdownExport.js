@@ -1,5 +1,5 @@
 /**
- * Markdown Export for Applied Lesson (Florida)
+ * Markdown Export for Applied Lesson (Texas)
  */
 
 export function generateMarkdown(templateData, fields, fieldValues) {
@@ -234,7 +234,7 @@ export function generateMarkdown(templateData, fields, fieldValues) {
   markdown += `${stripHtml(getFieldValue('Reasoning'))}\n\n`;
   markdown += `**Counterargument**\n`;
   markdown += `${stripHtml(getFieldValue('Counterargument'))}\n\n`;
- 
+
 
   // Step 6
   markdown += `#Step 6 - Create Introduction\n`;

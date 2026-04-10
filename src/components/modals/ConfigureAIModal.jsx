@@ -94,54 +94,53 @@ export default function ConfigureAIModal({
   const [syncing, setSyncing] = useState(false);
   const [vocabStandards, setVocabStandards] = useState([]);
   const [mainIdeaStandards, setMainIdeaStandards] = useState([]);
-  const allowSelfContext = field?.type === 'mcqs';
-  const questionKeys = useMemo(() => ['q1', 'q2', 'q3', 'q4', 'q5'], []);
+  const allowSelfContext = field?.type === 'mcqs' || field?.type === 'flex_mcq';
+  const questionKeys = useMemo(() => {
+    if (field?.type === 'flex_mcq') {
+      const count = field.defaultQuestionCount || 5;
+      return Array.from({ length: count }, (_, i) => `q${i + 1}`);
+    }
+    return ['q1', 'q2', 'q3', 'q4', 'q5'];
+  }, [field?.type, field?.defaultQuestionCount]);
 
   const defaultSystemInstructions = 'You are an AI assistant helping to create educational content. Be clear, concise, and age-appropriate.';
   const defaultContextInstructions = 'Use the following context from other fields to inform your generation:';
   const defaultFormatReqs = 'Return plain text without markdown formatting.';
 
-  // Get default prompts for MCQ questions
+  // Get default prompts for MCQ questions — loops over questionKeys, capping at q5 defaults for questions beyond 5
   const getDefaultQuestionPrompts = useCallback(() => {
     const defaults = aiPromptDefaults.fieldTypePrompts?.mcqs?.questionPrompts || {};
-    return {
-      q1: { 
-        prompt: defaults.q1?.prompt || '', 
-        label: defaults.q1?.label || 'Central Idea', 
-        tooltip: defaults.q1?.tooltip || '',
-        includeVocabStandards: defaults.q1?.includeVocabStandards || false,
-        includeMainIdeaStandards: defaults.q1?.includeMainIdeaStandards || false
-      },
-      q2: { 
-        prompt: defaults.q2?.prompt || '', 
-        label: defaults.q2?.label || 'Vocabulary', 
-        tooltip: defaults.q2?.tooltip || '',
-        includeVocabStandards: defaults.q2?.includeVocabStandards || false,
-        includeMainIdeaStandards: defaults.q2?.includeMainIdeaStandards || false
-      },
-      q3: { 
-        prompt: defaults.q3?.prompt || '', 
-        label: defaults.q3?.label || 'Evidence', 
-        tooltip: defaults.q3?.tooltip || '',
-        includeVocabStandards: defaults.q3?.includeVocabStandards || false,
-        includeMainIdeaStandards: defaults.q3?.includeMainIdeaStandards || false
-      },
-      q4: { 
-        prompt: defaults.q4?.prompt || '', 
-        label: defaults.q4?.label || 'Inference', 
-        tooltip: defaults.q4?.tooltip || '',
-        includeVocabStandards: defaults.q4?.includeVocabStandards || false,
-        includeMainIdeaStandards: defaults.q4?.includeMainIdeaStandards || false
-      },
-      q5: { 
-        prompt: defaults.q5?.prompt || '', 
-        label: defaults.q5?.label || 'Structure', 
-        tooltip: defaults.q5?.tooltip || '',
-        includeVocabStandards: defaults.q5?.includeVocabStandards || false,
-        includeMainIdeaStandards: defaults.q5?.includeMainIdeaStandards || false
-      }
-    };
-  }, []);
+    return questionKeys.reduce((acc, key, i) => {
+      const cappedKey = `q${Math.min(i, 4) + 1}`;
+      const d = defaults[cappedKey] || {};
+      acc[key] = {
+        prompt: d.prompt || '',
+        label: d.label || `Q${i + 1}`,
+        tooltip: d.tooltip || '',
+        includeVocabStandards: d.includeVocabStandards || false,
+        includeMainIdeaStandards: d.includeMainIdeaStandards || false
+      };
+      return acc;
+    }, {});
+  }, [questionKeys]);
+
+  // Build a questionPrompts object from saved data, falling back to defaults for missing keys
+  // Iterates all keys (including beyond q5) and caps default lookups at q5
+  const buildPromptsFromSaved = useCallback((savedPrompts, defaults) => {
+    return questionKeys.reduce((acc, key, i) => {
+      const cappedKey = `q${Math.min(i, 4) + 1}`;
+      const fallback = defaults[key] || defaults[cappedKey] || {};
+      const saved = savedPrompts?.[key];
+      acc[key] = {
+        prompt: stripHtml(saved?.prompt ?? (typeof saved === 'string' ? saved : '')) || fallback.prompt || '',
+        label: saved?.label || fallback.label || '',
+        tooltip: saved?.tooltip || fallback.tooltip || '',
+        includeVocabStandards: saved?.includeVocabStandards || false,
+        includeMainIdeaStandards: saved?.includeMainIdeaStandards || false
+      };
+      return acc;
+    }, {});
+  }, [questionKeys]);
 
   // Auto-resize all textareas once after values first load (not on every keystroke)
   useEffect(() => {
@@ -163,7 +162,7 @@ export default function ConfigureAIModal({
 
   useEffect(() => {
     const loadVocabStandards = async () => {
-      if (!field || field.type !== 'mcqs') {
+      if (!field || (field.type !== 'mcqs' && field.type !== 'flex_mcq')) {
         setVocabStandards([]);
         return;
       }
@@ -189,7 +188,7 @@ export default function ConfigureAIModal({
 
   useEffect(() => {
     const loadMainIdeaStandards = async () => {
-      if (!field || field.type !== 'mcqs') {
+      if (!field || (field.type !== 'mcqs' && field.type !== 'flex_mcq')) {
         setMainIdeaStandards([]);
         return;
       }
@@ -254,44 +253,7 @@ export default function ConfigureAIModal({
         setPrompt(stripHtml(configData.ai_prompt) || `Generate content for the ${field.name} field.`);
         // Load question prompts for MCQs
         if (configData.ai_question_prompts) {
-          const savedPrompts = configData.ai_question_prompts;
-          setQuestionPrompts({
-            q1: { 
-              prompt: stripHtml(savedPrompts.q1?.prompt || savedPrompts.q1) || defaultQuestionPrompts.q1.prompt, 
-              label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
-              tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip,
-              includeVocabStandards: savedPrompts.q1?.includeVocabStandards || false,
-              includeMainIdeaStandards: savedPrompts.q1?.includeMainIdeaStandards || false
-            },
-            q2: { 
-              prompt: stripHtml(savedPrompts.q2?.prompt || savedPrompts.q2) || defaultQuestionPrompts.q2.prompt, 
-              label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
-              tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip,
-              includeVocabStandards: savedPrompts.q2?.includeVocabStandards || false,
-              includeMainIdeaStandards: savedPrompts.q2?.includeMainIdeaStandards || false
-            },
-            q3: { 
-              prompt: stripHtml(savedPrompts.q3?.prompt || savedPrompts.q3) || defaultQuestionPrompts.q3.prompt, 
-              label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
-              tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip,
-              includeVocabStandards: savedPrompts.q3?.includeVocabStandards || false,
-              includeMainIdeaStandards: savedPrompts.q3?.includeMainIdeaStandards || false
-            },
-            q4: { 
-              prompt: stripHtml(savedPrompts.q4?.prompt || savedPrompts.q4) || defaultQuestionPrompts.q4.prompt, 
-              label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
-              tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip,
-              includeVocabStandards: savedPrompts.q4?.includeVocabStandards || false,
-              includeMainIdeaStandards: savedPrompts.q4?.includeMainIdeaStandards || false
-            },
-            q5: { 
-              prompt: stripHtml(savedPrompts.q5?.prompt || savedPrompts.q5) || defaultQuestionPrompts.q5.prompt, 
-              label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
-              tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip,
-              includeVocabStandards: savedPrompts.q5?.includeVocabStandards || false,
-              includeMainIdeaStandards: savedPrompts.q5?.includeMainIdeaStandards || false
-            }
-          });
+          setQuestionPrompts(buildPromptsFromSaved(configData.ai_question_prompts, defaultQuestionPrompts));
         } else {
           setQuestionPrompts(defaultQuestionPrompts);
         }
@@ -318,11 +280,11 @@ export default function ConfigureAIModal({
     }
     
     setLoading(false);
-  }, [field?.id, field?.name, mode, lessonId, getDefaultQuestionPrompts]);
+  }, [field?.id, field?.name, mode, lessonId, getDefaultQuestionPrompts, buildPromptsFromSaved]);
 
   const buildCurrentConfigPayload = () => ({
     ai_prompt: prompt || null,
-    ai_question_prompts: field?.type === 'mcqs' ? questionPrompts : null,
+    ai_question_prompts: (field?.type === 'mcqs' || field?.type === 'flex_mcq') ? questionPrompts : null,
     ai_context_field_ids: selectedFields.length > 0 ? selectedFields : null,
     ai_system_instructions: systemInstructions || null,
     ai_context_instructions: contextInstructions || null,
@@ -377,34 +339,7 @@ export default function ConfigureAIModal({
 
       setPrompt(stripHtml(templateData.ai_prompt) || `Generate content for the ${field.name} field.`);
       if (templateData.ai_question_prompts) {
-        const savedPrompts = templateData.ai_question_prompts;
-        setQuestionPrompts({
-          q1: { 
-            prompt: stripHtml(savedPrompts.q1?.prompt || savedPrompts.q1) || defaultQuestionPrompts.q1.prompt, 
-            label: savedPrompts.q1?.label || defaultQuestionPrompts.q1.label,
-            tooltip: savedPrompts.q1?.tooltip || defaultQuestionPrompts.q1.tooltip
-          },
-          q2: { 
-            prompt: stripHtml(savedPrompts.q2?.prompt || savedPrompts.q2) || defaultQuestionPrompts.q2.prompt, 
-            label: savedPrompts.q2?.label || defaultQuestionPrompts.q2.label,
-            tooltip: savedPrompts.q2?.tooltip || defaultQuestionPrompts.q2.tooltip
-          },
-          q3: { 
-            prompt: stripHtml(savedPrompts.q3?.prompt || savedPrompts.q3) || defaultQuestionPrompts.q3.prompt, 
-            label: savedPrompts.q3?.label || defaultQuestionPrompts.q3.label,
-            tooltip: savedPrompts.q3?.tooltip || defaultQuestionPrompts.q3.tooltip
-          },
-          q4: { 
-            prompt: stripHtml(savedPrompts.q4?.prompt || savedPrompts.q4) || defaultQuestionPrompts.q4.prompt, 
-            label: savedPrompts.q4?.label || defaultQuestionPrompts.q4.label,
-            tooltip: savedPrompts.q4?.tooltip || defaultQuestionPrompts.q4.tooltip
-          },
-          q5: { 
-            prompt: stripHtml(savedPrompts.q5?.prompt || savedPrompts.q5) || defaultQuestionPrompts.q5.prompt, 
-            label: savedPrompts.q5?.label || defaultQuestionPrompts.q5.label,
-            tooltip: savedPrompts.q5?.tooltip || defaultQuestionPrompts.q5.tooltip
-          }
-        });
+        setQuestionPrompts(buildPromptsFromSaved(templateData.ai_question_prompts, defaultQuestionPrompts));
       } else {
         setQuestionPrompts(defaultQuestionPrompts);
       }
@@ -434,13 +369,10 @@ export default function ConfigureAIModal({
     }
   };
 
-  const emptyQuestionPrompts = {
-    q1: { prompt: '', label: '', tooltip: '' },
-    q2: { prompt: '', label: '', tooltip: '' },
-    q3: { prompt: '', label: '', tooltip: '' },
-    q4: { prompt: '', label: '', tooltip: '' },
-    q5: { prompt: '', label: '', tooltip: '' }
-  };
+  const emptyQuestionPrompts = questionKeys.reduce((acc, key) => {
+    acc[key] = { prompt: '', label: '', tooltip: '' };
+    return acc;
+  }, {});
 
   useEffect(() => {
     if (visible && field) {
@@ -477,7 +409,7 @@ export default function ConfigureAIModal({
           .from('lesson_template_fields')
           .update({
             ai_prompt: prompt || null,
-            ai_question_prompts: field?.type === 'mcqs' ? questionPrompts : null,
+            ai_question_prompts: (field?.type === 'mcqs' || field?.type === 'flex_mcq') ? questionPrompts : null,
             ai_context_field_ids: selectedFields.length > 0 ? selectedFields : null,
             ai_system_instructions: systemInstructions || null,
             ai_context_instructions: contextInstructions || null,
@@ -542,10 +474,10 @@ export default function ConfigureAIModal({
     const extraContextBlocks = [];
     
     // For MCQ fields, only show standards if checkboxes are checked for the active question
-    if (field?.type === 'mcqs') {
+    if (field?.type === 'mcqs' || field?.type === 'flex_mcq') {
       const activeQuestionKey = questionKeys[activeQuestionTab];
       const activeQuestionConfig = questionPrompts[activeQuestionKey];
-      
+
       if (activeQuestionConfig?.includeVocabStandards && vocabStandards.length > 0) {
         extraContextBlocks.push({
           title: 'Grade-Specific Vocabulary Standards',
@@ -781,7 +713,7 @@ export default function ConfigureAIModal({
                     </div>
 
                     {/* Hide Field Prompt for MCQ fields - MCQs use individual question prompts instead */}
-                    {field?.type !== 'mcqs' && (
+                    {field?.type !== 'mcqs' && field?.type !== 'flex_mcq' && (
                     <div style={{
                       marginBottom: '1.5rem',
                       background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
@@ -823,7 +755,7 @@ export default function ConfigureAIModal({
                     </div>
                     )}
 
-                    {field?.type === 'mcqs' && (
+                    {(field?.type === 'mcqs' || field?.type === 'flex_mcq') && (
                       <QuestionPromptsEditor
                         questionPrompts={questionPrompts}
                         onChangeQuestionPrompts={setQuestionPrompts}

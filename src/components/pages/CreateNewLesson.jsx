@@ -43,6 +43,8 @@ import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } 
 import { generateMarkdown as generateNarrativeLessonFloridaMarkdown } from '../../export/templates/narrativelessonfloridaMarkdownExport';
 import { generateMarkdown as generateAppliedLessonFloridaMarkdown } from '../../export/templates/appliedlessonfloridaMarkdownExport';
 import { generateMarkdown as generateAppliedLessonMarkdown } from '../../export/templates/appliedlessonMarkdownExport';
+import { generateMarkdown as generateAdditionalReadingPracticeTexasMarkdown } from '../../export/templates/additionalreadingpracticetexasMarkdownExport';
+import { generateMarkdown as generateAppliedLessonTexasMarkdown } from '../../export/templates/appliedlessontexasMarkdownExport';
 
 export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
@@ -377,7 +379,8 @@ export default function CreateNewLesson() {
       'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
       'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
       'Applied Lesson': generateAppliedLessonMarkdown,
-
+      'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
+      'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
 
       // Future templates will be added here manually
     };
@@ -441,6 +444,8 @@ export default function CreateNewLesson() {
       'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
       'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
       'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
+      'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
+      'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
     };    const generateFunction = templateNameToFunctionMap[templateData?.name];
 
     if (!generateFunction) {
@@ -464,6 +469,9 @@ export default function CreateNewLesson() {
     
     // Convert single # field-name headers to classed h3 (blue styling via CSS)
     markdown = markdown.replace(/^#([^#\s].*)$/gm, '<h3 class="field-name">$1</h3>');
+
+    // Prevent markdown from treating numbered lines (e.g. "1. Question") as ordered lists
+    markdown = markdown.replace(/^(\d+)\. /gm, '<span>$1.</span> ');
 
     // Convert **bold** to <strong> before glossary word processing
     markdown = markdown.replace(/\*\*([^\*\n]+?)\*\*/g, '<strong>$1</strong>');
@@ -714,7 +722,9 @@ export default function CreateNewLesson() {
       const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
       
       // Get question-specific prompt based on questionIndex (0-4 -> q1-q5)
-      const questionKey = `q${questionIndex + 1}`;
+      // For flex_mcq, questions beyond Q5 reuse the Q5 prompt
+      const cappedIndex = field.type === 'flex_mcq' ? Math.min(questionIndex, 4) : questionIndex;
+      const questionKey = `q${cappedIndex + 1}`;
       let questionPrompt;
       
       // Get default question prompts from aiPromptDefaults.json
@@ -1951,6 +1961,7 @@ export default function CreateNewLesson() {
           if (field.field_config.max_selections !== undefined) mappedField.max_selections = field.field_config.max_selections;
           if (field.field_config.framework) mappedField.framework = field.field_config.framework;
           if (field.field_config.defaultText) mappedField.defaultText = field.field_config.defaultText;
+          if (field.field_config.defaultQuestionCount !== undefined) mappedField.defaultQuestionCount = field.field_config.defaultQuestionCount;
         }
         
         return mappedField;
@@ -2088,6 +2099,8 @@ export default function CreateNewLesson() {
               'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
               'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
               'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
+              'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
+              'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
             };
             
             const generateFunction = templateNameToFunctionMap[templateData?.name];
@@ -2105,6 +2118,8 @@ export default function CreateNewLesson() {
               // Clean up markdown for preview
               markdown = markdown.replace(/#Additional Notes\s*\n[\s\S]*?(?=\n#|\n*$)/g, '');
               markdown = markdown.replace(/^#([^#\s].*)$/gm, '<h3 class="field-name">$1</h3>');
+              // Prevent markdown from treating numbered lines as ordered lists
+              markdown = markdown.replace(/^(\d+)\. /gm, '<span>$1.</span> ');
               markdown = markdown.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<span class="glossary-word">$1</span>');
               
               setPreviewMarkdown(markdown);

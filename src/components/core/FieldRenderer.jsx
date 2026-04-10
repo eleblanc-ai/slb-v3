@@ -5,6 +5,7 @@ import ChecklistField from '../fields/ChecklistField';
 import ImageField from '../fields/ImageField';
 import AssignStandardsField from '../fields/AssignStandardsField';
 import MCQsField from '../fields/MCQsField';
+import FlexMCQField from '../fields/FlexMCQField';
 import SectionHeaderField from '../fields/SectionHeaderField';
 import BaseField from '../fields/BaseField';
 
@@ -120,6 +121,26 @@ export default function FieldRenderer({
       <MCQsField
         field={{ ...field, questionLabels }}
         value={value || { questions: ['', '', '', '', ''] }}
+        onChange={onChange}
+        onAIGenerate={field.aiEnabled ? () => onGenerateAI(field) : undefined}
+        onGenerateIndividual={field.aiEnabled ? onGenerateIndividualMCQ : undefined}
+        onAIConfig={onAIConfig}
+        isMissing={isMissing}
+        staleContextNames={staleContextNames}
+        onDismissStale={onDismissStale}
+        {...contextProps}
+        {...editProps}
+        isGenerating={isGenerating}
+        defaultStandardFramework={defaultStandardFramework}
+      />
+    );
+  }
+
+  if (field.type === 'flex_mcq') {
+    return (
+      <FlexMCQField
+        field={field}
+        value={value || { questions: Array(field.defaultQuestionCount || 5).fill('') }}
         onChange={onChange}
         onAIGenerate={field.aiEnabled ? () => onGenerateAI(field) : undefined}
         onGenerateIndividual={field.aiEnabled ? onGenerateIndividualMCQ : undefined}
