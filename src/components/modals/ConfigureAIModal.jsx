@@ -472,11 +472,14 @@ export default function ConfigureAIModal({
     // Read field values from localStorage
     const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
     const extraContextBlocks = [];
-    
-    // For MCQ fields, only show standards if checkboxes are checked for the active question
+
+    // For MCQ fields, use the active question's prompt and optionally include standards
+    let previewPrompt = prompt;
     if (field?.type === 'mcqs' || field?.type === 'flex_mcq') {
       const activeQuestionKey = questionKeys[activeQuestionTab];
       const activeQuestionConfig = questionPrompts[activeQuestionKey];
+
+      previewPrompt = activeQuestionConfig?.prompt || '';
 
       if (activeQuestionConfig?.includeVocabStandards && vocabStandards.length > 0) {
         extraContextBlocks.push({
@@ -494,7 +497,7 @@ export default function ConfigureAIModal({
 
     return buildFullPrompt({
       systemInstructions,
-      prompt,
+      prompt: previewPrompt,
       formatRequirements,
       contextInstructions,
       selectedFieldIds: selectedFields,

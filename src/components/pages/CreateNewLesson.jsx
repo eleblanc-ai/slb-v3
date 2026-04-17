@@ -70,7 +70,7 @@ export default function CreateNewLesson() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [fieldValues, setFieldValues] = useState({});
   const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState('claude-haiku-4-5-20251001');
 
   // AI state for per-field generation
   const [generatingFieldId, setGeneratingFieldId] = useState(null);

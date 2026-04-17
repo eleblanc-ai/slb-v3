@@ -49,7 +49,7 @@ export default function CreateNewLessonType() {
   const [fieldValues, setFieldValues] = useState({});
   const [testLessonId, setTestLessonId] = useState(testLessonIdParam || null);
   const [layoutMode, setLayoutMode] = useState('side-by-side'); // 'stacked' or 'side-by-side'
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState('claude-haiku-4-5-20251001');
 
   // AI state for per-field generation
   const [generatingFieldId, setGeneratingFieldId] = useState(null);

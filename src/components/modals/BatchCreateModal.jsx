@@ -19,7 +19,7 @@ export default function BatchCreateModal({ visible, onClose, templates, session,
   const [file, setFile] = useState(null);
   const [parseResult, setParseResult] = useState(null);
   const [resolvedLessons, setResolvedLessons] = useState([]);
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState('claude-haiku-4-5-20251001');
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef(null);
 
