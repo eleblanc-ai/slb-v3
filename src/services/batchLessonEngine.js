@@ -469,7 +469,7 @@ async function generateMCQField({ field, fields, fieldValues, template, model, s
   const filteredOutStandards = {};
 
   const questionCount = field.type === 'flex_mcq'
-    ? (field.defaultQuestionCount || 5)
+    ? (fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
     : 5;
   for (let i = 0; i < questionCount; i++) {
     const cappedIndex = field.type === 'flex_mcq' ? Math.min(i, 4) : i;

@@ -1079,7 +1079,7 @@ export default function CreateNewLessonType() {
         
         // Generate each question sequentially
         const questionCount = field.type === 'flex_mcq'
-          ? (fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
+          ? (storedFieldValues[field.id]?.questions?.length || fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
           : 5;
         for (let i = 0; i < questionCount; i++) {
           const cappedIndex = field.type === 'flex_mcq' ? Math.min(i, 4) : i;

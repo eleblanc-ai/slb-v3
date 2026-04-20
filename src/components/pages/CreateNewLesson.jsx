@@ -1677,8 +1677,9 @@ export default function CreateNewLesson() {
         
         // Generate each question sequentially
         const questionCount = field.type === 'flex_mcq'
-          ? (fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
+          ? (storedFieldValues[field.id]?.questions?.length || fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
           : 5;
+        console.log(`📝 flex_mcq questionCount: ${questionCount} (stored: ${storedFieldValues[field.id]?.questions?.length}, state: ${fieldValues[field.id]?.questions?.length}, default: ${field.defaultQuestionCount})`);
         for (let i = 0; i < questionCount; i++) {
           const cappedIndex = field.type === 'flex_mcq' ? Math.min(i, 4) : i;
           const questionKey = `q${cappedIndex + 1}`;

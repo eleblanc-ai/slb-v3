@@ -107,10 +107,10 @@ export default function FlexMCQField({
 
   useEffect(() => {
     if (!onChange || hasNormalizedRef.current) return;
-    const hasDiff = normalizedQuestions.some((q, idx) => q !== questions[idx]);
-    if (!hasDiff) return;
     hasNormalizedRef.current = true;
-    onChange({ questions: normalizedQuestions, standards: questionStandards, sourceStandards, filteredOutStandards });
+    const hasDiff = normalizedQuestions.some((q, idx) => q !== questions[idx]);
+    // Always fire onChange on mount to populate fieldValues, even if no normalization diff
+    onChange({ questions: hasDiff ? normalizedQuestions : questions, standards: questionStandards, sourceStandards, filteredOutStandards });
   }, [onChange, normalizedQuestions, questions, questionStandards, sourceStandards, filteredOutStandards]);
 
   const emitChange = (updatedQuestions, updatedStandards, updatedSource, updatedFiltered) => {
