@@ -90,7 +90,11 @@ export default function FlexMCQField({
   }, [value?.standards]);
 
   const defaultCount = field?.defaultQuestionCount || 5;
-  const questions = value?.questions?.length ? value.questions : Array(defaultCount).fill('');
+  // If saved questions exist but are fewer than defaultCount, pad with empty strings
+  const rawQuestions = value?.questions?.length ? value.questions : Array(defaultCount).fill('');
+  const questions = rawQuestions.length < defaultCount
+    ? [...rawQuestions, ...Array(defaultCount - rawQuestions.length).fill('')]
+    : rawQuestions;
   const sourceStandards = value?.sourceStandards || {};
   const filteredOutStandards = value?.filteredOutStandards || {};
 
