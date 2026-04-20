@@ -220,7 +220,7 @@ export async function processLesson({
           imageUrl: generated?.url || null,
           message: `Generated: ${field.name}`,
         });
-      } else if (field.type === 'mcqs') {
+      } else if (field.type === 'mcqs' || field.type === 'flex_mcq') {
         generated = await generateMCQField({
           field,
           fields,
@@ -468,8 +468,12 @@ async function generateMCQField({ field, fields, fieldValues, template, model, s
   const sourceStandards = {};
   const filteredOutStandards = {};
 
-  for (let i = 0; i < 5; i++) {
-    const questionKey = `q${i + 1}`;
+  const questionCount = field.type === 'flex_mcq'
+    ? (field.defaultQuestionCount || 5)
+    : 5;
+  for (let i = 0; i < questionCount; i++) {
+    const cappedIndex = field.type === 'flex_mcq' ? Math.min(i, 4) : i;
+    const questionKey = `q${cappedIndex + 1}`;
 
     // Get question-specific prompt
     let questionPrompt;
