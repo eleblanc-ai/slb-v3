@@ -354,7 +354,9 @@ export default function CreateNewLessonType() {
       const storedFieldValues = JSON.parse(localStorage.getItem('fieldValues') || '{}');
       
       // Get question-specific prompt based on questionIndex (0-4 -> q1-q5)
-      const questionKey = `q${questionIndex + 1}`;
+      // For flex_mcq, questions beyond Q5 reuse the Q5 prompt
+      const cappedIndex = field.type === 'flex_mcq' ? Math.min(questionIndex, 4) : questionIndex;
+      const questionKey = `q${cappedIndex + 1}`;
       let questionPrompt;
       
       // Get default question prompts from aiPromptDefaults.json
@@ -970,7 +972,7 @@ export default function CreateNewLessonType() {
       // Check if this is an MCQs field to use function calling
       let generatedContent;
       
-      if (field.type === 'mcqs') {
+      if (field.type === 'mcqs' || field.type === 'flex_mcq') {
         console.log('🎯 Generating MCQs sequentially using question prompts');
         
         // Generate each question sequentially using individual question prompts
@@ -1075,9 +1077,13 @@ export default function CreateNewLessonType() {
           }
         };
         
-        // Generate each question sequentially (q1, q2, q3, q4, q5)
-        for (let i = 0; i < 5; i++) {
-          const questionKey = `q${i + 1}`;
+        // Generate each question sequentially
+        const questionCount = field.type === 'flex_mcq'
+          ? (fieldValues[field.id]?.questions?.length || field.defaultQuestionCount || 5)
+          : 5;
+        for (let i = 0; i < questionCount; i++) {
+          const cappedIndex = field.type === 'flex_mcq' ? Math.min(i, 4) : i;
+          const questionKey = `q${cappedIndex + 1}`;
           console.log(`📝 Generating question ${i + 1} (${questionKey})...`);
           
           // Get question-specific prompt
@@ -1421,7 +1427,7 @@ export default function CreateNewLessonType() {
         if (field.type === 'assign_standards') {
           return { ...field, framework };
         }
-        if (field.type === 'mcqs' && (!field.framework || field.framework === previousFramework)) {
+        if ((field.type === 'mcqs' || field.type === 'flex_mcq') && (!field.framework || field.framework === previousFramework)) {
           return { ...field, framework };
         }
         return field;
