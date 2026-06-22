@@ -194,6 +194,33 @@ export default function BrowseLessonTemplates() {
       toast.warning('Please select a state for State-specific templates.');
       return;
     }
+
+    // Prevent duplicate template names for the selected label/category
+    const stateValue = cloneCategory === 'State-specific' ? cloneState : null;
+    const { data: existingTemplates, error: duplicateError } = await supabase
+      .from('lesson_templates')
+      .select('id, name, category, state')
+      .eq('name', cloneName.trim())
+      .eq('category', cloneCategory)
+      .match(stateValue ? { state: stateValue } : { state: null });
+
+    if (duplicateError) {
+      console.error('Error checking for existing cloned template:', duplicateError);
+      toast.error('Unable to check for duplicate templates. Please try again.');
+      return;
+    }
+
+    if (existingTemplates && existingTemplates.length > 0) {
+      const existingType = existingTemplates[0];
+      let message = `A lesson template named "${existingType.name}" already exists in ${existingType.category}`;
+      if (existingType.category === 'State-specific' && existingType.state) {
+        const stateName = US_STATES.find(s => s.value === existingType.state)?.label || existingType.state;
+        message += ` for ${stateName}`;
+      }
+      message += '. Please choose a different name or label.';
+      toast.warning(message);
+      return;
+    }
     
     setCloning(true);
     try {
@@ -325,7 +352,7 @@ export default function BrowseLessonTemplates() {
       setShowCloneSuccessModal(true);
     } catch (error) {
       console.error('Error cloning lesson template:', error);
-      toast.error('Failed to clone lesson template. Please try again.');
+      toast.error(`Failed to clone lesson template: ${error.message || 'Please try again.'}`);
     } finally {
       setCloning(false);
     }
