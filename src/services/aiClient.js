@@ -19,6 +19,17 @@ const openai = new OpenAI({
 
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
 
+function normalizeModelId(model) {
+  if (!model || typeof model !== 'string') return model;
+
+  const claudeAliases = {
+    'claude-sonnet-4-20250514': 'claude-sonnet-4-5',
+    'claude-sonnet-4-6': 'claude-sonnet-4-5',
+  };
+
+  return claudeAliases[model] || model;
+}
+
 /**
  * Call AI with a prompt (text generation)
  * @param {string} prompt - The prompt to send
@@ -27,9 +38,11 @@ const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
  * @returns {Promise<string>} - The generated text
  */
 export async function callAI(prompt, model, maxTokens = 4096) {
-  if (model.startsWith('claude')) {
+  const resolvedModel = normalizeModelId(model);
+
+  if (resolvedModel.startsWith('claude')) {
     const response = await anthropic.messages.create({
-      model,
+      model: resolvedModel,
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }]
     });
@@ -95,7 +108,9 @@ export async function summarizePassageForImage(passage, maxChars = 700) {
  * @returns {Promise<Object>} - The parsed function call result
  */
 export async function callAIWithFunction(prompt, model, functionSchema) {
-  if (model.startsWith('claude')) {
+  const resolvedModel = normalizeModelId(model);
+
+  if (resolvedModel.startsWith('claude')) {
     // Claude expects 'input_schema' not 'parameters'
     const claudeSchema = {
       name: functionSchema.name,
@@ -104,7 +119,7 @@ export async function callAIWithFunction(prompt, model, functionSchema) {
     };
     
     const response = await anthropic.messages.create({
-      model,
+      model: resolvedModel,
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
       tools: [claudeSchema],
@@ -315,13 +330,12 @@ async function generateWithDallE(prompt) {
     model: 'dall-e-3',
     prompt: prompt,
     n: 1,
-    size: '1024x1024',
-    response_format: 'b64_json'
+    size: '1024x1024'
   });
 
   console.log('✅ DALL-E generation successful');
   return {
-    url: `data:image/png;base64,${response.data[0].b64_json}`,
+    url: response.data[0].url,
     model: 'dall-e-3'
   };
 }
