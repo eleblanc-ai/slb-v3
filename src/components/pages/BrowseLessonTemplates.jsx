@@ -24,6 +24,7 @@ export default function BrowseLessonTemplates() {
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [templateToClone, setTemplateToClone] = useState(null);
   const [cloneName, setCloneName] = useState('');
+  const [cloneCategory, setCloneCategory] = useState('Core ELA');
   const [cloneState, setCloneState] = useState('');
   const [cloning, setCloning] = useState(false);
   const [showCloneSuccessModal, setShowCloneSuccessModal] = useState(false);
@@ -159,15 +160,18 @@ export default function BrowseLessonTemplates() {
     // Remove any existing state suffix from the name (e.g., "(Copy)", "(Florida)", etc.)
     const baseName = lessonType.name.replace(/\s*\([^)]*\)\s*$/, '').trim();
     
-    // If template has a state, suggest "(State)" format, otherwise use "(Copy)"
+    const initialCategory = lessonType.category || (lessonType.state ? 'State-specific' : 'Core ELA');
+
+    // If template is state-specific, suggest "(State)" format, otherwise use "(Copy)"
     const stateName = lessonType.state 
       ? US_STATES.find(s => s.value === lessonType.state)?.label 
       : null;
-    const suggestedName = stateName 
+    const suggestedName = initialCategory === 'State-specific' && stateName
       ? `${baseName} (${stateName})`
       : `${baseName} (Copy)`;
     
     setCloneName(suggestedName);
+    setCloneCategory(initialCategory);
     setCloneState(lessonType.state || '');
     setShowCloneModal(true);
   };
@@ -176,12 +180,18 @@ export default function BrowseLessonTemplates() {
     setShowCloneModal(false);
     setTemplateToClone(null);
     setCloneName('');
+    setCloneCategory('Core ELA');
     setCloneState('');
   };
 
   const handleCloneConfirm = async () => {
     if (!templateToClone || !cloneName.trim()) {
       toast.warning('Please enter a name for the cloned template.');
+      return;
+    }
+
+    if (cloneCategory === 'State-specific' && !cloneState) {
+      toast.warning('Please select a state for State-specific templates.');
       return;
     }
     
@@ -192,8 +202,8 @@ export default function BrowseLessonTemplates() {
         .from('lesson_templates')
         .insert({
           name: cloneName.trim(),
-          category: cloneState ? 'State-specific' : 'Core ELA',
-          state: cloneState || null,
+          category: cloneCategory,
+          state: cloneCategory === 'State-specific' ? (cloneState || null) : null,
           default_standard_framework: templateToClone.default_standard_framework || null,
           created_by: session.user.id,
           updated_by: session.user.id
@@ -311,7 +321,7 @@ export default function BrowseLessonTemplates() {
       // Close clone modal and show setup instructions
       handleCloneCancel();
       setClonedTemplateName(cloneName);
-      setClonedTemplateState(cloneState);
+      setClonedTemplateState(cloneCategory === 'State-specific' ? cloneState : null);
       setShowCloneSuccessModal(true);
     } catch (error) {
       console.error('Error cloning lesson template:', error);
@@ -1252,7 +1262,7 @@ export default function BrowseLessonTemplates() {
             />
           </div>
 
-          {/* State Selection */}
+          {/* Lesson Label Selection */}
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{
               display: 'block',
@@ -1261,19 +1271,25 @@ export default function BrowseLessonTemplates() {
               color: 'var(--gray-700)',
               marginBottom: '0.5rem'
             }}>
-              Associated State (Optional)
+              Lesson Label
             </label>
             <select
-              value={cloneState}
+              value={cloneCategory}
               onChange={(e) => {
-                const newState = e.target.value;
-                setCloneState(newState);
+                const newCategory = e.target.value;
+                setCloneCategory(newCategory);
+
+                if (newCategory !== 'State-specific') {
+                  setCloneState('');
+                }
                 
-                // Auto-update the template name to include the new state
+                // Auto-update template name for state-specific labels
                 if (templateToClone) {
                   const baseName = templateToClone.name.replace(/\s*\([^)]*\)\s*$/, '').trim();
-                  const stateName = newState ? US_STATES.find(s => s.value === newState)?.label : null;
-                  const newName = stateName ? `${baseName} (${stateName})` : `${baseName} (Copy)`;
+                  const stateName = cloneState ? US_STATES.find(s => s.value === cloneState)?.label : null;
+                  const newName = (newCategory === 'State-specific' && stateName)
+                    ? `${baseName} (${stateName})`
+                    : `${baseName} (Copy)`;
                   setCloneName(newName);
                 }
               }}
@@ -1300,21 +1316,75 @@ export default function BrowseLessonTemplates() {
                 e.target.style.boxShadow = 'none';
               }}
             >
-              <option value="">No State Association</option>
-              {US_STATES.map(state => (
-                <option key={state.value} value={state.value}>
-                  {state.label}
-                </option>
-              ))}
+              <option value="Core ELA">Core ELA</option>
+              <option value="Asha's Experiments">Asha's Experiments</option>
+              <option value="State-specific">State-specific</option>
             </select>
             <p style={{
               fontSize: '0.75rem',
               color: 'var(--gray-500)',
               marginTop: '0.375rem'
             }}>
-              Optional: Associate this template with a specific state
+              Choose the label/category for the cloned template
             </p>
           </div>
+
+          {cloneCategory === 'State-specific' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: 'var(--gray-700)',
+                marginBottom: '0.5rem'
+              }}>
+                Associated State
+              </label>
+              <select
+                value={cloneState}
+                onChange={(e) => {
+                  const newState = e.target.value;
+                  setCloneState(newState);
+
+                  if (templateToClone) {
+                    const baseName = templateToClone.name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+                    const stateName = newState ? US_STATES.find(s => s.value === newState)?.label : null;
+                    const newName = stateName ? `${baseName} (${stateName})` : `${baseName} (Copy)`;
+                    setCloneName(newName);
+                  }
+                }}
+                disabled={cloning}
+                style={{
+                  width: '100%',
+                  padding: '0.625rem 0.875rem',
+                  border: '1px solid var(--gray-300)',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  color: 'var(--gray-900)',
+                  outline: 'none',
+                  transition: 'all 0.2s',
+                  backgroundColor: '#fff',
+                  cursor: cloning ? 'not-allowed' : 'pointer',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'var(--primary)';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'var(--gray-300)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="">Select a state...</option>
+                {US_STATES.map(state => (
+                  <option key={state.value} value={state.value}>
+                    {state.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           
           <div style={{
             display: 'flex',

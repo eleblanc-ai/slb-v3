@@ -300,7 +300,7 @@ export default function NameLessonTypeModal({ visible, onClose, onSave, initialN
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
-                  if (e.target.value === 'Core ELA') {
+                  if (e.target.value !== 'State-specific') {
                     setState('');
                   }
                 }}
@@ -326,6 +326,7 @@ export default function NameLessonTypeModal({ visible, onClose, onSave, initialN
                 }}
               >
                 <option value="Core ELA">Core ELA</option>
+                <option value="Asha's Experiments">Asha's Experiments</option>
                 <option value="State-specific">State-specific</option>
               </select>
             </div>
