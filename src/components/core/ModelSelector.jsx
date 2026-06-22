@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 
 const AI_MODELS = [
   { id: 'claude-haiku-4-5-20251001', label: '🤖 Claude Haiku 4.5', short: 'Claude Haiku 4.5' },
-  { id: 'claude-sonnet-4-20250514', label: '🤖 Claude Sonnet 4', short: 'Claude Sonnet 4' },
+  { id: 'claude-sonnet-4-6', label: '🤖 Claude Sonnet 4.6', short: 'Claude Sonnet 4.6' },
   { id: 'gpt-4o', label: '🤖 GPT-4o', short: 'GPT-4o' },
 ];
 

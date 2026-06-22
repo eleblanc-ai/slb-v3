@@ -97,7 +97,7 @@ export function mapDatabaseFields(fieldsData) {
  * @param {Array}  params.fields          - Mapped field array (via mapDatabaseFields)
  * @param {Object} params.parsedFields    - { "Field Name": "raw value" } from batchMarkdownParser
  * @param {string} params.userId          - session.user.id
- * @param {string} params.model           - AI model ID (e.g. 'claude-sonnet-4-20250514')
+ * @param {string} params.model           - AI model ID (e.g. 'claude-sonnet-4-6')
  * @param {Function} params.onProgress    - (ProgressUpdate) => void
  * @param {Object} params.supabaseClient  - Supabase client instance
  * @returns {Promise<{ lessonId: string|null, fieldValues: Object, errors: string[] }>}

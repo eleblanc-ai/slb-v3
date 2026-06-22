@@ -61,10 +61,10 @@ describe('callAI', () => {
       content: [{ text: 'Hello from Claude!' }],
     });
 
-    const result = await callAI('Say hello', 'claude-sonnet-4-20250514');
+    const result = await callAI('Say hello', 'claude-sonnet-4-6');
 
     expect(mockAnthropicCreate).toHaveBeenCalledWith({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{ role: 'user', content: 'Say hello' }],
     });
@@ -100,7 +100,7 @@ describe('callAI', () => {
 
   it('throws when SDK call fails', async () => {
     mockAnthropicCreate.mockRejectedValue(new Error('Rate limited'));
-    await expect(callAI('test', 'claude-sonnet-4-20250514')).rejects.toThrow('Rate limited');
+    await expect(callAI('test', 'claude-sonnet-4-6')).rejects.toThrow('Rate limited');
   });
 });
 
@@ -112,7 +112,7 @@ describe('callAIWithFunction', () => {
       content: [{ type: 'tool_use', input: { answer: 42 } }],
     });
 
-    const result = await callAIWithFunction('test', 'claude-sonnet-4-20250514', schema);
+    const result = await callAIWithFunction('test', 'claude-sonnet-4-6', schema);
 
     expect(mockAnthropicCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -144,7 +144,7 @@ describe('callAIWithFunction', () => {
     const schema = { name: 'fn', parameters: {} };
     mockAnthropicCreate.mockResolvedValue({ content: [{ type: 'text', text: 'oops' }] });
 
-    await expect(callAIWithFunction('test', 'claude-sonnet-4-20250514', schema)).rejects.toThrow('No tool use');
+    await expect(callAIWithFunction('test', 'claude-sonnet-4-6', schema)).rejects.toThrow('No tool use');
   });
 
   it('throws when OpenAI returns no function_call', async () => {

@@ -375,7 +375,7 @@ describe('filterAlignedStandardsWithAI', () => {
       'Passage about dolphins',
       candidates,
       mockAI,
-      'claude-sonnet-4-20250514'
+      'claude-sonnet-4-6'
     );
 
     expect(result).toContain('CCSS.RI.8.2');
