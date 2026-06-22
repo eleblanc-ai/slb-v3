@@ -76,6 +76,91 @@ export default function CreateNewLessonType() {
   const autoCreateTestLessonPromiseRef = useRef(null);
   const userHasInteractedRef = useRef(false);
 
+  const MCQ_MAX_ATTEMPTS = 3;
+
+  const normalizeChoiceValue = (choices, key) => {
+    if (!choices || typeof choices !== 'object') return '';
+    const numericKey = String('ABCD'.indexOf(key) + 1);
+    const value =
+      choices[key] ??
+      choices[key.toLowerCase()] ??
+      choices[numericKey] ??
+      choices[`option_${key.toLowerCase()}`] ??
+      choices[`option${key}`] ??
+      choices[`option${numericKey}`];
+
+    return typeof value === 'string' ? value.trim() : '';
+  };
+
+  const normalizeCorrectAnswer = (value) => {
+    if (typeof value !== 'string') return '';
+    const match = value.toUpperCase().match(/[ABCD]/);
+    return match ? match[0] : '';
+  };
+
+  const normalizeMCQQuestion = (question) => {
+    if (!question || typeof question !== 'object') return null;
+
+    const questionText = (question.question_text || question.question || '').toString().trim();
+    const choices = {
+      A: normalizeChoiceValue(question.choices, 'A'),
+      B: normalizeChoiceValue(question.choices, 'B'),
+      C: normalizeChoiceValue(question.choices, 'C'),
+      D: normalizeChoiceValue(question.choices, 'D'),
+    };
+
+    const standards = Array.isArray(question.standards)
+      ? question.standards.filter((entry) => typeof entry === 'string' && entry.trim()).map((entry) => entry.trim())
+      : typeof question.standards === 'string'
+        ? question.standards.split(';').map((entry) => entry.trim()).filter(Boolean)
+        : [];
+
+    const correctAnswer = normalizeCorrectAnswer(
+      question.correct_answer || question.correctAnswer || question.answer_key || question.answerKey || ''
+    );
+
+    return {
+      question_text: questionText,
+      choices,
+      standards,
+      correct_answer: correctAnswer || 'A',
+    };
+  };
+
+  const isCompleteMCQQuestion = (question) => {
+    return !!(
+      question?.question_text &&
+      question?.choices?.A &&
+      question?.choices?.B &&
+      question?.choices?.C &&
+      question?.choices?.D
+    );
+  };
+
+  const generateMCQQuestionWithRetry = async ({ prompt, functionSchema, questionLabel }) => {
+    let lastRawQuestion = null;
+
+    for (let attempt = 1; attempt <= MCQ_MAX_ATTEMPTS; attempt++) {
+      const retryInstruction = attempt > 1
+        ? '\n\nIMPORTANT: Your previous output was invalid. Return exactly one question with non-empty question_text and choices A, B, C, D. Output only the function payload.'
+        : '';
+
+      const result = await callAIWithFunction(`${prompt}${retryInstruction}`, selectedModel, functionSchema);
+      const rawQuestion = result?.questions?.[0] || null;
+      const normalizedQuestion = normalizeMCQQuestion(rawQuestion);
+
+      if (isCompleteMCQQuestion(normalizedQuestion)) {
+        return normalizedQuestion;
+      }
+
+      lastRawQuestion = rawQuestion;
+      console.warn(`⚠️ Incomplete MCQ payload for ${questionLabel} (attempt ${attempt}/${MCQ_MAX_ATTEMPTS})`, rawQuestion);
+    }
+
+    console.error(`❌ Invalid MCQ response for ${questionLabel} after retries:`, lastRawQuestion);
+    throw new Error(`AI generated incomplete ${questionLabel} - missing question text or choices.`);
+  };
+
   // Field CRUD hook (add/edit/delete/drag) — includes field_config for template design
   const {
     isModalOpen,
@@ -498,22 +583,12 @@ export default function CreateNewLessonType() {
         }
       };
       
-      const result = await callAIWithFunction(prompt, selectedModel, functionSchema);
-      console.log('✅ Individual MCQ generated (structured):', result);
-      
-      // Validate the response structure
-      if (!result || !result.questions || !result.questions[0]) {
-        throw new Error('AI returned invalid response structure');
-      }
-      
-      // Format the structured response as text
-      const q = result.questions[0];
-      
-      // Validate question has required content
-      if (!q.question_text || !q.choices || !q.choices.A || !q.choices.B || !q.choices.C || !q.choices.D) {
-        console.error('❌ Invalid MCQ response:', q);
-        throw new Error('AI generated incomplete question - missing question text or choices. Check that context fields (passage) are configured in AI Config.');
-      }
+      const q = await generateMCQQuestionWithRetry({
+        prompt,
+        functionSchema,
+        questionLabel: 'question'
+      });
+      console.log('✅ Individual MCQ generated (normalized):', q);
       
       // Build context text from configured context fields (e.g., reading passage)
       let contextText = '';
@@ -537,7 +612,7 @@ export default function CreateNewLessonType() {
       }
       
       // Map standards (works for any framework) and track source
-      let standardsText = q.standards.join('; ');
+      let standardsText = (q.standards || []).join('; ');
       let sourceStandardInfo = null;
       let candidateStandards = [];
       
@@ -1141,23 +1216,15 @@ export default function CreateNewLessonType() {
           console.log(`📝 Question ${i + 1} prompt built`);
           
           // Generate the question
-          const result = await callAIWithFunction(questionFullPrompt, selectedModel, functionSchema);
-          console.log(`✅ Question ${i + 1} generated:`, result);
-          
-          if (!result || !result.questions || !result.questions[0]) {
-            throw new Error(`AI returned invalid response for question ${i + 1}`);
-          }
-          
-          const q = result.questions[0];
-          
-          // Validate question has required content
-          if (!q.question_text || !q.choices || !q.choices.A || !q.choices.B || !q.choices.C || !q.choices.D) {
-            console.error(`❌ Invalid MCQ response for question ${i + 1}:`, q);
-            throw new Error(`AI generated incomplete question ${i + 1} - missing question text or choices.`);
-          }
+          const q = await generateMCQQuestionWithRetry({
+            prompt: questionFullPrompt,
+            functionSchema,
+            questionLabel: `question ${i + 1}`
+          });
+          console.log(`✅ Question ${i + 1} generated (normalized):`, q);
           
           // Map standards
-          let standardsText = q.standards.join('; ');
+          let standardsText = (q.standards || []).join('; ');
           let candidateStandards = [];
           
           if (q.standards && q.standards.length > 0) {
