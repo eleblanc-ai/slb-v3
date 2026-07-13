@@ -330,12 +330,13 @@ async function generateWithDallE(prompt) {
     model: 'dall-e-3',
     prompt: prompt,
     n: 1,
-    size: '1024x1024'
+    size: '1024x1024',
+    response_format: 'b64_json'
   });
 
   console.log('✅ DALL-E generation successful');
   return {
-    url: response.data[0].url,
+    url: `data:image/png;base64,${response.data[0].b64_json}`,
     model: 'dall-e-3'
   };
 }

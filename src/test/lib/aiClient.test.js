@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ─── SDK mocks (hoisted so they're available inside vi.mock factories) ──
 const {
@@ -52,6 +52,13 @@ beforeEach(() => {
   mockOpenAIChatCreate.mockReset();
   mockOpenAIImagesGenerate.mockReset();
   mockGeminiGenerateContent.mockReset();
+  // generateImage() only attempts Gemini when this key is present; Vitest does
+  // not load .env into import.meta.env, so stub it for deterministic tests.
+  vi.stubEnv('VITE_GOOGLE_API_KEY', 'test-google-key');
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 // ─── callAI ──────────────────────────────────────────────────────────

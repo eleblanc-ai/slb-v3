@@ -23,8 +23,6 @@ export default function PreFormModal({
   templateName,
   allFields = [],
 }) {
-  if (!visible) return null;
-
   // Fields required for AI generation
   const requiredFields = fields.filter(f => f.requiredForGeneration);
 
@@ -45,6 +43,9 @@ export default function PreFormModal({
 
   const [importMessage, setImportMessage] = React.useState(null);
   const fileInputRef = React.useRef(null);
+
+  // Hooks must run on every render, so keep this guard below all hook calls.
+  if (!visible) return null;
 
   const handleDownloadFormat = () => {
     const fieldsForFormat = allFields.length > 0 ? allFields : fields;
