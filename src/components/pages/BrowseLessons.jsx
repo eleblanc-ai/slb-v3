@@ -48,11 +48,12 @@ export default function BrowseLessons() {
       console.log('📦 Loaded lessons:', lessonsData);
 
       // Get unique user IDs and template IDs
+      const lessons = lessonsData || [];
       const userIds = [...new Set([
-        ...lessonsData?.map(l => l.created_by).filter(Boolean),
-        ...lessonsData?.map(l => l.updated_by).filter(Boolean)
+        ...lessons.map(l => l.created_by).filter(Boolean),
+        ...lessons.map(l => l.updated_by).filter(Boolean)
       ])];
-      const templateIds = [...new Set(lessonsData?.map(l => l.lesson_template_id).filter(Boolean))];
+      const templateIds = [...new Set(lessons.map(l => l.lesson_template_id).filter(Boolean))];
       
       console.log('👥 User IDs to fetch:', userIds);
       
@@ -107,7 +108,7 @@ export default function BrowseLessons() {
       }
 
       // Add creator and template info to lessons
-      const lessonsWithCreator = lessonsData?.map(lesson => {
+      const lessonsWithCreator = lessons.map(lesson => {
         // Use created_by for the creator display
         const creatorId = lesson.created_by;
         const creatorName = profileMap[creatorId] || 'Unknown User';
