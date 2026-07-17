@@ -349,6 +349,35 @@ describe('getMappedStandardsWithSource', () => {
     expect(result.sourceStandard.code).toBe('CCSS.RI.8.2');
     expect(result.mappedStandards.length).toBeGreaterThan(0);
   });
+
+  // Regression: a multi-grade lesson (e.g. an "8-10" band with an 8th- and a
+  // 9th-grade standard) must keep standards for EVERY grade in the band. The old
+  // code did parseInt([8,9,10].toString()) === 8, so a 9th-grade question lost
+  // all its mapped standards.
+  it('keeps standards for every grade in a multi-grade band', async () => {
+    const band = extractGradesFromBand('8-10'); // [8, 9, 10]
+
+    const g8 = await getMappedStandardsWithSource('CCSS.RI.8.2', band);
+    const g9 = await getMappedStandardsWithSource('CCSS.RI.9-10.2', band);
+
+    // 8th-grade question keeps its grade-8 mappings
+    expect(g8.mappedStandards).toContain('TEKS.ELAR.8.6(A)');
+    // 9th-grade question keeps its grade-9 mappings (previously dropped)
+    expect(g9.mappedStandards).toContain('TEKS.ELAR.E1.6(A)');
+    expect(g9.mappedStandards).toContain('BEST.ELA.9.R.2.2');
+  });
+
+  it('accepts a "8-10" band string, not just an array', async () => {
+    const g9 = await getMappedStandardsWithSource('CCSS.RI.9-10.2', '8-10');
+    expect(g9.mappedStandards).toContain('TEKS.ELAR.E1.6(A)');
+  });
+
+  it('still excludes grades outside a single-grade filter', async () => {
+    // Filtering to grade 8 only must drop the 9th-grade mappings.
+    const g9 = await getMappedStandardsWithSource('CCSS.RI.9-10.2', [8]);
+    expect(g9.mappedStandards).not.toContain('TEKS.ELAR.E1.6(A)');
+    expect(g9.mappedStandards).not.toContain('BEST.ELA.9.R.2.2');
+  });
 });
 
 // ─── ASYNC: filterAlignedStandardsWithAI ─────────────────────────────

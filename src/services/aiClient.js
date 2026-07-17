@@ -151,11 +151,34 @@ export async function callAIWithFunction(prompt, model, functionSchema) {
  * @param {string} size - Image size (ignored for Gemini, used for DALL-E fallback)
  * @returns {Promise<{url: string, model: string, altText?: string}>} - The image URL, model used, and optional alt text from Gemini
  */
+// Fast image model — ~5-6s vs ~16-18s for gemini-3-pro-image, which is plenty
+// for lesson cover images where speed matters more than fidelity.
+const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+
+// A fixed visual anchor keeps images consistent run-to-run, pushes a realistic
+// photographic look (not the glossy "AI" look), and stops the model from
+// rendering text into the picture. Applied to every provider.
+const IMAGE_STYLE_DIRECTIVE =
+  'Create a realistic, natural-looking photograph with a single clear focal ' +
+  'subject and a clean composition. Style: documentary / editorial photography, ' +
+  'natural lighting, true-to-life colors, realistic textures, and natural depth ' +
+  'of field, as if shot on a DSLR camera. Avoid illustration, 3D render, CGI, ' +
+  'cartoon, painting, over-saturated colors, or a glossy "AI-generated" look. ' +
+  'Do not render any text, words, letters, numbers, labels, captions, or ' +
+  'watermarks anywhere in the image.';
+
+function buildImagePrompt(prompt) {
+  const maxTotal = 3500;
+  const cleaned = (prompt || '').replace(/\s+/g, ' ').trim();
+  const room = maxTotal - IMAGE_STYLE_DIRECTIVE.length - 20;
+  const scene = cleaned.length > room
+    ? cleaned.slice(0, room).replace(/\s+\S*$/, '') + '…'
+    : cleaned;
+  return `${IMAGE_STYLE_DIRECTIVE}\n\nScene to depict: ${scene}`;
+}
+
 export async function generateImage(prompt, size = '1K') {
-  const maxPromptLength = 3500;
-  let imagePrompt = prompt.length > maxPromptLength 
-    ? prompt.substring(0, maxPromptLength) + '...' 
-    : prompt;
+  const imagePrompt = buildImagePrompt(prompt);
 
   // Attempt Gemini first if key exists
   if (import.meta.env.VITE_GOOGLE_API_KEY) {
@@ -183,15 +206,15 @@ async function attemptGeminiGeneration(prompt, size) {
   console.log('🎨 Attempting image generation with Gemini 3 Pro Image...');
   
   let delay = 3000;
-  let attemptCount = 0;
   const maxAttempts = 3;
-  
-  while (attemptCount < maxAttempts) {
+  let lastReason = 'Unknown error';
+  let lastDebug = null;
+
+  for (let attemptCount = 1; attemptCount <= maxAttempts; attemptCount++) {
     try {
-      attemptCount++;
-      
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-3-pro-image-preview"
+
+      const model = genAI.getGenerativeModel({
+        model: GEMINI_IMAGE_MODEL
       });
       
       const result = await model.generateContent({
@@ -247,7 +270,7 @@ async function attemptGeminiGeneration(prompt, size) {
                   success: true,
                   data: {
                     url: `data:${mimeType};base64,${base64Data}`,
-                    model: 'gemini-3-pro-image-preview',
+                    model: GEMINI_IMAGE_MODEL,
                     altText: geminiAltText.trim()
                   }
                 };
@@ -276,7 +299,7 @@ async function attemptGeminiGeneration(prompt, size) {
                 success: true,
                 data: {
                   url: `data:${mimeType};base64,${base64Data}`,
-                  model: 'gemini-3-pro-image-preview',
+                  model: GEMINI_IMAGE_MODEL,
                   altText: geminiAltText.trim()
                 }
               };
@@ -285,39 +308,44 @@ async function attemptGeminiGeneration(prompt, size) {
         }
       }
 
-      // If we got here, no image data was found
+      // If we got here, no image data was found. The Gemini image-preview model
+      // often returns text-only — treat that as a retryable failure, not an
+      // instant fallback to DALL-E (that is the main source of instability).
       if (geminiAltText) {
         console.log('⚠️ Gemini returned text instead of image:');
         console.log(geminiAltText);
       }
-      console.log('🔍 Full response structure:', JSON.stringify(response, null, 2));
+      lastReason = 'No image data in Gemini response';
 
-      return {
-        success: false,
-        reason: 'No image data in Gemini response'
-      };
-      
     } catch (error) {
-      const isOverloaded = error.message?.includes('503') || 
-                          error.message?.toLowerCase().includes('overloaded') ||
-                          error.message?.toLowerCase().includes('quota');
-      
-      if (attemptCount < maxAttempts && isOverloaded) {
-        console.warn(`⚠️ Gemini error, retrying in ${delay / 1000}s... (Attempt ${attemptCount}/${maxAttempts})`);
-        await new Promise(r => setTimeout(r, delay));
-        delay = Math.min(delay * 1.5, 10000);
-        continue;
+      const msg = (error.message || '').toLowerCase();
+      const isTransient = ['503', '500', '429', 'overloaded', 'quota', 'rate',
+        'timeout', 'timed out', 'fetch', 'network', 'unavailable', 'internal']
+        .some(t => msg.includes(t));
+      lastReason = `Gemini error: ${error.message}`;
+      lastDebug = error;
+
+      // Permanent errors (bad model, auth, bad request) won't fix themselves —
+      // stop retrying and fall back to DALL-E immediately.
+      if (!isTransient) {
+        return { success: false, reason: lastReason, debugInfo: lastDebug };
       }
-      
-      return { 
-        success: false, 
-        reason: `Gemini failed after ${attemptCount} attempts: ${error.message}`,
-        debugInfo: error
-      };
+    }
+
+    // This attempt failed with a retryable condition (no image, or a transient
+    // error). Back off and retry while attempts remain.
+    if (attemptCount < maxAttempts) {
+      console.warn(`⚠️ Gemini attempt ${attemptCount}/${maxAttempts} failed (${lastReason}); retrying in ${delay / 1000}s...`);
+      await new Promise(r => setTimeout(r, delay));
+      delay = Math.min(delay * 1.5, 10000);
     }
   }
-  
-  return { success: false, reason: 'Max attempts reached' };
+
+  return {
+    success: false,
+    reason: `Gemini failed after ${maxAttempts} attempts: ${lastReason}`,
+    debugInfo: lastDebug
+  };
 }
 
 /**

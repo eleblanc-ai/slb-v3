@@ -184,7 +184,7 @@ describe('generateImage', () => {
 
     expect(mockGeminiGenerateContent).toHaveBeenCalled();
     expect(result.url).toBe('data:image/png;base64,abc123');
-    expect(result.model).toBe('gemini-3-pro-image-preview');
+    expect(result.model).toBe('gemini-2.5-flash-image');
     expect(result.altText).toBe('A nice image');
   });
 

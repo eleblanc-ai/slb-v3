@@ -7,6 +7,27 @@ handling, and a test-harness gap.
 
 ---
 
+## 0b. 🖼️ Image generation stability
+
+**File:** `src/services/aiClient.js`
+
+Emily reported image output was unstable. Root causes and fixes:
+
+- **Model:** switched the primary model to `gemini-2.5-flash-image` (~6s/image)
+  from `gemini-3-pro-image-preview` (~16–18s, and blocked on the free tier). A
+  10× live run went 10/10 images, 0 text-only, 0 errors.
+- **Retry:** the Gemini image model frequently returns text-only. The old code
+  only retried on 503/quota and treated a text-only response as an instant
+  fallback to DALL-E — so which model drew the image was luck-of-the-draw, and
+  styles jumped between runs. Now text-only and transient errors retry (3× with
+  backoff); permanent errors (bad model/auth/request) still fall back to DALL-E
+  immediately.
+- **Prompt:** added a fixed style anchor applied to every provider that pushes a
+  realistic photographic look (avoids the illustration/CGI/"AI" look), forbids
+  rendering any text into the image, and truncates cleanly at a word boundary.
+
+---
+
 ## 0. 🔴 MCQ standards mapping only used one grade of a grade band
 
 **File:** `src/lib/standardsMapper.js` (`getMappedStandards`)
