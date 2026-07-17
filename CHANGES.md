@@ -1,8 +1,25 @@
 # Changes — `fix/image-gen-and-react-hooks`
 
-Bug fixes for image generation, React Hooks compliance, and a test-harness gap.
+Bug fixes for image generation, React Hooks compliance, MCQ standards grade
+handling, and a test-harness gap.
 
 **Result:** all tests pass (`155/155`, was `153/155`); ESLint errors on the changed files drop to `0`.
+
+---
+
+## 0. 🔴 MCQ standards mapping only used one grade of a grade band
+
+**File:** `src/lib/standardsMapper.js` (`getMappedStandards`)
+
+For a multi-grade lesson (e.g. a 6–8 band with grade 6 and 7 standards), the
+cross-framework standards mapping kept standards for **only the first grade** and
+dropped the rest. `extractGradesFromBand("6-8")` correctly returns `[6, 7, 8]`,
+but `getMappedStandards` then did `parseInt(gradeLevel.toString())` — for an array
+`[6,7,8]` that is `parseInt("6,7,8") === 6`, so grades 7 and 8 were filtered out.
+
+**Fix:** normalize the grade filter into a list of target grades (supports a single
+grade, a `"6-8"` band string, or a `[6,7,8]` array) and keep any mapped standard
+whose grade falls in that band. The limitation was in code, not the prompt.
 
 ---
 

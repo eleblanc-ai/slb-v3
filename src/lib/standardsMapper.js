@@ -524,10 +524,20 @@ export async function getMappedMainIdeaStandardsForGrade(gradeLevel, framework) 
  */
 async function getMappedStandards(ccssCode, gradeLevel = null) {
   const data = await loadMOACData();
-  
-  // Parse grade level if provided as string
-  const targetGrade = gradeLevel ? parseInt(gradeLevel.toString()) : null;
-  
+
+  // Normalize the grade filter into a list of target grades. Supports a single
+  // grade (6 or "6"), a band string ("6-8"), or an array of grades ([6, 7, 8]).
+  // Previously this used parseInt(gradeLevel.toString()), which collapsed an
+  // array/band to only its first grade — so a 6-8 lesson kept only grade-6
+  // mapped standards and dropped 7 and 8.
+  let targetGrades = null;
+  if (gradeLevel !== null && gradeLevel !== undefined) {
+    const grades = Array.isArray(gradeLevel)
+      ? gradeLevel.map(g => parseInt(g)).filter(g => !isNaN(g))
+      : extractGradesFromBand(gradeLevel.toString());
+    if (grades.length > 0) targetGrades = grades;
+  }
+
   // Initialize result with the CCSS code
   const result = {
     CCSS: [ccssCode],
@@ -546,11 +556,11 @@ async function getMappedStandards(ccssCode, gradeLevel = null) {
     const code = row.mappedCode;
     
     if (framework && code) {
-      // If grade level is specified, filter by grade
-      if (targetGrade) {
+      // If grade level(s) specified, keep standards for any grade in the band
+      if (targetGrades) {
         const codeGrade = extractGrade(code);
-        if (codeGrade && codeGrade !== targetGrade) {
-          continue; // Skip standards that don't match the target grade
+        if (codeGrade && !targetGrades.includes(codeGrade)) {
+          continue; // Skip standards outside the target grade band
         }
       }
       
