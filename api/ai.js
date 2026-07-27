@@ -86,10 +86,19 @@ function google() {
 
 function supabase() {
   if (!supabaseClient) {
-    supabaseClient = createClient(
-      process.env.VITE_SUPABASE_URL,
-      process.env.VITE_SUPABASE_ANON_KEY,
-    );
+    // Accept either name. The app's variables carry the VITE_ prefix because
+    // the browser needs them, and Vercel exposes every project variable to
+    // functions regardless of prefix — but fall back to unprefixed names so a
+    // rename can never silently turn every request into a 401.
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!url || !anonKey) {
+      throw new Error(
+        'Supabase config missing: set SUPABASE_URL and SUPABASE_ANON_KEY (or the VITE_ prefixed equivalents)',
+      );
+    }
+    supabaseClient = createClient(url, anonKey);
   }
   return supabaseClient;
 }
@@ -277,7 +286,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const user = await verifyUser(req);
+  let user;
+  try {
+    user = await verifyUser(req);
+  } catch (error) {
+    // Misconfiguration, not a bad caller. Say so plainly instead of
+    // returning 401 and sending someone hunting for an auth bug.
+    return res.status(500).json({ error: error.message || 'Auth check failed' });
+  }
+
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
