@@ -1,44 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// ─── SDK mocks (hoisted so they're available inside vi.mock factories) ──
-const {
-  mockAnthropicCreate,
-  mockOpenAIChatCreate,
-  mockOpenAIImagesGenerate,
-  mockGeminiGenerateContent,
-} = vi.hoisted(() => ({
-  mockAnthropicCreate: vi.fn(),
-  mockOpenAIChatCreate: vi.fn(),
-  mockOpenAIImagesGenerate: vi.fn(),
-  mockGeminiGenerateContent: vi.fn(),
+const { mockGetSession } = vi.hoisted(() => ({ mockGetSession: vi.fn() }));
+
+vi.mock('../../services/supabaseClient', () => ({
+  supabase: { auth: { getSession: mockGetSession } },
 }));
 
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class {
-    constructor() {
-      this.messages = { create: mockAnthropicCreate };
-    }
-  },
-}));
-
-vi.mock('openai', () => ({
-  default: class {
-    constructor() {
-      this.chat = { completions: { create: mockOpenAIChatCreate } };
-      this.images = { generate: mockOpenAIImagesGenerate };
-    }
-  },
-}));
-
-vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: class {
-    getGenerativeModel() {
-      return { generateContent: mockGeminiGenerateContent };
-    }
-  },
-}));
-
-// ─── Import after mocks are set up ─────────────────────────────────
 import {
   callAI,
   callAIWithFunction,
@@ -47,245 +14,195 @@ import {
   summarizePassageForImage,
 } from '../../services/aiClient';
 
+function mockFetchOnce({ ok = true, status = 200, body = {} } = {}) {
+  const fn = vi.fn().mockResolvedValue({ ok, status, json: async () => body });
+  global.fetch = fn;
+  return fn;
+}
+
+/** The parsed JSON body of the Nth fetch call. */
+const sentBody = (fetchMock, n = 0) => JSON.parse(fetchMock.mock.calls[n][1].body);
+
 beforeEach(() => {
-  mockAnthropicCreate.mockReset();
-  mockOpenAIChatCreate.mockReset();
-  mockOpenAIImagesGenerate.mockReset();
-  mockGeminiGenerateContent.mockReset();
+  mockGetSession.mockReset().mockResolvedValue({
+    data: { session: { access_token: 'jwt-123' } },
+  });
+});
+
+afterEach(() => {
+  delete global.fetch;
+});
+
+// ─── request shape ───────────────────────────────────────────────────
+describe('request shape', () => {
+  it('POSTs to /api/ai with the session bearer token', async () => {
+    const fetchMock = mockFetchOnce({ body: { text: 'hi' } });
+    await callAI('Say hi', 'claude-sonnet-4-5');
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/ai');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer jwt-123');
+    expect(init.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('omits the Authorization header when there is no session', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null } });
+    const fetchMock = mockFetchOnce({ body: { text: 'hi' } });
+    await callAI('Say hi', 'claude-sonnet-4-5');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+  });
 });
 
 // ─── callAI ──────────────────────────────────────────────────────────
 describe('callAI', () => {
-  it('uses Anthropic SDK for Claude models', async () => {
-    mockAnthropicCreate.mockResolvedValue({
-      content: [{ text: 'Hello from Claude!' }],
-    });
-
+  it('sends the generate action and returns text', async () => {
+    const fetchMock = mockFetchOnce({ body: { text: 'Hello from Claude!' } });
     const result = await callAI('Say hello', 'claude-sonnet-4-5');
 
-    expect(mockAnthropicCreate).toHaveBeenCalledWith({
+    expect(sentBody(fetchMock)).toEqual({
+      action: 'generate',
+      prompt: 'Say hello',
       model: 'claude-sonnet-4-5',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: 'Say hello' }],
+      maxTokens: 4096,
     });
     expect(result).toBe('Hello from Claude!');
   });
 
-  it('uses OpenAI SDK for GPT models', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'Hello from GPT!' } }],
-    });
-
-    const result = await callAI('Say hello', 'gpt-4o');
-
-    expect(mockOpenAIChatCreate).toHaveBeenCalledWith({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: 'Say hello' }],
-      max_tokens: 4096,
-    });
-    expect(result).toBe('Hello from GPT!');
+  it('passes a custom maxTokens', async () => {
+    const fetchMock = mockFetchOnce({ body: { text: 'Hi' } });
+    await callAI('test', 'claude-haiku-4-5-20251001', 1024);
+    expect(sentBody(fetchMock).maxTokens).toBe(1024);
   });
 
-  it('uses custom maxTokens when specified', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'Hi' } }],
-    });
-
-    await callAI('test', 'gpt-4o', 1024);
-
-    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ max_tokens: 1024 })
-    );
-  });
-
-  it('throws when SDK call fails', async () => {
-    mockAnthropicCreate.mockRejectedValue(new Error('Rate limited'));
+  it('throws with the server error message', async () => {
+    mockFetchOnce({ ok: false, status: 502, body: { error: 'Rate limited' } });
     await expect(callAI('test', 'claude-sonnet-4-5')).rejects.toThrow('Rate limited');
+  });
+
+  it('throws when the server rejects the model', async () => {
+    mockFetchOnce({ ok: false, status: 400, body: { error: 'Model not allowed: gpt-4o' } });
+    await expect(callAI('test', 'gpt-4o')).rejects.toThrow('Model not allowed: gpt-4o');
+  });
+
+  it('throws on 401', async () => {
+    mockFetchOnce({ ok: false, status: 401, body: { error: 'Unauthorized' } });
+    await expect(callAI('test', 'claude-sonnet-4-5')).rejects.toThrow('Unauthorized');
+  });
+
+  it('throws a status-based message when the body is not JSON', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error('not json');
+      },
+    });
+    await expect(callAI('test', 'claude-sonnet-4-5')).rejects.toThrow('500');
   });
 });
 
 // ─── callAIWithFunction ─────────────────────────────────────────────
 describe('callAIWithFunction', () => {
-  it('uses Claude tool_use for Claude models', async () => {
-    const schema = { name: 'extractData', description: 'Extract data', parameters: { type: 'object' } };
-    mockAnthropicCreate.mockResolvedValue({
-      content: [{ type: 'tool_use', input: { answer: 42 } }],
-    });
+  it('sends the function action and unwraps result', async () => {
+    const schema = { name: 'extractData', description: 'Extract', parameters: { type: 'object' } };
+    const fetchMock = mockFetchOnce({ body: { result: { answer: 42 } } });
 
     const result = await callAIWithFunction('test', 'claude-sonnet-4-5', schema);
 
-    expect(mockAnthropicCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tools: [{ name: 'extractData', description: 'Extract data', input_schema: { type: 'object' } }],
-        tool_choice: { type: 'tool', name: 'extractData' },
-      })
-    );
+    expect(sentBody(fetchMock)).toEqual({
+      action: 'function',
+      prompt: 'test',
+      model: 'claude-sonnet-4-5',
+      functionSchema: schema,
+    });
     expect(result).toEqual({ answer: 42 });
   });
 
-  it('uses OpenAI function_call for GPT models', async () => {
-    const schema = { name: 'extractData', description: 'Extract data', parameters: { type: 'object' } };
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { function_call: { arguments: '{"answer":42}' } } }],
-    });
-
-    const result = await callAIWithFunction('test', 'gpt-4o', schema);
-
-    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        functions: [schema],
-        function_call: { name: 'extractData' },
-      })
-    );
-    expect(result).toEqual({ answer: 42 });
-  });
-
-  it('throws when Claude returns no tool_use block', async () => {
-    const schema = { name: 'fn', parameters: {} };
-    mockAnthropicCreate.mockResolvedValue({ content: [{ type: 'text', text: 'oops' }] });
-
-    await expect(callAIWithFunction('test', 'claude-sonnet-4-5', schema)).rejects.toThrow('No tool use');
-  });
-
-  it('throws when OpenAI returns no function_call', async () => {
-    const schema = { name: 'fn', parameters: {} };
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'oops' } }],
-    });
-
-    await expect(callAIWithFunction('test', 'gpt-4o', schema)).rejects.toThrow('No function call');
+  it('propagates a server error', async () => {
+    mockFetchOnce({ ok: false, status: 502, body: { error: 'No tool use in Claude response' } });
+    await expect(
+      callAIWithFunction('test', 'claude-sonnet-4-5', { name: 'fn', parameters: {} }),
+    ).rejects.toThrow('No tool use');
   });
 });
 
 // ─── generateImage ──────────────────────────────────────────────────
 describe('generateImage', () => {
-  it('tries Gemini first and returns base64 data URL on success', async () => {
-    mockGeminiGenerateContent.mockResolvedValue({
-      response: {
-        candidates: [{
-          content: {
-            parts: [
-              { text: 'A nice image' },
-              { inlineData: { data: 'abc123', mimeType: 'image/png' } },
-            ],
-          },
-        }],
+  it('sends the image action and returns the payload unchanged', async () => {
+    const fetchMock = mockFetchOnce({
+      body: {
+        url: 'data:image/png;base64,abc',
+        model: 'gemini-3-pro-image-preview',
+        altText: 'A nice image',
       },
     });
 
     const result = await generateImage('A cat');
 
-    expect(mockGeminiGenerateContent).toHaveBeenCalled();
-    expect(result.url).toBe('data:image/png;base64,abc123');
+    expect(sentBody(fetchMock)).toEqual({ action: 'image', prompt: 'A cat' });
+    expect(result.url).toBe('data:image/png;base64,abc');
     expect(result.model).toBe('gemini-3-pro-image-preview');
     expect(result.altText).toBe('A nice image');
   });
 
-  it('falls back to DALL-E when Gemini fails', async () => {
-    mockGeminiGenerateContent.mockRejectedValue(new Error('Model not available'));
-    mockOpenAIImagesGenerate.mockResolvedValue({
-      data: [{ b64_json: 'dalle_base64' }],
-    });
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const result = await generateImage('A cat');
-    warnSpy.mockRestore();
-    logSpy.mockRestore();
-
-    expect(result.url).toBe('data:image/png;base64,dalle_base64');
-    expect(result.model).toBe('dall-e-3');
+  it('ignores the legacy size argument', async () => {
+    const fetchMock = mockFetchOnce({ body: { url: 'u', model: 'm', altText: '' } });
+    await generateImage('A cat', '1024x1024');
+    expect(sentBody(fetchMock)).toEqual({ action: 'image', prompt: 'A cat' });
   });
 
-  it('truncates very long prompts', async () => {
-    mockGeminiGenerateContent.mockRejectedValue(new Error('fail'));
-    mockOpenAIImagesGenerate.mockResolvedValue({
-      data: [{ b64_json: 'img' }],
-    });
-
-    const longPrompt = 'A'.repeat(5000);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    await generateImage(longPrompt);
-    warnSpy.mockRestore();
-    logSpy.mockRestore();
-
-    const dalleCall = mockOpenAIImagesGenerate.mock.calls[0][0];
-    expect(dalleCall.prompt.length).toBeLessThanOrEqual(3504); // 3500 + '...'
+  it('throws when generation fails', async () => {
+    mockFetchOnce({ ok: false, status: 502, body: { error: 'Image generation failed: overloaded' } });
+    await expect(generateImage('A cat')).rejects.toThrow('Image generation failed');
   });
 });
 
 // ─── generateAltText ────────────────────────────────────────────────
 describe('generateAltText', () => {
-  it('uses GPT-4o vision to describe the image', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'A cat sitting on a mat' } }],
-    });
-
+  it('sends the altText action and returns text', async () => {
+    const fetchMock = mockFetchOnce({ body: { text: 'A cat sitting on a mat' } });
     const result = await generateAltText('data:image/png;base64,abc');
 
-    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gpt-4o' })
-    );
+    expect(sentBody(fetchMock)).toEqual({
+      action: 'altText',
+      imageDataUrl: 'data:image/png;base64,abc',
+    });
     expect(result).toBe('A cat sitting on a mat');
   });
 
-  it('throws when SDK call fails', async () => {
-    mockOpenAIChatCreate.mockRejectedValue(new Error('Vision failed'));
+  it('throws when the call fails', async () => {
+    mockFetchOnce({ ok: false, status: 502, body: { error: 'Vision failed' } });
     await expect(generateAltText('data:image/png;base64,abc')).rejects.toThrow('Vision failed');
   });
 });
 
 // ─── summarizePassageForImage ───────────────────────────────────────
 describe('summarizePassageForImage', () => {
-  it('returns null for empty passage', async () => {
-    const result = await summarizePassageForImage('');
-    expect(result).toBeNull();
-    expect(mockOpenAIChatCreate).not.toHaveBeenCalled();
+  it('returns null for empty, null and whitespace passages without calling the server', async () => {
+    const fetchMock = mockFetchOnce({ body: { summary: 'unused' } });
+    expect(await summarizePassageForImage('')).toBeNull();
+    expect(await summarizePassageForImage(null)).toBeNull();
+    expect(await summarizePassageForImage('   \n  ')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns null for null passage', async () => {
-    const result = await summarizePassageForImage(null);
-    expect(result).toBeNull();
-    expect(mockOpenAIChatCreate).not.toHaveBeenCalled();
-  });
+  it('sends the summarize action with a trimmed passage', async () => {
+    const fetchMock = mockFetchOnce({ body: { summary: 'A vivid scene' } });
+    const result = await summarizePassageForImage('  passage with spaces  ');
 
-  it('returns null for whitespace-only passage', async () => {
-    const result = await summarizePassageForImage('   \n  ');
-    expect(result).toBeNull();
-    expect(mockOpenAIChatCreate).not.toHaveBeenCalled();
-  });
-
-  it('calls GPT-3.5-turbo for summarization', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'A vivid scene' } }],
+    expect(sentBody(fetchMock)).toEqual({
+      action: 'summarize',
+      passage: 'passage with spaces',
+      maxChars: 700,
     });
-
-    const result = await summarizePassageForImage('Long passage text here');
-
-    expect(mockOpenAIChatCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'gpt-3.5-turbo' })
-    );
     expect(result).toBe('A vivid scene');
   });
 
-  it('trims passage before sending', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'summary' } }],
-    });
-
-    await summarizePassageForImage('  passage with spaces  ');
-
-    const call = mockOpenAIChatCreate.mock.calls[0][0];
-    const userMsg = call.messages.find((m) => m.role === 'user');
-    expect(userMsg.content).toContain('passage with spaces');
-    expect(userMsg.content).not.toMatch(/^\s+passage/);
-  });
-
-  it('returns null and warns on SDK error', async () => {
-    mockOpenAIChatCreate.mockRejectedValue(new Error('Server error'));
-
+  it('returns null and warns when the request fails', async () => {
+    mockFetchOnce({ ok: false, status: 502, body: { error: 'Server error' } });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
     const result = await summarizePassageForImage('Some passage');
 
     expect(result).toBeNull();
@@ -293,13 +210,8 @@ describe('summarizePassageForImage', () => {
     warnSpy.mockRestore();
   });
 
-  it('truncates summary if longer than maxChars', async () => {
-    mockOpenAIChatCreate.mockResolvedValue({
-      choices: [{ message: { content: 'A'.repeat(800) } }],
-    });
-
-    const result = await summarizePassageForImage('passage', 700);
-
-    expect(result.length).toBeLessThanOrEqual(700);
+  it('returns null when the server returns an empty summary', async () => {
+    mockFetchOnce({ body: { summary: '' } });
+    expect(await summarizePassageForImage('Some passage')).toBeNull();
   });
 });
