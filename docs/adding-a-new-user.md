@@ -1,0 +1,107 @@
+# Adding a New Person to Smart Lesson Builder
+
+**This process changed on 2026-08-02.** Adding an email to `src/config/allowedEmails.js` no longer works — that file has been deleted. The allowlist now lives in the database, because a list in the JavaScript bundle could be edited away in the browser and was publicly readable.
+
+There are two steps. The first is required for everyone.
+
+---
+
+## Step 1 — Add the email to the allowlist (required)
+
+Supabase Dashboard → **SQL Editor** → New query:
+
+```sql
+insert into public.allowed_signup_emails (email)
+values ('new.person@thinkcerca.com')
+on conflict (email) do nothing;
+```
+
+Use the address in lowercase, exactly as they'll type it at signup.
+
+Until this row exists, **nothing else will work.** A database trigger on `auth.users` rejects any account creation for an address that isn't on the list — through the signup form, a direct API call, or the admin panel. There's no way around it, which is the point.
+
+---
+
+## Step 2 — Get them an account
+
+Pick whichever fits.
+
+### Option A: They sign themselves up
+
+Send them to the app and have them use **Sign up** with that exact email address. Done.
+
+If public signup is turned off in the Supabase dashboard, use Option B instead.
+
+### Option B: You create it for them
+
+Admin Dashboard → Create User. This uses the service role behind the scenes, but it still inserts into `auth.users`, so **Step 1 is still required** — it is not a bypass.
+
+---
+
+## Checking the current list
+
+```sql
+select email, added_at
+from public.allowed_signup_emails
+order by added_at desc;
+```
+
+You can't read this table from the app or with the anon key — RLS blocks it. That's deliberate: the old JS file exposed all 17 staff addresses to anyone who viewed the page source.
+
+---
+
+## Removing someone
+
+```sql
+delete from public.allowed_signup_emails
+where email = 'former.person@thinkcerca.com';
+```
+
+**This alone does not lock them out.** It prevents a *new* signup. An existing account keeps working until you also delete the user:
+
+Supabase Dashboard → **Authentication → Users** → find them → Delete.
+
+Do both, in that order.
+
+---
+
+## Roles
+
+New accounts don't get an elevated role automatically. To make someone an admin or designer, an existing admin updates their profile row:
+
+```sql
+update public.profiles
+set role = 'admin'          -- 'admin' | 'builder' | 'designer'
+where id = (select id from auth.users where email = 'new.person@thinkcerca.com');
+```
+
+Users cannot change their own role. A trigger blocks it, so this has to come from an admin or the SQL editor.
+
+---
+
+## Troubleshooting
+
+**"Please reach out to the AI Lab for help." at signup**
+The email isn't on the allowlist. Run Step 1, then have them retry. Check for typos and a trailing space.
+
+**Signed up fine, but AI generation fails with "Account not permitted to use AI features"**
+The account exists but isn't on the allowlist — this happens for accounts created before 2026-08-02, when signup was briefly open. Run Step 1 for their address and it resolves immediately; no new account needed.
+
+**They can log in but see nothing / can't reach the right pages**
+That's a role problem, not an access problem. See Roles above.
+
+---
+
+## Why it works this way
+
+The old allowlist was a check in `Login.jsx` that ran in the user's browser. Anyone could skip it by calling the signup API directly with the public key from the page source, which is how an unapproved account got created. Enforcement now sits in the database, where the client can't reach it.
+
+Three layers, in case one is misconfigured:
+
+| Layer | What it stops |
+|---|---|
+| Trigger on `auth.users` | Any signup for an off-list address, from any client |
+| RLS on `allowed_signup_emails` | The list being read by the app or the anon key |
+| Allowlist check in `api/ai.js` | Off-list accounts spending the AI budget |
+
+Questions → Emily.
