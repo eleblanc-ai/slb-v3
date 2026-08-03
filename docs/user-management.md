@@ -9,10 +9,14 @@ One-time: run `supabase/migrations/create_user_function.sql` once, or none of th
 ### Add a user
 
 ```sql
+-- creates them as a builder
 select public.create_slb_user('person@thinkcerca.com', 'TempPassword123!');
+
+-- or pass a role: 'builder' | 'designer' | 'admin'
+select public.create_slb_user('person@thinkcerca.com', 'TempPassword123!', 'admin');
 ```
 
-Roles: add a third argument — `'builder'` (default), `'designer'`, `'admin'`.
+**Builder is the default** — two arguments is all you need for a normal user.
 
 Tell them: *sign in at smart-lesson-builder.vercel.app with this temporary password; you'll be asked to choose your own.*
 
