@@ -2,6 +2,8 @@
 
 All of this runs in **Supabase → SQL Editor** (set the dropdown to **No limit**).
 
+Creating accounts requires Supabase project access. Being an admin *inside* Smart Lesson Builder is not enough — that's deliberate.
+
 One-time: run `supabase/migrations/create_user_function.sql` once, or none of this works.
 
 ---
