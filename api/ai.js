@@ -104,14 +104,41 @@ function supabase() {
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────
-async function verifyUser(req) {
+function bearerToken(req) {
   const header = req.headers?.authorization || req.headers?.Authorization || '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
-  if (!match) return null;
+  return match ? match[1] : null;
+}
 
-  const { data, error } = await supabase().auth.getUser(match[1]);
+async function verifyUser(req) {
+  const token = bearerToken(req);
+  if (!token) return null;
+
+  const { data, error } = await supabase().auth.getUser(token);
   if (error || !data?.user) return null;
   return data.user;
+}
+
+/**
+ * A valid session is not sufficient — signup was open at one point, so
+ * accounts exist that were never approved. Confirm the caller is on the
+ * allowlist before spending any AI quota.
+ *
+ * Uses a request-scoped client so auth.jwt() resolves to the caller inside
+ * the SECURITY DEFINER function.
+ */
+async function isAllowlisted(req) {
+  const token = bearerToken(req);
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  const scoped = createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data, error } = await scoped.rpc('is_current_user_allowed');
+  if (error) throw new Error(`Allowlist check failed: ${error.message}`);
+  return data === true;
 }
 
 // ─── Providers ────────────────────────────────────────────────────────
@@ -297,6 +324,14 @@ export default async function handler(req, res) {
 
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    if (!(await isAllowlisted(req))) {
+      return res.status(403).json({ error: 'Account not permitted to use AI features' });
+    }
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Allowlist check failed' });
   }
 
   try {

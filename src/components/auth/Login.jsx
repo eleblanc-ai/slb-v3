@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { APP_CONFIG } from '../../config';
-import { ALLOWED_EMAILS } from '../../config/allowedEmails';
 import favicon from '../../assets/favicon.ico';
 
 export default function Login({ onLogin }) {
@@ -12,10 +11,13 @@ export default function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('login');
 
-  const isAllowedSignupEmail = (value) => {
-    const normalized = value.trim().toLowerCase();
-    return ALLOWED_EMAILS.some((entry) => normalized === entry.toLowerCase());
-  };
+  // The signup allowlist is enforced by a BEFORE INSERT trigger on auth.users
+  // (see supabase/migrations/restrict_signup_to_allowlist.sql). It deliberately
+  // does not live here: a browser-side check can be bypassed by calling
+  // supabase.auth.signUp directly, and shipping the list would expose every
+  // staff address in the public bundle.
+  const isAllowlistRejection = (error) =>
+    /not permitted to sign up/i.test(error?.message || '');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,10 +27,6 @@ export default function Login({ onLogin }) {
 
     try {
       if (mode === 'signup') {
-        if (!isAllowedSignupEmail(email)) {
-          throw new Error('Please reach out to the AI Lab for help.');
-        }
-
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: password,
@@ -40,7 +38,9 @@ export default function Login({ onLogin }) {
         });
 
         if (error) {
-          throw error;
+          throw isAllowlistRejection(error)
+            ? new Error('Please reach out to the AI Lab for help.')
+            : error;
         }
 
         if (data?.session) {
