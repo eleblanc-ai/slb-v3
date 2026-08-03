@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:report": "vitest run --reporter=json --outputFile=public/test-results.json --coverage --coverage.reporter=json-summary --coverage.reportsDirectory=public/coverage"
+    "test:report": "vitest run --reporter=json --outputFile=public/test-results.json --coverage --coverage.reporter=json-summary --coverage.reportsDirectory=public/coverage",
+    "check:secrets": "./scripts/check-secrets.sh",
+    "check:secrets:built": "npm run build && ./scripts/check-secrets.sh --built"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",

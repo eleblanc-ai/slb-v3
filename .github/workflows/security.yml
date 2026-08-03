@@ -1,0 +1,37 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  no-leaked-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      # Source-level check: catches a VITE_-prefixed provider key or a browser
+      # SDK client before it is ever built.
+      - name: Check source for browser-reachable keys
+        run: ./scripts/check-secrets.sh
+
+      # Build with fake VITE_ values, then scan the output. This is the check
+      # that would have caught the 2026-08-02 leak: it inspects the artifact
+      # users actually download, not the source that produced it.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+      - name: Check built bundle for keys
+        run: ./scripts/check-secrets.sh --built
+
+      - run: npx vitest run
