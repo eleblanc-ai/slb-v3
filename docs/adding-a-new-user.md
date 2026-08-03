@@ -22,19 +22,15 @@ Until this row exists, **nothing else will work.** A database trigger on `auth.u
 
 ---
 
-## Step 2 — Get them an account
+## Step 2 — Create the account for them
 
-Pick whichever fits.
+**Admin Dashboard → Create User.**
 
-### Option A: They sign themselves up
+This is the only route right now. Self-signup is switched off for the whole Supabase project (verified 2026-08-02) — anyone who tries the **Sign up** button gets *"Signups not allowed for this instance"*, whether or not they're on the allowlist.
 
-Send them to the app and have them use **Sign up** with that exact email address. Done.
+Creating the user from the Admin Dashboard uses the service role, but it still inserts into `auth.users`, so **Step 1 is still required.** It is not a bypass.
 
-If public signup is turned off in the Supabase dashboard, use Option B instead.
-
-### Option B: You create it for them
-
-Admin Dashboard → Create User. This uses the service role behind the scenes, but it still inserts into `auth.users`, so **Step 1 is still required** — it is not a bypass.
+If self-signup is ever re-enabled, the person can sign up themselves with the exact address from Step 1, and the allowlist trigger will let them through.
 
 ---
 
@@ -81,8 +77,11 @@ Users cannot change their own role. A trigger blocks it, so this has to come fro
 
 ## Troubleshooting
 
+**"Signups not allowed for this instance"**
+Expected — self-signup is off for the whole project. Create the account from the Admin Dashboard instead (Step 2).
+
 **"Please reach out to the AI Lab for help." at signup**
-The email isn't on the allowlist. Run Step 1, then have them retry. Check for typos and a trailing space.
+The email isn't on the allowlist. Run Step 1, then have them retry. Check for typos and a trailing space. (Only reachable if self-signup gets re-enabled.)
 
 **Signed up fine, but AI generation fails with "Account not permitted to use AI features"**
 The account exists but isn't on the allowlist — this happens for accounts created before 2026-08-02, when signup was briefly open. Run Step 1 for their address and it resolves immediately; no new account needed.
