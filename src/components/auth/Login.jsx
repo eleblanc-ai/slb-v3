@@ -49,26 +49,16 @@ export default function Login({ onLogin }) {
           setSuccess('Check your email to confirm your account before signing in.');
         }
       } else {
-        console.log('=== LOGIN ATTEMPT ===');
-        console.log('Email:', email);
-        console.log('Password length:', password.length);
-        console.log('Password first char:', password[0]);
-        console.log('Sending to Supabase...');
-        
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: password,
         });
 
-        console.log('Login response:', { data, error });
-
         if (error) {
-          console.error('Supabase error:', error);
           throw error;
         }
 
         if (data.session) {
-          console.log('Login successful!');
           onLogin();
         }
       }

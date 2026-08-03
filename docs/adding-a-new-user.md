@@ -2,7 +2,25 @@
 
 **This process changed on 2026-08-02.** Adding an email to `src/config/allowedEmails.js` no longer works — that file has been deleted. The allowlist now lives in the database, because a list in the JavaScript bundle could be edited away in the browser and was publicly readable.
 
-There are two steps. The first is required for everyone.
+---
+
+## Quickest way: one command
+
+From the repo root:
+
+```bash
+./scripts/create-user.sh new.person@thinkcerca.com 'TheirPassword123!'
+```
+
+That allowlists the address, creates the account with email already confirmed, and sets `role = 'builder'` — all three steps below, in one go. Add a third argument for a different role:
+
+```bash
+./scripts/create-user.sh new.person@thinkcerca.com 'TheirPassword123!' admin
+```
+
+It needs `SUPABASE_SERVICE_ROLE_KEY` in your local `.env`. If the account already exists, it reuses it and just fixes the allowlist and role.
+
+The manual steps below do the same thing if you'd rather work in the dashboard.
 
 ---
 
