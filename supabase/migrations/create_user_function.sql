@@ -3,8 +3,13 @@
 -- Run this file once in the Supabase SQL Editor to define the function.
 -- After that, adding a person is a single line:
 --
---   select public.create_slb_user('new.person@thinkcerca.com', 'TheirPassword123!');
---   select public.create_slb_user('someone@thinkcerca.com', 'Pw!', 'admin');
+--   select public.create_slb_user('new.person@thinkcerca.com', 'TempPassword123!');
+--   select public.create_slb_user('someone@thinkcerca.com', 'TempPassword123!', 'admin');
+--
+-- The password you pass is TEMPORARY. The new account is flagged
+-- password_set:false, so the app forces them through the Set Your Password
+-- screen at first login and they choose their own. You only ever need to hand
+-- over a throwaway string, and you never know their real password.
 --
 -- It does all four things a working account needs:
 --   1. adds the address to allowed_signup_emails (else the signup trigger blocks it)
@@ -92,7 +97,10 @@ begin
     '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
     v_email, extensions.crypt(p_password, extensions.gen_salt('bf')),
     now(), now(), now(),
-    '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    -- password_set:false makes the app force them through SetPassword on first
+    -- login, so the temporary password below is never the one they keep.
+    '{"password_set": false}'::jsonb,
     '', '', '', ''
   );
 

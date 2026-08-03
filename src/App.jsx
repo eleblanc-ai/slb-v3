@@ -9,6 +9,7 @@ import HomePage from './components/pages/HomePage';
 import PlaceholderPage from './components/pages/PlaceholderPage';
 import Login from './components/auth/Login';
 import SetDisplayName from './components/auth/SetDisplayName';
+import SetPassword from './components/auth/SetPassword';
 import CreateNewLessonType from './components/pages/CreateNewLessonType';
 import CreateNewLesson from './components/pages/CreateNewLesson';
 import BrowseLessonTemplates from './components/pages/BrowseLessonTemplates';
@@ -125,6 +126,19 @@ function App() {
     }
   };
 
+  // updateUser() changes user_metadata but fires onAuthStateChange with the
+  // same user id, and the listener below ignores same-id events. Refresh the
+  // session explicitly so password_set flips and the gate lets them through.
+  const handlePasswordComplete = async () => {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data?.session) {
+      setSession(data.session);
+      return;
+    }
+    const { data: current } = await supabase.auth.getSession();
+    setSession(current?.session ?? null);
+  };
+
 
   useEffect(() => {
     if (session && postLoginRedirect) {
@@ -198,6 +212,22 @@ function App() {
 
   if (!session) {
     return <Login onLogin={handleLogin} />;
+  }
+
+  // Accounts created by create_slb_user() carry password_set: false and were
+  // given a temporary password by an admin. Force them to choose their own
+  // before anything else.
+  //
+  // Deliberately `=== false`, not falsy: existing accounts have no such flag,
+  // and treating "missing" as "needs a password" would push the whole team
+  // through this screen on their next login.
+  if (session && session.user?.user_metadata?.password_set === false) {
+    return (
+      <SetPassword
+        onComplete={handlePasswordComplete}
+        onSignOut={handleLogout}
+      />
+    );
   }
 
   // If user is logged in but doesn't have a display name, show the display name form

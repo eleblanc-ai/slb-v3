@@ -11,18 +11,26 @@
 After that, adding a person is a single line in the SQL Editor:
 
 ```sql
-select public.create_slb_user('new.person@thinkcerca.com', 'TheirPassword123!');
+select public.create_slb_user('new.person@thinkcerca.com', 'TempPassword123!');
 ```
 
 For a different role:
 
 ```sql
-select public.create_slb_user('someone@thinkcerca.com', 'TheirPassword123!', 'admin');
+select public.create_slb_user('someone@thinkcerca.com', 'TempPassword123!', 'admin');
 ```
 
-It allowlists the address, creates the account with email already confirmed, wires up the identity record, and sets the role — every step below, in one statement. It returns the new user's id, and they can sign in right away.
+It allowlists the address, creates the account with email already confirmed, wires up the identity record, and sets the role — every step below, in one statement. It returns the new user's id.
 
-It refuses rather than half-finishing if the address already exists or the password is under 8 characters.
+**The password you pass is temporary.** Send it to them however you like; it stops working the moment they use it. At first login the app puts them straight onto a *Set Your Password* screen and won't let them past it until they choose their own. You never learn their real password, and there's nothing to rotate later.
+
+So the handover is:
+
+> Go to smart-lesson-builder.vercel.app, sign in with your email and the temporary password `TempPassword123!`. You'll be asked to pick your own password right away.
+
+It refuses rather than half-finishing if the address already exists or the temporary password is under 8 characters.
+
+Existing accounts are unaffected — the forced screen only applies to accounts created this way.
 
 *(There's also `./scripts/create-user.sh` if you'd rather work from a terminal — same effect, needs the service role key in `.env`.)*
 

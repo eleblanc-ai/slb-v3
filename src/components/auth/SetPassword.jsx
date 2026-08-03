@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { APP_CONFIG } from '../../config';
 
-export default function SetPassword({ onComplete }) {
+export default function SetPassword({ onComplete, onSignOut }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,8 +17,9 @@ export default function SetPassword({ onComplete }) {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Matches the minimum enforced by create_slb_user in SQL.
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -199,6 +200,27 @@ export default function SetPassword({ onComplete }) {
             >
               {loading ? 'Setting Password...' : 'Set Password'}
             </button>
+
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                style={{
+                  width: '100%',
+                  marginTop: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  background: 'transparent',
+                  color: '#2563eb',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.95rem',
+                  fontWeight: '500',
+                  border: '1px solid #bfdbfe',
+                  cursor: 'pointer'
+                }}
+              >
+                Sign out
+              </button>
+            )}
           </form>
         </div>
       </div>
