@@ -4,23 +4,29 @@
 
 ---
 
-## Quickest way: one command
+## Quickest way: one line of SQL
 
-From the repo root:
+**One-time setup:** run `supabase/migrations/create_user_function.sql` in the Supabase SQL Editor. You only ever do this once.
 
-```bash
-./scripts/create-user.sh new.person@thinkcerca.com 'TheirPassword123!'
+After that, adding a person is a single line in the SQL Editor:
+
+```sql
+select public.create_slb_user('new.person@thinkcerca.com', 'TheirPassword123!');
 ```
 
-That allowlists the address, creates the account with email already confirmed, and sets `role = 'builder'` — all three steps below, in one go. Add a third argument for a different role:
+For a different role:
 
-```bash
-./scripts/create-user.sh new.person@thinkcerca.com 'TheirPassword123!' admin
+```sql
+select public.create_slb_user('someone@thinkcerca.com', 'TheirPassword123!', 'admin');
 ```
 
-It needs `SUPABASE_SERVICE_ROLE_KEY` in your local `.env`. If the account already exists, it reuses it and just fixes the allowlist and role.
+It allowlists the address, creates the account with email already confirmed, wires up the identity record, and sets the role — every step below, in one statement. It returns the new user's id, and they can sign in right away.
 
-The manual steps below do the same thing if you'd rather work in the dashboard.
+It refuses rather than half-finishing if the address already exists or the password is under 8 characters.
+
+*(There's also `./scripts/create-user.sh` if you'd rather work from a terminal — same effect, needs the service role key in `.env`.)*
+
+The manual steps below do the same thing by hand.
 
 ---
 
