@@ -28,6 +28,7 @@ import { buildFullPrompt } from '../../ai/promptBuilder';
 import { buildFieldResponses } from '../../ai/responseBuilder';
 import { APP_CONFIG } from '../../config';
 import { supabase } from '../../services/supabaseClient';
+import { getExportFunction } from '../../export/exportRegistry';
 import { US_STATES } from '../../config/usStates';
 import { callAI, callAIWithFunction, generateImage, generateAltText, summarizePassageForImage } from '../../services/aiClient';
 import { getMappedStandardsWithSource, extractGradesFromBand, filterAlignedStandardsWithAI, insertStandardInOrder, getCcssVocabularyStandardsForGrade, getMappedVocabularyStandardsForGrade, getCcssMainIdeaStandardsForGrade, getMappedMainIdeaStandardsForGrade } from '../../lib/standardsMapper';
@@ -38,13 +39,6 @@ import useFieldCRUD from '../../hooks/useFieldCRUD';
 import gradeRangeConfig from '../../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../../config/themeSelectorOptions.json';
 import aiPromptDefaults from '../../config/aiPromptDefaults.json';
-import { generateMarkdown as generateAdditionalReadingPracticeMarkdown } from '../../export/templates/additionalreadingpracticeMarkdownExport';
-import { generateMarkdown as generateAdditionalReadingPracticeFloridaMarkdown } from '../../export/templates/additionalreadingpracticefloridaMarkdownExport';
-import { generateMarkdown as generateNarrativeLessonFloridaMarkdown } from '../../export/templates/narrativelessonfloridaMarkdownExport';
-import { generateMarkdown as generateAppliedLessonFloridaMarkdown } from '../../export/templates/appliedlessonfloridaMarkdownExport';
-import { generateMarkdown as generateAppliedLessonMarkdown } from '../../export/templates/appliedlessonMarkdownExport';
-import { generateMarkdown as generateAdditionalReadingPracticeTexasMarkdown } from '../../export/templates/additionalreadingpracticetexasMarkdownExport';
-import { generateMarkdown as generateAppliedLessonTexasMarkdown } from '../../export/templates/appliedlessontexasMarkdownExport';
 
 export default function CreateNewLesson() {
   const [searchParams] = useSearchParams();
@@ -456,21 +450,8 @@ export default function CreateNewLesson() {
       }
     }
     
-    // Map template name to markdown export function
-    // Template names should be converted to camelCase for function lookup
-    const templateNameToFunctionMap = {
-      'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
-      'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
-      'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
-      'Applied Lesson': generateAppliedLessonMarkdown,
-      'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
-      'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
-
-      // Future templates will be added here manually
-    };
     
-    const generateFunction = templateNameToFunctionMap[templateData?.name];
+    const generateFunction = getExportFunction(templateData?.name);
     
     if (!generateFunction) {
       console.error('No markdown export function found for template:', templateData?.name);
@@ -522,16 +503,8 @@ export default function CreateNewLesson() {
         console.error('Error fetching fresh lesson data:', error);
       }
     }
-    
-    // Map template name to markdown export function
-    const templateNameToFunctionMap = {
-      'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-      'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
-      'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
-      'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
-      'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
-      'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
-    };    const generateFunction = templateNameToFunctionMap[templateData?.name];
+
+    const generateFunction = getExportFunction(templateData?.name);
 
     if (!generateFunction) {
       toast.error(`No preview available for template "${templateData?.name}".`);
@@ -2166,16 +2139,8 @@ export default function CreateNewLesson() {
 
           // If lesson is locked, generate preview markdown for display
           if (!lockResult.success) {
-            const templateNameToFunctionMap = {
-              'Additional Reading Practice': generateAdditionalReadingPracticeMarkdown,
-              'Additional Reading Practice (Florida)': generateAdditionalReadingPracticeFloridaMarkdown,
-              'Narrative Lesson (Florida)': generateNarrativeLessonFloridaMarkdown,
-              'Applied Lesson (Florida)': generateAppliedLessonFloridaMarkdown,
-              'Additional Reading Practice (Texas)': generateAdditionalReadingPracticeTexasMarkdown,
-              'Applied Lesson (Texas)': generateAppliedLessonTexasMarkdown,
-            };
             
-            const generateFunction = templateNameToFunctionMap[templateData?.name];
+            const generateFunction = getExportFunction(templateData?.name);
             if (generateFunction) {
               let markdown = generateFunction(templateData, mergedFields, loadedValues);
               
