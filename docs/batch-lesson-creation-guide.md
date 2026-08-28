@@ -4,7 +4,7 @@ This guide walks through how to create multiple lessons at once using the batch 
 
 ## Overview
 
-Instead of creating lessons one at a time, you can prepare a markdown file with content for up to **5 lessons** and upload them all at once. The system will import your content, let you review it, and then use AI to generate the remaining fields.
+Instead of creating lessons one at a time, you can prepare a markdown file with content for up to **30 lessons** and upload them all at once. The system will import your content, let you review it, and then use AI to generate the remaining fields.
 
 ## Step 1: Download a Markdown Template
 

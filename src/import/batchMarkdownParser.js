@@ -5,7 +5,11 @@
 
 import { parseMarkdownImport } from './markdownImporter';
 
-const MAX_LESSONS = 5;
+/**
+ * Maximum lessons accepted from a single upload. Exported so the UI can quote
+ * the real number instead of a hardcoded copy that drifts out of sync.
+ */
+export const MAX_LESSONS = 30;
 
 /**
  * Parse a batch markdown file containing multiple lessons separated by `---`.

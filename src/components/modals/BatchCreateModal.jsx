@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { X, Upload, FileText, AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Sparkles, Loader } from 'lucide-react';
-import { parseBatchMarkdown } from '../../import/batchMarkdownParser';
+import { parseBatchMarkdown, MAX_LESSONS } from '../../import/batchMarkdownParser';
 import { applyImportToFields } from '../../import/markdownImporter';
 import { mapDatabaseFields } from '../../services/batchLessonEngine';
 import { supabase } from '../../services/supabaseClient';
@@ -326,7 +326,7 @@ export default function BatchCreateModal({ visible, onClose, templates, session,
             <>
               {/* Instructions */}
               <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.6 }}>
-                Upload a markdown file with up to 5 lessons separated by{' '}
+                Upload a markdown file with up to {MAX_LESSONS} lessons separated by{' '}
                 <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
                   ---
                 </code>
