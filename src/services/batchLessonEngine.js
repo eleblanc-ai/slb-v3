@@ -29,7 +29,7 @@ import aiPromptDefaults from '../config/aiPromptDefaults.json';
 import gradeRangeConfig from '../config/gradeRangeOptions.json';
 import themeSelectorConfig from '../config/themeSelectorOptions.json';
 
-/* ─── Retry helper for transient API errors (429 / 529 overloaded) ─── */
+/* ─── Retry helper for transient API errors (429 / 529 / 504 timeout) ─── */
 
 async function withRetry(fn, { maxRetries = 3, baseDelay = 5000 } = {}) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -37,7 +37,9 @@ async function withRetry(fn, { maxRetries = 3, baseDelay = 5000 } = {}) {
       return await fn();
     } catch (err) {
       const msg = err?.message || '';
-      const isRetryable = /overloaded|529|rate.?limit|429|too many requests/i.test(msg);
+      // 504 is Vercel terminating api/ai.js at its maxDuration — the model was
+      // still working, so the same request usually succeeds on a second attempt.
+      const isRetryable = /overloaded|529|rate.?limit|429|too many requests|504|gateway time-?out/i.test(msg);
       if (!isRetryable || attempt === maxRetries) throw err;
       const delay = baseDelay * Math.pow(2, attempt); // 5s, 10s, 20s
       console.warn(`⏳ Retryable error (attempt ${attempt + 1}/${maxRetries}): ${msg}. Waiting ${delay / 1000}s...`);
